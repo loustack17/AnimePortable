@@ -1,3 +1,16 @@
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+go.work
+go.work.sum
+.env
 apps/desktop/frontend/dist/
 apps/desktop/frontend/node_modules/
 apps/desktop/bin/
@@ -5,4 +18,3 @@ apps/desktop/.task/
 apps/desktop/build/android/
 apps/desktop/build/ios/
 apps/desktop/build/linux/appimage/build/
-apps/desktop/build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
