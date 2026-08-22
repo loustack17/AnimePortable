@@ -1,0 +1,39 @@
+version: '3'
+
+info:
+  companyName: AnimePortable
+  productName: AnimePortable
+  productIdentifier: com.animeportable.desktop
+  description: A lightweight desktop anime client
+  copyright: Copyright 2026 AnimePortable
+  comments: AnimePortable desktop application
+  version: 0.0.1
+
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - bin
+      - frontend
+      - node_modules
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+    watched_extension:
+      - '*.go'
+    git_ignore: true
+  executes:
+    - cmd: wails3 task common:install:frontend:deps
+      type: once
+    - cmd: wails3 task common:dev:frontend
+      type: background
+    - cmd: go mod tidy
+      type: blocking
+    - cmd: wails3 task build
+      type: blocking
+    - cmd: wails3 task run
+      type: primary

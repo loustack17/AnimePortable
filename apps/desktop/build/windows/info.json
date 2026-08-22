@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.0.1"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.0.1",
+			"CompanyName": "AnimePortable",
+			"FileDescription": "A lightweight desktop anime client",
+			"LegalCopyright": "© now, My Company",
+			"ProductName": "My Product",
+			"Comments": "This is a comment"
+		}
+	}
+}

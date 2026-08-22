@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: apps/desktop/frontend/package-lock.json
+      - name: Verify frontend
+        working-directory: apps/desktop/frontend
+        run: |
+          npm ci
+          npm run check
+          npm run build
+          npm audit --audit-level=high
+      - name: Verify Go formatting
+        shell: pwsh
+        run: |
+          $files = git ls-files -- '*.go'
+          $unformatted = gofmt -l $files
+          if ($unformatted) { throw "Unformatted Go files: $unformatted" }
+      - name: Verify Go module
+        run: go mod verify
+      - name: Test Go
+        run: go test ./...
+      - name: Vet Go
+        run: go vet ./...
+      - name: Check Go vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - name: Install Wails CLI
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.12
+          Add-Content $env:GITHUB_PATH "$(go env GOPATH)\bin"
+      - name: Generate frontend bindings
+        working-directory: apps/desktop
+        run: wails3 generate bindings -clean=true -ts
+      - name: Build desktop shell
+        working-directory: apps/desktop
+        run: wails3 build
