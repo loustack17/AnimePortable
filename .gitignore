@@ -1,8 +1,3 @@
-.slim/deepwork/
-.phase0-template/
-.phase0-wails-bootstrap/
-.gocache-phase0/
-.cache/
 apps/desktop/frontend/dist/
 apps/desktop/frontend/node_modules/
 apps/desktop/bin/
@@ -11,4 +6,3 @@ apps/desktop/build/android/
 apps/desktop/build/ios/
 apps/desktop/build/linux/appimage/build/
 apps/desktop/build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
-/desktop.exe
