@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 02 — Core Models and Ports — complete
+Loop 03 — Contract Tests — complete
 
 ## Completed
 
@@ -20,6 +20,10 @@ Loop 02 — Core Models and Ports — complete
 - [x] Typed application façade with source-independent local library
 - [x] Opaque, cloned, and redacted transient playback source
 - [x] Fake-based core replacement and security tests
+- [x] Reusable AnimeSource, MetadataProvider, Player, and Store contract suites
+- [x] Fake adapters covering supported, unsupported, cancellation, lifecycle, and persistence behavior
+- [x] Contract validator rejection tests for invalid adapter output
+- [x] Independent code-quality and Oracle final review
 
 ## In progress
 
@@ -37,7 +41,7 @@ None
 ## Last verified commands
 
 - `go test -count=1 ./...`
-- `go test -race ./...`
+- `go test -race -count=1 ./...`
 - `go vet ./...`
 - `go build ./apps/desktop`
 - `go mod verify`
@@ -49,8 +53,8 @@ None
 - `wails3 build`
 - `wails3 dev -config ./build/config.yml -port 9245`
 
-The Phase 1 loop passed independent code-quality and Oracle final review. Validation artifacts were removed after testing.
+The Phase 2 loop passed independent code-quality and Oracle final review. Validation artifacts were removed after testing.
 
 ## Next loop
 
-Loop 03 — Contract Tests
+Loop 04 — Secure HTTP Foundation
