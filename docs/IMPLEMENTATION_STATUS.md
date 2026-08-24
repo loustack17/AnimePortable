@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 01 — Repository and Contracts — complete
+Loop 02 — Core Models and Ports — complete
 
 ## Completed
 
@@ -10,11 +10,16 @@ Loop 01 — Repository and Contracts — complete
 - [x] Wails v3.0.0-beta.12 desktop shell
 - [x] Svelte and TypeScript frontend shell
 - [x] Source-of-truth documents copied exactly
-- [x] Windows CI skeleton
+- [x] Linux CI
 - [x] Architecture dependency test
 - [x] Local test, build, security, and desktop-start validation
 - [x] Clean-checkout CI-order validation
 - [x] Independent final review
+- [x] Provider-neutral core models and canonical IDs
+- [x] AnimeSource, MetadataProvider, Player, and Store ports
+- [x] Typed application façade with source-independent local library
+- [x] Opaque, cloned, and redacted transient playback source
+- [x] Fake-based core replacement and security tests
 
 ## In progress
 
@@ -27,7 +32,7 @@ None
 ## Known technical risks
 
 - Wails v3 remains pre-stable at v3.0.0-beta.12
-- Linux and macOS desktop builds remain deferred to their planned validation phases
+- Windows and macOS release validation remain deferred to their planned phases
 
 ## Last verified commands
 
@@ -44,8 +49,8 @@ None
 - `wails3 build`
 - `wails3 dev -config ./build/config.yml -port 9245`
 
-The complete CI sequence also passed from a staged-only clean export with no pre-existing `node_modules` or `frontend/dist`.
+The Phase 1 loop passed independent code-quality and Oracle final review. Validation artifacts were removed after testing.
 
 ## Next loop
 
-Loop 02 — Core Models and Ports
+Loop 03 — Contract Tests
