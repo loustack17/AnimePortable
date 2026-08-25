@@ -3,7 +3,6 @@ package contract
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 
 	"animeportable/core"
@@ -90,7 +89,7 @@ func validateMetadataSuite(t *testing.T, suite MetadataProviderSuite) {
 		if suite.Get.Expected.Ref != suite.Get.Ref {
 			t.Fatal("expected metadata ref does not match get ref")
 		}
-	} else if suite.Get.Ref != (core.MetadataRef{}) || !reflect.DeepEqual(suite.Get.Expected, core.AnimeMetadata{}) {
+	} else if suite.Get.Ref != (core.MetadataRef{}) || suite.Get.Expected != (core.AnimeMetadata{}) {
 		t.Fatal("unsupported metadata get has fixtures")
 	}
 	if suite.Missing != nil {

@@ -216,7 +216,13 @@ type memoryStore struct {
 }
 
 func newMemoryStore() *memoryStore {
-	return &memoryStore{anime: map[core.AnimeID]core.Anime{}, sourceRefs: map[core.AnimeID][]core.SourceRef{}, metadata: map[core.AnimeID]core.AnimeMetadata{}, following: map[core.AnimeID]bool{}, progress: map[[2]string]core.PlaybackProgress{}}
+	return &memoryStore{
+		anime:      map[core.AnimeID]core.Anime{},
+		sourceRefs: map[core.AnimeID][]core.SourceRef{},
+		metadata:   map[core.AnimeID]core.AnimeMetadata{},
+		following:  map[core.AnimeID]bool{},
+		progress:   map[[2]string]core.PlaybackProgress{},
+	}
 }
 
 func (store *memoryStore) SaveAnime(_ context.Context, anime core.Anime) error {

@@ -136,7 +136,22 @@ If environment prevents a test:
 - provide the closest substitute
 - do not mark the criterion fully passed
 
-## 8. Loop output format
+## 8. Simplify gate
+
+After relevant behavior passes its tests, review every changed code and configuration file with the `simplify` skill.
+
+The review must:
+
+- preserve behavior, errors, side effects, ordering, and security policy
+- follow repository conventions
+- make only genuine clarity or maintainability improvements
+- avoid line-count optimization and unrelated refactors
+- accept unchanged code when it is already clear
+- rerun focused tests after every accepted simplification
+
+A loop is incomplete until its changed code passes this review.
+
+## 9. Loop output format
 
 Every loop ends with a structured report:
 
@@ -168,7 +183,7 @@ Only real remaining issues.
 
 Name the next intended phase, but do not implement it.
 
-## 9. Stop condition
+## 10. Stop condition
 
 After finishing the assigned loop, stop.
 
@@ -176,7 +191,7 @@ Do not continue because there is extra time/context.
 
 The purpose of loop engineering is controlled convergence.
 
-## 10. Scope drift rule
+## 11. Scope drift rule
 
 If a loop reveals that the documented architecture is materially wrong:
 
@@ -193,7 +208,7 @@ If a loop reveals that the documented architecture is materially wrong:
 
 Minor implementation details do not require ADR.
 
-## 11. Dependency rule
+## 12. Dependency rule
 
 Before adding a dependency, the agent must answer:
 
@@ -207,7 +222,7 @@ Before adding a dependency, the agent must answer:
 
 Avoid npm packages for trivial helpers.
 
-## 12. Performance rule
+## 13. Performance rule
 
 Do not micro-optimize Go interface dispatch.
 
@@ -224,7 +239,7 @@ Measure or reason about the real bottlenecks:
 
 Performance work must target observed or structurally credible bottlenecks.
 
-## 13. AI anti-patterns prohibited
+## 14. AI anti-patterns prohibited
 
 The agent must not:
 
@@ -240,7 +255,7 @@ The agent must not:
 - put secrets in debug logs
 - turn cached startup into network-blocking startup
 
-## 14. Required loop sequence
+## 15. Required loop sequence
 
 Use this order unless an ADR changes it:
 
@@ -282,7 +297,7 @@ Use this order unless an ADR changes it:
 36. CI/release
 37. Full acceptance
 
-## 15. Project-status file
+## 16. Project-status file
 
 Maintain `docs/IMPLEMENTATION_STATUS.md`.
 
@@ -314,13 +329,14 @@ None
 
 Update only after tests/validation.
 
-## 16. Definition of done for each loop
+## 17. Definition of done for each loop
 
 A loop is done only if:
 
 - code implemented
 - relevant tests added
 - tests actually run
+- changed code passed simplify review
 - security reviewed
 - resource lifecycle reviewed
 - documentation/status updated

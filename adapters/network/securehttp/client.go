@@ -155,7 +155,7 @@ func newClient(config Config, resolver func(context.Context, string) ([]netip.Ad
 		origins:               origins,
 		maxBody:               config.MaxResponseBytes,
 		maxRedirects:          config.MaxRedirects,
-		extraSensitiveHeaders: normalizeHeaders(config.ExtraSensitiveHeaders),
+		extraSensitiveHeaders: config.ExtraSensitiveHeaders,
 		resolver:              resolver,
 		dialer:                dialer,
 	}

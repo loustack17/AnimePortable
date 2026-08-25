@@ -23,10 +23,23 @@ import (
 )
 
 func TestNewRejectsInvalidConfigAndSecuresTransport(t *testing.T) {
-	for _, config := range []Config{{}, {AllowedOrigins: []string{"http://example.com"}}, {AllowedOrigins: []string{"https://example.com/path"}}, {AllowedOrigins: []string{"https://example.com"}, ConnectTimeout: -1}, {AllowedOrigins: []string{"https://example.com"}, MaxResponseBytes: math.MaxInt64}, {AllowedOrigins: []string{"https://example.com"}, ExtraSensitiveHeaders: []string{"bad header"}}} {
-		if _, err := New(config); !isKind(err, KindConfig) {
-			t.Fatal(err)
-		}
+	invalid := []struct {
+		name   string
+		config Config
+	}{
+		{"missing origins", Config{}},
+		{"non HTTPS origin", Config{AllowedOrigins: []string{"http://example.com"}}},
+		{"origin with path", Config{AllowedOrigins: []string{"https://example.com/path"}}},
+		{"negative timeout", Config{AllowedOrigins: []string{"https://example.com"}, ConnectTimeout: -1}},
+		{"overflowing body limit", Config{AllowedOrigins: []string{"https://example.com"}, MaxResponseBytes: math.MaxInt64}},
+		{"invalid sensitive header", Config{AllowedOrigins: []string{"https://example.com"}, ExtraSensitiveHeaders: []string{"bad header"}}},
+	}
+	for _, test := range invalid {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := New(test.config); !isKind(err, KindConfig) {
+				t.Fatal(err)
+			}
+		})
 	}
 	c, err := New(Config{AllowedOrigins: []string{"https://EXAMPLE.com.:443/"}, ExtraSensitiveHeaders: []string{"X-Token", "x-token"}})
 	if err != nil || c.maxBody != defaultMaxResponseBytes || c.maxRedirects != defaultMaxRedirects || len(c.extraSensitiveHeaders) != 1 {
@@ -280,7 +293,7 @@ func TestDoBoundsAndClosesBodies(t *testing.T) {
 	}
 }
 
-func TestSanitizedErrorsAndTLSVerification(t *testing.T) {
+func TestSanitizedErrors(t *testing.T) {
 	for _, source := range []error{context.Canceled, context.DeadlineExceeded, errors.New("secret network tls url")} {
 		err := sanitizeError(source)
 		if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "tls") || strings.Contains(err.Error(), "url") {
@@ -290,6 +303,9 @@ func TestSanitizedErrorsAndTLSVerification(t *testing.T) {
 	if !errors.Is(sanitizeError(context.Canceled), context.Canceled) || !errors.Is(sanitizeError(context.DeadlineExceeded), context.DeadlineExceeded) {
 		t.Fatal("safe causes missing")
 	}
+}
+
+func TestTLSVerification(t *testing.T) {
 	server, roots := trustedTLSServer(t, "example.test")
 	defer server.Close()
 	dialed := ""
@@ -313,7 +329,7 @@ func TestSanitizedErrorsAndTLSVerification(t *testing.T) {
 	}
 }
 
-func TestCancellationTimeoutAndErrorSanitization(t *testing.T) {
+func TestCanceledDial(t *testing.T) {
 	dialed := false
 	c := newTestClient(t, []string{"https://example.com"}, func(ctx context.Context, _ string) ([]netip.Addr, error) {
 		return nil, ctx.Err()
@@ -327,7 +343,10 @@ func TestCancellationTimeoutAndErrorSanitization(t *testing.T) {
 	if !isKind(err, KindCanceled) || !errors.Is(err, context.Canceled) || dialed {
 		t.Fatal(err, dialed)
 	}
-	c = newRoundTripClientFunc(t, func(request *http.Request) (*http.Response, error) {
+}
+
+func TestOverallTimeout(t *testing.T) {
+	c := newRoundTripClientFunc(t, func(request *http.Request) (*http.Response, error) {
 		<-request.Context().Done()
 		return nil, request.Context().Err()
 	})
@@ -335,7 +354,10 @@ func TestCancellationTimeoutAndErrorSanitization(t *testing.T) {
 	if _, err := c.Do(mustRequest(t, "https://example.com/a")); !isKind(err, KindTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
-	c = newRoundTripClientFunc(t, func(*http.Request) (*http.Response, error) {
+}
+
+func TestDoSanitizesTransportErrors(t *testing.T) {
+	c := newRoundTripClientFunc(t, func(*http.Request) (*http.Response, error) {
 		return nil, errors.New("raw-secret token tls url")
 	})
 	if _, err := c.Do(mustRequest(t, "https://example.com/token?secret=yes")); !isKind(err, KindNetwork) || strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "token") {
