@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 03 — Contract Tests — complete
+Loop 04 — Secure HTTP Foundation — complete
 
 ## Completed
 
@@ -24,6 +24,12 @@ Loop 03 — Contract Tests — complete
 - [x] Fake adapters covering supported, unsupported, cancellation, lifecycle, and persistence behavior
 - [x] Contract validator rejection tests for invalid adapter output
 - [x] Independent code-quality and Oracle final review
+- [x] Reusable exact-origin HTTPS client and transport policy
+- [x] Connection-time DNS/IP validation with literal-address pinning
+- [x] Redirect revalidation and cross-origin sensitive-header removal
+- [x] TLS verification, timeout, response-size, and response-header limits
+- [x] Sanitized typed errors and centralized URL/header redaction
+- [x] Deterministic SSRF, redirect, TLS, cancellation, and body-lifecycle tests
 
 ## In progress
 
@@ -43,18 +49,19 @@ None
 - `go test -count=1 ./...`
 - `go test -race -count=1 ./...`
 - `go vet ./...`
-- `go build ./apps/desktop`
+- `go build -o bin/animeportable.exe .`
 - `go mod verify`
 - `npm run check`
 - `npm run build`
 - `npm audit --audit-level=high`
+- `npm ci`
 - `go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...`
 - `wails3 doctor`
 - `wails3 build`
 - `wails3 dev -config ./build/config.yml -port 9245`
 
-The Phase 2 loop passed independent code-quality and Oracle final review. Validation artifacts were removed after testing.
+The Phase 3 loop passed independent code-quality, security, test-vacuity, and Oracle final review. Validation artifacts were removed after testing.
 
 ## Next loop
 
-Loop 04 — Secure HTTP Foundation
+Loop 05 — Anime1 Catalog and Search
