@@ -7,9 +7,9 @@
 			"ProductVersion": "0.0.1",
 			"CompanyName": "AnimePortable",
 			"FileDescription": "A lightweight desktop anime client",
-			"LegalCopyright": "© now, My Company",
-			"ProductName": "My Product",
-			"Comments": "This is a comment"
+			"LegalCopyright": "Copyright 2026 AnimePortable",
+			"ProductName": "AnimePortable",
+			"Comments": "AnimePortable desktop application"
 		}
 	}
 }

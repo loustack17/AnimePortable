@@ -1,8 +1,7 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
+Name=AnimePortable
 Comment=A lightweight desktop anime client
-# The Exec line includes %u to pass the URL to the application
 Exec=/usr/local/bin/animeportable %u
 Terminal=false
 Type=Application

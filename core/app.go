@@ -20,14 +20,14 @@ func (app *App) Search(ctx context.Context, query string) ([]SourceAnime, error)
 }
 
 func (app *App) PlayEpisode(ctx context.Context, animeID AnimeID, episodeID EpisodeID, ref EpisodeRef, startAt time.Duration) (PlaybackSession, error) {
-	source, err := app.source.Resolve(ctx, ref)
+	playbackSource, err := app.source.Resolve(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
 	return app.player.Start(ctx, PlayRequest{
 		AnimeID:   animeID,
 		EpisodeID: episodeID,
-		Source:    source,
+		Source:    playbackSource,
 		StartAt:   startAt,
 	})
 }

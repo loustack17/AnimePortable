@@ -12,7 +12,7 @@ priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
 description: "A lightweight desktop anime client"
 vendor: "AnimePortable"
-homepage: "https://wails.io"
+homepage: "https://github.com/loustack17/AnimePortable"
 license: "MIT"
 release: "1"
 
