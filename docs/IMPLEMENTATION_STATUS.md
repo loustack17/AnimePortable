@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 05 — Anime1 Catalog and Search — complete
+Loop 06 — Anime1 Episodes — complete
 
 ## Completed
 
@@ -37,6 +37,12 @@ Loop 05 — Anime1 Catalog and Search — complete
 - [x] Fixture tests for malformed input, cancellation, and the `AnimeSource` contract
 - [x] Live catalog smoke: 1,893 valid entries and a successful query result
 - [x] Oracle and simplify review approval
+- [x] Anime1 category archives parsed into provider-scoped episode references
+- [x] Bounded sequential pagination with canonical same-origin validation
+- [x] Deterministic oldest-to-newest episode order across long-running series
+- [x] Non-numeric episode labels preserved without exposing playback tokens
+- [x] Exact-limit, malformed-page, cancellation, and no-partial-result coverage
+- [x] Live episode smoke: 8-episode and 170-episode archives
 
 ## In progress
 
@@ -67,8 +73,8 @@ None
 - `go tool wails3 build`
 - `go tool wails3 dev -config ./build/config.yml -port 9245`
 
-The Phase 4 loop passed Oracle and simplify review.
+The Phase 5 loop passed Oracle and simplify review.
 
 ## Next loop
 
-Loop 06 — Anime1 Episodes
+Loop 07 — Anime1 Resolver
