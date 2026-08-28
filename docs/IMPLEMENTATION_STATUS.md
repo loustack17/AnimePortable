@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 06 — Anime1 Episodes — complete
+Loop 08 — Anime1 Schedule — complete
 
 ## Completed
 
@@ -43,6 +43,17 @@ Loop 06 — Anime1 Episodes — complete
 - [x] Non-numeric episode labels preserved without exposing playback tokens
 - [x] Exact-limit, malformed-page, cancellation, and no-partial-result coverage
 - [x] Live episode smoke: 8-episode and 170-episode archives
+- [x] Anime1 episode pages resolved through the fixed `v.anime1.me/api` control endpoint
+- [x] Resolver tokens, signed stream URLs, and `e`/`h`/`p` cookies kept transient and redacted
+- [x] Non-GET/HEAD redirects rejected before sensitive request bodies can be replayed
+- [x] Dynamic Anime1 CDN URLs and playback authorization validated with strict bounds
+- [x] Live resolver smoke completed without logging or persisting playback secrets
+- [x] Provider-neutral day/time schedule precision and unknown-episode representation
+- [x] Anime1 seasonal tables parsed with embedded `Asia/Taipei` calendar rules
+- [x] Exact season headers, weekday columns, trusted category links, and stable source order
+- [x] Schedule parser limits, malformed schema, cancellation, half-open range, and season-boundary tests
+- [x] Live schedule smoke against the current Anime1 seasonal table
+- [x] Resolver and schedule simplify passes and independent code-quality reviews
 
 ## In progress
 
@@ -56,6 +67,7 @@ None
 
 - Wails v3 remains pre-stable at v3.0.0-beta.12
 - Windows and macOS release validation remain deferred to their planned phases
+- Playback CDN redirect and cookie-origin enforcement remains a required secure-proxy gate before MPV exposure
 
 ## Last verified commands
 
@@ -73,8 +85,8 @@ None
 - `go tool wails3 build`
 - `go tool wails3 dev -config ./build/config.yml -port 9245`
 
-The Phase 5 loop passed Oracle and simplify review.
+Loops 07–08 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 07 — Anime1 Resolver
+Loop 09 — Anime1 Adapter Acceptance

@@ -36,7 +36,7 @@ type SourceResolveCase struct {
 type SourceScheduleCase struct {
 	Supported bool
 	Query     core.ScheduleQuery
-	Expected  []core.EpisodeRef
+	Expected  []core.SourceScheduleItem
 }
 
 type AnimeSourceSuite struct {
@@ -165,7 +165,11 @@ func validateAnimeSourceSuite(t *testing.T, suite AnimeSourceSuite) {
 		t.Fatal("unsupported resolve case has episode fixture")
 	}
 	if suite.Schedule.Supported {
-		validateEpisodeFixtures(t, suite.Schedule.Expected, core.SourceRef{})
+		for _, item := range suite.Schedule.Expected {
+			if err := validateScheduleItem(item); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 

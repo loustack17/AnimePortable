@@ -228,6 +228,28 @@ func TestDoRejectsBlockedRedirectBeforeSecondRequest(t *testing.T) {
 	}
 }
 
+func TestDoNeverRedirectsNonIdempotentRequests(t *testing.T) {
+	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		for _, location := range []string{"https://one.example/other", "https://two.example/other"} {
+			c := newTestClient(t, []string{"https://one.example", "https://two.example"}, func(context.Context, string) ([]netip.Addr, error) {
+				return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+			}, nil)
+			calls := 0
+			c.httpClient.Transport = roundTripperFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{StatusCode: status, Header: http.Header{"Location": {location}}, Body: io.NopCloser(strings.NewReader(""))}, nil
+			})
+			request, err := http.NewRequest(http.MethodPost, "https://one.example/api", strings.NewReader("d=secret"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.Do(request); !isKind(err, KindRedirect) || calls != 1 {
+				t.Fatalf("status=%d location=%s error=%v calls=%d", status, location, err, calls)
+			}
+		}
+	}
+}
+
 func TestRedirectResolutionPreservesContextErrors(t *testing.T) {
 	for _, test := range []struct {
 		cause error

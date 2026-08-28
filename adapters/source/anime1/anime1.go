@@ -199,14 +199,6 @@ func (client *Client) Episodes(ctx context.Context, ref core.SourceRef) ([]core.
 	}
 }
 
-func (*Client) Resolve(context.Context, core.EpisodeRef) (core.PlaybackSource, error) {
-	return core.PlaybackSource{}, core.ErrUnsupported
-}
-
-func (*Client) Schedule(context.Context, core.ScheduleQuery) ([]core.SourceScheduleItem, error) {
-	return nil, core.ErrUnsupported
-}
-
 func parseCatalog(ctx context.Context, body []byte) ([]core.SourceAnime, error) {
 	if err := checkContext(ctx); err != nil {
 		return nil, err

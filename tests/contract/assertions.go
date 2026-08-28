@@ -90,7 +90,7 @@ func validateEpisodeOrder(actual []core.SourceEpisode, anime core.SourceRef, exp
 	return nil
 }
 
-func validateSchedule(items []core.SourceScheduleItem, expected []core.EpisodeRef) error {
+func validateSchedule(items []core.SourceScheduleItem, expected []core.SourceScheduleItem) error {
 	if len(expected) == 0 {
 		return fmt.Errorf("expected schedule is empty")
 	}
@@ -98,20 +98,49 @@ func validateSchedule(items []core.SourceScheduleItem, expected []core.EpisodeRe
 		return fmt.Errorf("schedule count = %d, want %d", len(items), len(expected))
 	}
 	var previous time.Time
+	type scheduleIdentity struct {
+		anime     core.SourceRef
+		episode   core.EpisodeRef
+		airsAtUTC string
+		precision core.SchedulePrecision
+	}
+	seen := make(map[scheduleIdentity]struct{}, len(items))
 	for index, item := range items {
-		if err := validateSourceRef(item.Anime.Ref); err != nil {
+		if err := validateScheduleItem(item); err != nil {
 			return err
-		}
-		if item.Episode.Ref.Anime != item.Anime.Ref || strings.TrimSpace(item.Episode.Ref.ID) == "" {
-			return fmt.Errorf("unlinked schedule item: %#v", item)
 		}
 		if item.AirsAt.IsZero() || (!previous.IsZero() && item.AirsAt.Before(previous)) {
 			return fmt.Errorf("schedule is not normalized at %d", index)
 		}
-		if item.Episode.Ref != expected[index] {
-			return fmt.Errorf("schedule episode %d = %#v, want %#v", index, item.Episode.Ref, expected[index])
+		key := scheduleIdentity{anime: item.Anime.Ref, episode: item.Episode.Ref, airsAtUTC: item.AirsAt.UTC().Format(time.RFC3339Nano), precision: item.Precision}
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("duplicate schedule item at %d", index)
+		}
+		seen[key] = struct{}{}
+		if !reflect.DeepEqual(item, expected[index]) {
+			return fmt.Errorf("schedule item %d = %#v, want %#v", index, item, expected[index])
 		}
 		previous = item.AirsAt
+	}
+	return nil
+}
+
+func validateScheduleItem(item core.SourceScheduleItem) error {
+	if err := validateSourceRef(item.Anime.Ref); err != nil {
+		return err
+	}
+	if strings.TrimSpace(item.Anime.Title) == "" || item.Episode.Ref.Anime != item.Anime.Ref {
+		return fmt.Errorf("unlinked schedule item: %#v", item)
+	}
+	if item.Episode.Ref.ID == "" {
+		if item.Episode.Number != "" || item.Episode.Title != "" {
+			return fmt.Errorf("unknown schedule episode has metadata: %#v", item)
+		}
+	} else if strings.TrimSpace(item.Episode.Ref.ID) == "" {
+		return fmt.Errorf("invalid schedule episode: %#v", item)
+	}
+	if item.AirsAt.IsZero() || item.Precision != core.SchedulePrecisionDay && item.Precision != core.SchedulePrecisionTime {
+		return fmt.Errorf("invalid schedule time: %#v", item)
 	}
 	return nil
 }

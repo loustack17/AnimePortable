@@ -22,10 +22,18 @@ type ScheduleQuery struct {
 	To   time.Time
 }
 
+type SchedulePrecision uint8
+
+const (
+	SchedulePrecisionDay SchedulePrecision = iota + 1
+	SchedulePrecisionTime
+)
+
 type SourceScheduleItem struct {
-	Anime   SourceAnime
-	Episode SourceEpisode
-	AirsAt  time.Time
+	Anime     SourceAnime
+	Episode   SourceEpisode
+	AirsAt    time.Time
+	Precision SchedulePrecision
 }
 
 type AnimeSource interface {

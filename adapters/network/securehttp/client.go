@@ -254,6 +254,9 @@ func (c *Client) Do(req *http.Request) (*Response, error) {
 }
 
 func (c *Client) checkRedirect(request *http.Request, via []*http.Request) error {
+	if len(via) > 0 && via[0].Method != http.MethodGet && via[0].Method != http.MethodHead {
+		return &Error{Kind: KindRedirect}
+	}
 	if len(via) > c.maxRedirects {
 		return &Error{Kind: KindRedirect}
 	}

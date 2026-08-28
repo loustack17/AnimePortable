@@ -60,8 +60,8 @@ func (*fakeAnimeSource) Schedule(ctx context.Context, _ core.ScheduleQuery) ([]c
 	}
 	start := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	return []core.SourceScheduleItem{
-		{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode1, Number: "1"}, AirsAt: start},
-		{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode2, Number: "2"}, AirsAt: start.Add(time.Hour)},
+		{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode1, Number: "1"}, AirsAt: start, Precision: core.SchedulePrecisionTime},
+		{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode2, Number: "2"}, AirsAt: start.Add(time.Hour), Precision: core.SchedulePrecisionTime},
 	}, nil
 }
 
@@ -328,12 +328,15 @@ var (
 
 func TestAnimeSourceContract(t *testing.T) {
 	RunAnimeSource(t, AnimeSourceSuite{
-		New:              func(*testing.T) core.AnimeSource { return &fakeAnimeSource{} },
-		Catalog:          SourceListCase{Supported: true, Expected: []core.SourceRef{fakeAnimeRef}},
-		Search:           SourceSearchCase{Supported: true, Query: "Anime", Expected: []core.SourceRef{fakeAnimeRef}},
-		Episodes:         SourceEpisodesCase{Supported: true, Anime: fakeAnimeRef, Expected: []core.EpisodeRef{fakeEpisode1, fakeEpisode2}},
-		Resolve:          SourceResolveCase{Supported: true, Episode: fakeEpisode1},
-		Schedule:         SourceScheduleCase{Supported: true, Expected: []core.EpisodeRef{fakeEpisode1, fakeEpisode2}},
+		New:      func(*testing.T) core.AnimeSource { return &fakeAnimeSource{} },
+		Catalog:  SourceListCase{Supported: true, Expected: []core.SourceRef{fakeAnimeRef}},
+		Search:   SourceSearchCase{Supported: true, Query: "Anime", Expected: []core.SourceRef{fakeAnimeRef}},
+		Episodes: SourceEpisodesCase{Supported: true, Anime: fakeAnimeRef, Expected: []core.EpisodeRef{fakeEpisode1, fakeEpisode2}},
+		Resolve:  SourceResolveCase{Supported: true, Episode: fakeEpisode1},
+		Schedule: SourceScheduleCase{Supported: true, Expected: []core.SourceScheduleItem{
+			{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode1, Number: "1"}, AirsAt: time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC), Precision: core.SchedulePrecisionTime},
+			{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode2, Number: "2"}, AirsAt: time.Date(2026, 1, 1, 11, 0, 0, 0, time.UTC), Precision: core.SchedulePrecisionTime},
+		}},
 		ForbiddenStrings: []string{"raw-secret"},
 	})
 }

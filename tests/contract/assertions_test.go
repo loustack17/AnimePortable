@@ -31,7 +31,7 @@ func TestValidatorsRejectBrokenAdapters(t *testing.T) {
 			return validateEpisodeOrder([]core.SourceEpisode{{Ref: episode}}, anime, []core.EpisodeRef{{Anime: anime, ID: "other"}})
 		},
 		"schedule": func() error {
-			return validateSchedule([]core.SourceScheduleItem{{Anime: core.SourceAnime{Ref: anime}, Episode: core.SourceEpisode{Ref: episode}, AirsAt: time.Time{}}}, []core.EpisodeRef{episode})
+			return validateSchedule([]core.SourceScheduleItem{{Anime: core.SourceAnime{Ref: anime}, Episode: core.SourceEpisode{Ref: episode}, AirsAt: time.Time{}}}, []core.SourceScheduleItem{{Anime: core.SourceAnime{Ref: anime}, Episode: core.SourceEpisode{Ref: episode}, AirsAt: time.Time{}}})
 		},
 		"metadata candidates": func() error {
 			return validateMetadataCandidates(nil, []core.MetadataRef{{Provider: "metadata", ID: "missing"}})
@@ -47,5 +47,17 @@ func TestValidatorsRejectBrokenAdapters(t *testing.T) {
 				t.Fatal("validator accepted broken adapter output")
 			}
 		})
+	}
+}
+
+func TestScheduleValidatorAllowsDistinctEpisodesAtSameTime(t *testing.T) {
+	anime := core.SourceRef{Provider: "source", ID: "anime"}
+	instant := time.Date(2026, time.January, 1, 10, 0, 0, 0, time.UTC)
+	items := []core.SourceScheduleItem{
+		{Anime: core.SourceAnime{Ref: anime, Title: "Anime"}, Episode: core.SourceEpisode{Ref: core.EpisodeRef{Anime: anime, ID: "1"}}, AirsAt: instant, Precision: core.SchedulePrecisionTime},
+		{Anime: core.SourceAnime{Ref: anime, Title: "Anime"}, Episode: core.SourceEpisode{Ref: core.EpisodeRef{Anime: anime, ID: "2"}}, AirsAt: instant, Precision: core.SchedulePrecisionTime},
+	}
+	if err := validateSchedule(items, items); err != nil {
+		t.Fatal(err)
 	}
 }
