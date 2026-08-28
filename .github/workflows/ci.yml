@@ -41,13 +41,9 @@ jobs:
         run: go vet ./...
       - name: Check Go vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
-      - name: Install Wails CLI
-        run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.12
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Generate frontend bindings
         working-directory: apps/desktop
-        run: wails3 generate bindings -clean=true -ts
+        run: go tool wails3 generate bindings -clean=true -ts
       - name: Build desktop shell
         working-directory: apps/desktop
         run: go build -o bin/animeportable .

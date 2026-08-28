@@ -4,8 +4,8 @@ tasks:
   build:
     dir: apps/desktop
     cmds:
-      - wails3 build
+      - go tool wails3 build
   dev:
     dir: apps/desktop
     cmds:
-      - wails3 dev -config ./build/config.yml -port 9245
+      - go tool wails3 dev -config ./build/config.yml -port 9245

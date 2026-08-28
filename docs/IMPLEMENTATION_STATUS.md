@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 04 — Secure HTTP Foundation — complete
+Loop 05 — Anime1 Catalog and Search — complete
 
 ## Completed
 
@@ -30,6 +30,13 @@ Loop 04 — Secure HTTP Foundation — complete
 - [x] TLS verification, timeout, response-size, and response-header limits
 - [x] Sanitized typed errors and centralized URL/header redaction
 - [x] Deterministic SSRF, redirect, TLS, cancellation, and body-lifecycle tests
+- [x] Anime1 `animelist.json` retrieval through the shared secure HTTP client
+- [x] Catalog rows normalized to provider-scoped `SourceRef`s
+- [x] Local case-insensitive substring search over the loaded catalog
+- [x] Bounded HTML title normalization and JSON catalog parsing
+- [x] Fixture tests for malformed input, cancellation, and the `AnimeSource` contract
+- [x] Live catalog smoke: 1,893 valid entries and a successful query result
+- [x] Oracle and simplify review approval
 
 ## In progress
 
@@ -56,12 +63,12 @@ None
 - `npm audit --audit-level=high`
 - `npm ci`
 - `go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...`
-- `wails3 doctor`
-- `wails3 build`
-- `wails3 dev -config ./build/config.yml -port 9245`
+- `go tool wails3 doctor`
+- `go tool wails3 build`
+- `go tool wails3 dev -config ./build/config.yml -port 9245`
 
-The Phase 3 loop passed independent code-quality, security, test-vacuity, and Oracle final review. Validation artifacts were removed after testing.
+The Phase 4 loop passed Oracle and simplify review.
 
 ## Next loop
 
-Loop 05 — Anime1 Catalog and Search
+Loop 06 — Anime1 Episodes

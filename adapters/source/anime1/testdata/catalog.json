@@ -1,0 +1,14 @@
+[
+  [42, "<span>Alpha&nbsp;Show</span><script>do-not-return</script><style>hidden</style><template>template</template><iframe>frame</iframe>", "1", "2026", "spring", "group"],
+  [7, "<b>Beta</b> &amp; <i>Gamma</i>", "2", "2025", "fall", "group"],
+  [42, "duplicate must lose", "3", "2024", "winter", "group"],
+  ["8", "string id", "4", "2024", "winter", "group"],
+  [9.5, "fractional id", "5", "2024", "winter", "group"],
+  [10e2, "exponent id", "6", "2024", "winter", "group"],
+  [0, "zero id", "7", "2024", "winter", "group"],
+  [-1, "negative id", "8", "2024", "winter", "group"],
+  [11, "<script>only secret</script>", "9", "2024", "winter", "group"],
+  [12, null, "10", "2024", "winter", "group"],
+  [13],
+  "not a row"
+]

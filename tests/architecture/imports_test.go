@@ -16,9 +16,13 @@ type packageInfo struct {
 
 func TestCoreImportsOnlyPermittedPackages(t *testing.T) {
 	command := exec.Command("go", "list", "-json", "animeportable/core/...")
-	output, err := command.CombinedOutput()
+	output, err := command.Output()
 	if err != nil {
-		t.Fatalf("discovering core packages: %v\n%s", err, output)
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			t.Fatalf("discovering core packages: %v\n%s", err, exitError.Stderr)
+		}
+		t.Fatalf("discovering core packages: %v", err)
 	}
 
 	decoder := json.NewDecoder(strings.NewReader(string(output)))
