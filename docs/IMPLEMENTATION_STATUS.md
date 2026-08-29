@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 10 — Secure Playback Proxy — complete
+Loop 11 — MPV Detection and Process Lifecycle — complete
 
 ## Completed
 
@@ -69,6 +69,16 @@ Loop 10 — Secure Playback Proxy — complete
 - [x] Concurrent close, saturation, expiry, malformed request, redaction, and body-lifecycle race coverage
 - [x] Live Anime1 resolver-to-proxy 1 KiB Range smoke without logging or persisting playback secrets
 - [x] Secure playback proxy simplify pass and independent security review approval
+- [x] User-configured, PATH, and fixed-platform MPV executable detection
+- [x] Fail-closed configured-path validation with sanitized actionable errors
+- [x] Windows `.exe`, Scoop Junction, Unix regular-file, and executable-bit validation
+- [x] Fixed `--idle=yes` launch without shell, source credentials, or MPV config overrides
+- [x] Stable PID plus repeatable concurrent `Done`, `Wait`, and idempotent `Close` lifecycle
+- [x] Unix TERM-to-KILL and Windows direct-kill cleanup with bounded stop failures and process reaping
+- [x] Deterministic helper-process cancellation, exit, escalation, race, and repeated-cycle coverage
+- [x] Windows, Linux, and macOS MPV package cross-compilation
+- [x] Live local MPV 0.41 detection, start, PID, close, and reap smoke
+- [x] MPV lifecycle simplify pass and independent security/concurrency review approval
 
 ## In progress
 
@@ -100,8 +110,8 @@ None
 - `go tool wails3 build`
 - `go tool wails3 dev -config ./build/config.yml -port 9245`
 
-Loops 07–10 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
+Loops 07–11 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 11 — MPV Detection and Process Lifecycle
+Loop 12 — MPV JSON IPC
