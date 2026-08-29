@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 09 — Anime1 Adapter Acceptance — complete
+Loop 10 — Secure Playback Proxy — complete
 
 ## Completed
 
@@ -60,6 +60,15 @@ Loop 09 — Anime1 Adapter Acceptance — complete
 - [x] Current Anime1 category-slug compatibility with same-page and cross-page integrity checks
 - [x] Live end-to-end adapter smoke for catalog, search, episodes, resolver, and schedule
 - [x] CI binding generation before frontend verification, full race detection, and clean-worktree gate
+- [x] IPv4 loopback-only playback proxy on an ephemeral port
+- [x] High-entropy per-session capability URLs with bounded TTL, registry, and stream limits
+- [x] Resolver-owned source URLs and credentials isolated from frontend and local player requests
+- [x] Shared exact-origin HTTPS, DNS pinning, SSRF, TLS, and redirect policy for streaming requests
+- [x] Strict GET/HEAD, single-range, 200/206/416, MP4 MIME, encoding, and response-header validation
+- [x] Deterministic session/server revocation with in-flight request, body, and blocked-writer cancellation
+- [x] Concurrent close, saturation, expiry, malformed request, redaction, and body-lifecycle race coverage
+- [x] Live Anime1 resolver-to-proxy 1 KiB Range smoke without logging or persisting playback secrets
+- [x] Secure playback proxy simplify pass and independent security review approval
 
 ## In progress
 
@@ -73,7 +82,6 @@ None
 
 - Wails v3 remains pre-stable at v3.0.0-beta.12
 - Windows and macOS release validation remain deferred to their planned phases
-- Playback CDN redirect and cookie-origin enforcement remains a required secure-proxy gate before MPV exposure
 
 ## Last verified commands
 
@@ -92,8 +100,8 @@ None
 - `go tool wails3 build`
 - `go tool wails3 dev -config ./build/config.yml -port 9245`
 
-Loops 07–09 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
+Loops 07–10 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 10 — Secure Playback Proxy
+Loop 11 — MPV Detection and Process Lifecycle

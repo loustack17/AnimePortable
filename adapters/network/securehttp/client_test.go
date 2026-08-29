@@ -387,6 +387,159 @@ func TestDoSanitizesTransportErrors(t *testing.T) {
 	}
 }
 
+func TestOpenReturnsStreamingBodyOwnedByCaller(t *testing.T) {
+	sourceHeader := http.Header{"X-Value": {"one"}}
+	body := &countingBody{data: []byte("stream")}
+	c := newRoundTripClient(t, &http.Response{StatusCode: http.StatusPartialContent, ContentLength: 6, Header: sourceHeader, Body: body})
+	response, err := c.Open(mustRequest(t, "https://example.com/media"))
+	if err != nil || response == nil || response.StatusCode != http.StatusPartialContent || response.ContentLength != 6 || response.Body == nil {
+		t.Fatal(response, err)
+	}
+	if body.reads != 0 {
+		t.Fatalf("Open read %d bytes before returning", body.reads)
+	}
+	sourceHeader.Set("X-Value", "changed")
+	if response.Header.Get("X-Value") != "one" {
+		t.Fatal(response.Header)
+	}
+	read, err := io.ReadAll(response.Body)
+	if err != nil || string(read) != "stream" {
+		t.Fatal(string(read), err)
+	}
+	if err := response.Body.Close(); err != nil || !body.closed {
+		t.Fatal(err, body.closed)
+	}
+}
+
+func TestOpenRejectsInvalidURLsAndClosesTransportErrorBodies(t *testing.T) {
+	calls := 0
+	c := newRoundTripClientFunc(t, func(*http.Request) (*http.Response, error) {
+		calls++
+		return httpResponse(http.StatusOK, "unexpected", nil), nil
+	})
+	for _, request := range []*http.Request{nil, {URL: nil}, mustRequest(t, "http://example.com/media"), mustRequest(t, "https://unapproved.example/media")} {
+		if _, err := c.Open(request); err == nil {
+			t.Fatal(request)
+		}
+	}
+	if calls != 0 {
+		t.Fatal(calls)
+	}
+	body := &recordingBody{Reader: strings.NewReader("ignored")}
+	c = newRoundTripClientFunc(t, func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: body}, errors.New("raw-secret token tls url")
+	})
+	if _, err := c.Open(mustRequest(t, "https://example.com/media?secret=yes")); !isKind(err, KindNetwork) || strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "token") || !body.closed {
+		t.Fatal(err, body.closed)
+	}
+}
+
+func TestOpenPreservesRequestContextCancellation(t *testing.T) {
+	started := make(chan struct{})
+	c := newRoundTripClientFunc(t, func(request *http.Request) (*http.Response, error) {
+		close(started)
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request := mustRequest(t, "https://example.com/media").WithContext(ctx)
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Open(request)
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("transport was not called")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !isKind(err, KindCanceled) || !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Open did not observe cancellation")
+	}
+}
+
+func TestOpenUsesRedirectPolicyAndStripsCrossOriginHeaders(t *testing.T) {
+	requests := make([]*http.Request, 0, 2)
+	c := newTestClient(t, []string{"https://one.example", "https://two.example"}, func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+	}, nil)
+	c.httpClient.Transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request)
+		if len(requests) == 1 {
+			return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Location": {"https://two.example/media"}}, Body: io.NopCloser(strings.NewReader(""))}, nil
+		}
+		return httpResponse(http.StatusOK, "stream", http.Header{"X-Result": {"ok"}}), nil
+	})
+	request := mustRequest(t, "https://one.example/start")
+	request.Header.Set("Authorization", "secret")
+	response, err := c.Open(request)
+	if err != nil || response == nil || len(requests) != 2 {
+		t.Fatal(response, err, len(requests))
+	}
+	if requests[1].Header.Get("Authorization") != "" || response.Header.Get("X-Result") != "ok" {
+		t.Fatal(requests[1].Header, response.Header)
+	}
+	if body, err := io.ReadAll(response.Body); err != nil || string(body) != "stream" {
+		t.Fatal(string(body), err)
+	}
+	if err := response.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenDisablesOverallTimeoutButDoRemainsBounded(t *testing.T) {
+	c := newRoundTripClientFunc(t, func(request *http.Request) (*http.Response, error) {
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})
+	c.httpClient.Timeout = 10 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	request := mustRequest(t, "https://example.com/media").WithContext(ctx)
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Open(request)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("Open applied overall timeout: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !isKind(err, KindCanceled) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Open did not finish after cancellation")
+	}
+	start := time.Now()
+	if _, err := c.Do(mustRequest(t, "https://example.com/media")); !isKind(err, KindTimeout) {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Do exceeded timeout bound: %s", elapsed)
+	}
+}
+
+func TestCloseIdleConnectionsDelegatesToTransport(t *testing.T) {
+	transport := &idleClosingTransport{}
+	c := newTestClient(t, []string{"https://example.com"}, nil, nil)
+	c.httpClient.Transport = transport
+	c.CloseIdleConnections()
+	if !transport.closed {
+		t.Fatal("transport was not asked to close idle connections")
+	}
+}
+
 func TestRedactionClonesAndRemovesSecrets(t *testing.T) {
 	originalURL, err := url.Parse("https://user:pass@example.com/path-token?query-secret=yes#fragment-secret")
 	if err != nil {
@@ -495,6 +648,34 @@ type recordingBody struct {
 }
 
 func (b *recordingBody) Close() error { b.closed = true; return b.closeErr }
+
+type countingBody struct {
+	data   []byte
+	reads  int
+	closed bool
+}
+
+func (b *countingBody) Read(p []byte) (int, error) {
+	b.reads++
+	if len(b.data) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, b.data)
+	b.data = b.data[n:]
+	return n, nil
+}
+
+func (b *countingBody) Close() error { b.closed = true; return nil }
+
+type idleClosingTransport struct {
+	closed bool
+}
+
+func (idleClosingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("unexpected request")
+}
+
+func (t *idleClosingTransport) CloseIdleConnections() { t.closed = true }
 
 type errorReader struct{}
 

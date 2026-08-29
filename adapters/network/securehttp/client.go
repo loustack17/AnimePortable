@@ -98,6 +98,13 @@ type Response struct {
 	Body       []byte
 }
 
+type StreamResponse struct {
+	StatusCode    int
+	Header        http.Header
+	Body          io.ReadCloser
+	ContentLength int64
+}
+
 func (r *Response) RequireSuccess() error {
 	if r == nil || r.StatusCode < http.StatusOK || r.StatusCode >= http.StatusMultipleChoices {
 		return &Error{Kind: KindStatus}
@@ -217,15 +224,10 @@ func normalizeConfig(config *Config) error {
 }
 
 func (c *Client) Do(req *http.Request) (*Response, error) {
-	if c == nil || c.httpClient == nil || req == nil {
-		return nil, &Error{Kind: KindURL}
-	}
-	if err := c.validateURL(req.URL); err != nil {
+	clone, err := c.cloneRequest(req)
+	if err != nil {
 		return nil, err
 	}
-	clone := req.Clone(req.Context())
-	clone.Header = req.Header.Clone()
-	clone.Host = ""
 	response, err := c.httpClient.Do(clone)
 	if err != nil {
 		return nil, sanitizeError(err)
@@ -251,6 +253,69 @@ func (c *Client) Do(req *http.Request) (*Response, error) {
 		return nil, &Error{Kind: KindNetwork}
 	}
 	return &Response{StatusCode: response.StatusCode, Header: response.Header.Clone(), Body: append([]byte(nil), body...)}, nil
+}
+
+func (c *Client) Open(req *http.Request) (*StreamResponse, error) {
+	clone, err := c.cloneRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	transport := c.httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	client := &http.Client{
+		Transport:     closeResponseBodyTransport{transport: transport},
+		CheckRedirect: c.checkRedirect,
+	}
+	response, err := client.Do(clone)
+	if err != nil {
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
+		return nil, sanitizeError(err)
+	}
+	if response == nil || response.Body == nil {
+		return nil, &Error{Kind: KindResponse}
+	}
+	return &StreamResponse{
+		StatusCode:    response.StatusCode,
+		Header:        response.Header.Clone(),
+		Body:          response.Body,
+		ContentLength: response.ContentLength,
+	}, nil
+}
+
+func (c *Client) cloneRequest(req *http.Request) (*http.Request, error) {
+	if c == nil || c.httpClient == nil || req == nil {
+		return nil, &Error{Kind: KindURL}
+	}
+	if err := c.validateURL(req.URL); err != nil {
+		return nil, err
+	}
+	clone := req.Clone(req.Context())
+	clone.Header = req.Header.Clone()
+	clone.Host = ""
+	return clone, nil
+}
+
+func (c *Client) CloseIdleConnections() {
+	if c == nil || c.httpClient == nil {
+		return
+	}
+	c.httpClient.CloseIdleConnections()
+}
+
+type closeResponseBodyTransport struct {
+	transport http.RoundTripper
+}
+
+func (t closeResponseBodyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	response, err := t.transport.RoundTrip(req)
+	if err != nil && response != nil && response.Body != nil {
+		_ = response.Body.Close()
+	}
+	return response, err
 }
 
 func (c *Client) checkRedirect(request *http.Request, via []*http.Request) error {
