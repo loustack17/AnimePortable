@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -105,8 +104,7 @@ func RunAnimeSource(t *testing.T, suite AnimeSourceSuite) {
 		}
 		requireNoError(t, err, suite.ForbiddenStrings)
 		requireValid(t, validateAbsoluteURL(resolved.URL()))
-		requireValid(t, validateForbidden(fmt.Sprint(resolved), suite.ForbiddenStrings))
-		requireValid(t, validateForbidden(fmt.Sprintf("%#v", resolved), suite.ForbiddenStrings))
+		requireValid(t, validateForbidden(resolved, suite.ForbiddenStrings))
 		encoded, err := json.Marshal(resolved)
 		if err != nil {
 			t.Fatal(err)

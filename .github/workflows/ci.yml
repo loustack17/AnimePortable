@@ -21,10 +21,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+      - name: Install frontend dependencies
+        working-directory: apps/desktop/frontend
+        run: npm ci
+      - name: Generate frontend bindings
+        working-directory: apps/desktop
+        run: go tool wails3 generate bindings -clean=true -ts
       - name: Verify frontend
         working-directory: apps/desktop/frontend
         run: |
-          npm ci
           npm run check
           npm run build
           npm audit --audit-level=high
@@ -37,13 +42,16 @@ jobs:
         run: go mod verify
       - name: Test Go
         run: go test ./...
+      - name: Test Anime1 adapter acceptance
+        run: go test ./adapters/source/anime1 -run '^TestAnime1AdapterAcceptance'
+      - name: Test Go with race detector
+        run: go test -race ./...
       - name: Vet Go
         run: go vet ./...
       - name: Check Go vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
-      - name: Generate frontend bindings
-        working-directory: apps/desktop
-        run: go tool wails3 generate bindings -clean=true -ts
       - name: Build desktop shell
         working-directory: apps/desktop
         run: go build -o bin/animeportable .
+      - name: Verify clean worktree
+        run: test -z "$(git status --porcelain)"

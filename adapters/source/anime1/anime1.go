@@ -36,6 +36,7 @@ const (
 	maxEpisodeLabelRunes  = 64
 	maxEpisodeIDDigits    = 20
 	maxCategoryIDDigits   = 10
+	maxCategoryClassBytes = 128
 )
 
 var (
@@ -146,6 +147,7 @@ func (client *Client) Episodes(ctx context.Context, ref core.SourceRef) ([]core.
 	seenURLs := map[string]struct{}{canonicalEpisodeURL(initialURL): {}}
 	seenIDs := make(map[string]struct{})
 	newestFirst := make([]core.SourceEpisode, 0)
+	archiveCategoryClass := ""
 
 	for {
 		if err := checkContext(ctx); err != nil {
@@ -158,6 +160,11 @@ func (client *Client) Episodes(ctx context.Context, ref core.SourceRef) ([]core.
 		page, err := parseEpisodePage(ctx, body, ref, currentURL)
 		if err != nil {
 			return nil, err
+		}
+		if archiveCategoryClass == "" {
+			archiveCategoryClass = page.categoryClass
+		} else if page.categoryClass != archiveCategoryClass {
+			return nil, errEpisodesMalformed
 		}
 		for _, postID := range page.postIDs {
 			if _, exists := seenIDs[postID]; exists {
@@ -414,10 +421,11 @@ func sanitizeEpisodeRequestError(err error) error {
 }
 
 type episodePage struct {
-	episodes []core.SourceEpisode
-	postIDs  []string
-	hasNext  bool
-	nextHref string
+	episodes      []core.SourceEpisode
+	postIDs       []string
+	categoryClass string
+	hasNext       bool
+	nextHref      string
 }
 
 type episodePaginationState struct {
@@ -452,9 +460,9 @@ func parseEpisodePage(ctx context.Context, body []byte, ref core.SourceRef, page
 	if parsed.main == nil {
 		return episodePage{}, errEpisodesMalformed
 	}
-	categoryClass := "category-" + ref.ID
 	episodes := make([]core.SourceEpisode, 0)
 	postIDs := make([]string, 0)
+	categoryClass := ""
 	for child := parsed.main.FirstChild; child != nil; child = child.NextSibling {
 		if err := checkContext(ctx); err != nil {
 			return episodePage{}, err
@@ -462,9 +470,11 @@ func parseEpisodePage(ctx context.Context, body []byte, ref core.SourceRef, page
 		if child.Type != html.ElementNode || child.DataAtom != atom.Article {
 			continue
 		}
-		if !hasClass(child, categoryClass) {
+		articleCategoryClass, ok := episodeArticleCategoryClass(child, ref)
+		if !ok || categoryClass != "" && articleCategoryClass != categoryClass {
 			return episodePage{}, errEpisodesMalformed
 		}
+		categoryClass = articleCategoryClass
 		if postID, ok := parsePostID(attributeValue(child, "id")); ok {
 			postIDs = append(postIDs, postID)
 		}
@@ -479,7 +489,7 @@ func parseEpisodePage(ctx context.Context, body []byte, ref core.SourceRef, page
 	if len(episodes) == 0 {
 		return episodePage{}, errEpisodesMalformed
 	}
-	page := episodePage{episodes: episodes, postIDs: postIDs}
+	page := episodePage{episodes: episodes, postIDs: postIDs, categoryClass: categoryClass}
 	if len(parsed.navigationLinks) > 0 {
 		nextURL, err := mergeEpisodePaginationTargets(pageURL, parsed.navigationLinks)
 		if err != nil {
@@ -489,6 +499,46 @@ func parseEpisodePage(ctx context.Context, body []byte, ref core.SourceRef, page
 		page.nextHref = nextURL.String()
 	}
 	return page, nil
+}
+
+func episodeArticleCategoryClass(article *html.Node, ref core.SourceRef) (string, bool) {
+	categoryClass := ""
+	for _, class := range strings.Fields(attributeValue(article, "class")) {
+		if !strings.HasPrefix(class, "category-") {
+			continue
+		}
+		if categoryClass != "" {
+			return "", false
+		}
+		suffix := strings.TrimPrefix(class, "category-")
+		if !validCategoryClassSuffix(suffix) {
+			return "", false
+		}
+		if allASCIIDigits(suffix) {
+			categoryID, ok := parseBoundedPositiveDecimal(suffix, maxCategoryIDDigits)
+			if !ok || categoryID != ref.ID {
+				return "", false
+			}
+		}
+		categoryClass = class
+	}
+	return categoryClass, categoryClass != ""
+}
+
+func validCategoryClassSuffix(value string) bool {
+	if value == "" || len(value) > maxCategoryClassBytes {
+		return false
+	}
+	for _, character := range value {
+		switch {
+		case character >= 'a' && character <= 'z':
+		case character >= '0' && character <= '9':
+		case character == '-' || character == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func inspectEpisodeDocument(ctx context.Context, document *html.Node) (episodePageDocument, error) {

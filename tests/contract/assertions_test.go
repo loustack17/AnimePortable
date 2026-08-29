@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -11,6 +13,17 @@ type deceptiveError string
 
 func (err deceptiveError) Error() string { return string(err) }
 func (deceptiveError) GoString() string  { return "redacted" }
+
+type plusVOnlyError struct{}
+
+func (plusVOnlyError) Error() string { return "safe" }
+func (plusVOnlyError) Format(state fmt.State, verb rune) {
+	if verb == 'v' && state.Flag('+') {
+		_, _ = io.WriteString(state, "plus-v-secret")
+		return
+	}
+	_, _ = io.WriteString(state, "safe")
+}
 
 func TestValidatorsRejectBrokenAdapters(t *testing.T) {
 	anime := core.SourceRef{Provider: "source", ID: "anime"}
@@ -59,5 +72,21 @@ func TestScheduleValidatorAllowsDistinctEpisodesAtSameTime(t *testing.T) {
 	}
 	if err := validateSchedule(items, items); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestForbiddenValidatorChecksPlusVFormatting(t *testing.T) {
+	value := plusVOnlyError{}
+	if got := fmt.Sprintf("%v", value); got != "safe" {
+		t.Fatalf("%%v = %q", got)
+	}
+	if got := fmt.Sprintf("%#v", value); got != "safe" {
+		t.Fatalf("%%#v = %q", got)
+	}
+	if got := fmt.Sprintf("%+v", value); got != "plus-v-secret" {
+		t.Fatalf("%%+v = %q", got)
+	}
+	if err := validateForbidden(value, []string{"plus-v-secret"}); err == nil {
+		t.Fatal("validator missed a secret exposed only by plus-v formatting")
 	}
 }

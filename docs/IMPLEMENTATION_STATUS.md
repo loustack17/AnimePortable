@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 08 — Anime1 Schedule — complete
+Loop 09 — Anime1 Adapter Acceptance — complete
 
 ## Completed
 
@@ -54,6 +54,12 @@ Loop 08 — Anime1 Schedule — complete
 - [x] Schedule parser limits, malformed schema, cancellation, half-open range, and season-boundary tests
 - [x] Live schedule smoke against the current Anime1 seasonal table
 - [x] Resolver and schedule simplify passes and independent code-quality reviews
+- [x] Named Anime1 adapter acceptance gate covering all five source methods
+- [x] Malformed-response zero-value and `%v`/`%+v`/`%#v` secret-redaction regression coverage
+- [x] Public `securehttp` to Anime1 adapter composition test without production wiring
+- [x] Current Anime1 category-slug compatibility with same-page and cross-page integrity checks
+- [x] Live end-to-end adapter smoke for catalog, search, episodes, resolver, and schedule
+- [x] CI binding generation before frontend verification, full race detection, and clean-worktree gate
 
 ## In progress
 
@@ -72,6 +78,7 @@ None
 ## Last verified commands
 
 - `go test -count=1 ./...`
+- `go test ./adapters/source/anime1 -run '^TestAnime1AdapterAcceptance' -count=1`
 - `go test -race -count=1 ./...`
 - `go vet ./...`
 - `go build -o bin/animeportable.exe .`
@@ -85,8 +92,8 @@ None
 - `go tool wails3 build`
 - `go tool wails3 dev -config ./build/config.yml -port 9245`
 
-Loops 07–08 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
+Loops 07–09 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 09 — Anime1 Adapter Acceptance
+Loop 10 — Secure Playback Proxy

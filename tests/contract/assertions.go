@@ -37,7 +37,7 @@ func validateAbsoluteURL(raw string) error {
 }
 
 func validateForbidden(value any, forbidden []string) error {
-	formatted := fmt.Sprintf("%v\n%#v", value, value)
+	formatted := fmt.Sprintf("%v\n%+v\n%#v", value, value, value)
 	for _, sentinel := range forbidden {
 		if sentinel != "" && strings.Contains(formatted, sentinel) {
 			return errors.New("value contains forbidden content")

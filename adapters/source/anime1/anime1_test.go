@@ -464,6 +464,52 @@ func TestEpisodesFixtureReturnsOldestFirstAndUsesArchivePagination(t *testing.T)
 	}
 }
 
+func TestEpisodesAcceptsConsistentCategorySlugs(t *testing.T) {
+	pageOne := strings.ReplaceAll(episodeFixture(t, "episodes-page-1.html"), "category-42", "category-lets-go-")
+	pageTwo := strings.ReplaceAll(episodeFixture(t, "episodes-page-2.html"), "category-42", "category-lets-go-")
+	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{
+		episodeResponse(pageOne),
+		episodeResponse(pageTwo),
+	}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	if err != nil || len(items) != 4 {
+		t.Fatalf("items = %d error = %v", len(items), err)
+	}
+}
+
+func TestEpisodesRejectsInvalidCategoryClassStructure(t *testing.T) {
+	base := episodeFixture(t, "episodes-page-2.html")
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "multiple categories", body: strings.Replace(base, "category-42", "category-show category-other", 1)},
+		{name: "missing category", body: strings.Replace(base, "category-42", "tag-show", 1)},
+		{name: "invalid slug", body: strings.Replace(base, "category-42", "category-UPPER", 1)},
+		{name: "oversized slug", body: strings.Replace(base, "category-42", "category-"+strings.Repeat("a", maxCategoryClassBytes+1), 1)},
+		{name: "mixed categories", body: strings.Replace(strings.Replace(base, "category-42", "category-show", 1), "category-42", "category-other", 1)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(test.body)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+			if !errors.Is(err, errEpisodesMalformed) || items != nil {
+				t.Fatalf("items = %#v error = %v", items, err)
+			}
+		})
+	}
+}
+
+func TestEpisodesRejectsCategorySlugChangesAcrossPages(t *testing.T) {
+	pageOne := strings.ReplaceAll(episodeFixture(t, "episodes-page-1.html"), "category-42", "category-show")
+	pageTwo := strings.ReplaceAll(episodeFixture(t, "episodes-page-2.html"), "category-42", "category-other")
+	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{
+		episodeResponse(pageOne),
+		episodeResponse(pageTwo),
+	}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	if !errors.Is(err, errEpisodesMalformed) || items != nil {
+		t.Fatalf("items = %#v error = %v", items, err)
+	}
+}
+
 func TestEpisodesRejectsInvalidRefsBeforeRequest(t *testing.T) {
 	fake := &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(episodeFixture(t, "episodes-page-1.html"))}}
 	client := newWithDo(fake)
@@ -823,7 +869,7 @@ func TestEpisodesCancellationDuringTraversalAndPagination(t *testing.T) {
 	}
 }
 
-func TestAnime1SourceContract(t *testing.T) {
+func TestAnime1AdapterAcceptanceContract(t *testing.T) {
 	factory := func(*testing.T) core.AnimeSource {
 		return newWithDo(&fakeClient{
 			response: jsonResponse(catalogFixture(t)),
