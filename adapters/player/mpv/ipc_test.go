@@ -155,6 +155,283 @@ func TestClientEndFileEventIsTypedAndReasonSanitized(t *testing.T) {
 	_ = serverConn.Close()
 }
 
+func TestClientFileLoadedEventIsTypedAndSanitizedInEitherOrder(t *testing.T) {
+	for _, eventFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("event-first=%t", eventFirst), func(t *testing.T) {
+			clientConn, serverConn := net.Pipe()
+			client, err := NewClient(clientConn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
+			defer serverConn.Close()
+
+			serverDone := make(chan struct{})
+			release := make(chan struct{})
+			go func() {
+				defer close(serverDone)
+				defer serverConn.Close()
+				reader := bufio.NewReader(serverConn)
+				barrierLine, err := reader.ReadBytes('\n')
+				if err != nil {
+					return
+				}
+				var barrier ipcWireRequest
+				if json.Unmarshal(barrierLine, &barrier) != nil || len(barrier.Command) != 2 || barrier.Command[0] != "get_property" || barrier.Command[1] != "mpv-version" {
+					return
+				}
+				barrierResponse, _ := json.Marshal(map[string]any{"error": "success", "request_id": barrier.RequestID, "data": "mpv"})
+				if _, err := serverConn.Write(append(barrierResponse, '\n')); err != nil {
+					return
+				}
+				loadLine, err := reader.ReadBytes('\n')
+				if err != nil {
+					return
+				}
+				var load ipcWireRequest
+				if json.Unmarshal(loadLine, &load) != nil || len(load.Command) != 3 || load.Command[0] != "loadfile" || load.Command[2] != "replace" {
+					return
+				}
+				response, _ := json.Marshal(map[string]any{"error": "success", "request_id": load.RequestID})
+				event := []byte(`{"event":"file-loaded","filename":"http://127.0.0.1:43210/media/secret","data":{"url":"secret"}}` + "\n")
+				if eventFirst {
+					_, _ = serverConn.Write(event)
+					_, _ = serverConn.Write(append(response, '\n'))
+				} else {
+					_, _ = serverConn.Write(append(response, '\n'))
+					_, _ = serverConn.Write(event)
+				}
+				<-release
+			}()
+
+			if err := client.LoadFile(context.Background(), proxyMediaURL()); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case event := <-client.Events():
+				if event.Kind != EventFileLoaded || event.sequence == 0 || event.Property != "" || event.Position != 0 || event.Duration != 0 || event.Paused || event.Reason != "" {
+					t.Fatalf("event = %+v", event)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("timed out waiting for file-loaded event")
+			}
+			close(release)
+			select {
+			case <-serverDone:
+			case <-time.After(time.Second):
+				t.Fatal("server did not stop")
+			}
+		})
+	}
+}
+
+func TestClientLoadFileReceiptCorrelatesBarrierAndNACK(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	client, err := NewClient(clientConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	defer serverConn.Close()
+	serverDone := make(chan struct{})
+	releaseServer := make(chan struct{})
+	go func() {
+		defer close(serverDone)
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		barrierLine, err := reader.ReadBytes('\n')
+		if err != nil {
+			return
+		}
+		var barrier ipcWireRequest
+		if json.Unmarshal(barrierLine, &barrier) != nil {
+			return
+		}
+		if _, err := serverConn.Write([]byte(`{"event":"file-loaded","filename":"private"}` + "\n")); err != nil {
+			return
+		}
+		barrierResponse, _ := json.Marshal(map[string]any{"error": "success", "request_id": barrier.RequestID, "data": "mpv"})
+		if _, err := serverConn.Write(append(barrierResponse, '\n')); err != nil {
+			return
+		}
+		loadLine, err := reader.ReadBytes('\n')
+		if err != nil {
+			return
+		}
+		var load ipcWireRequest
+		if json.Unmarshal(loadLine, &load) != nil {
+			return
+		}
+		response, _ := json.Marshal(map[string]any{"error": "file not found", "request_id": load.RequestID})
+		if _, err := serverConn.Write(append(response, '\n')); err != nil {
+			return
+		}
+		<-releaseServer
+	}()
+
+	receipt := client.loadFileSequenced(context.Background(), proxyMediaURL())
+	if !errors.Is(receipt.err, ErrIPCCommand) {
+		t.Fatalf("receipt error = %v", receipt.err)
+	}
+	if receipt.barrier <= 1 || receipt.ack <= receipt.barrier {
+		t.Fatalf("receipt cursors = barrier:%d ack:%d", receipt.barrier, receipt.ack)
+	}
+	select {
+	case event := <-client.Events():
+		if event.Kind != EventFileLoaded || event.sequence == 0 || event.sequence >= receipt.barrier {
+			t.Fatalf("stale event = %+v barrier=%d", event, receipt.barrier)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for stale event")
+	}
+	close(releaseServer)
+	select {
+	case <-serverDone:
+	case <-time.After(time.Second):
+		t.Fatal("server did not stop")
+	}
+}
+
+func TestClientEventCursorSurvivesPriorityPressureAndClose(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	client, err := NewClient(clientConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serverConn.Close()
+	for range maxEventQueue {
+		client.publish(Event{Kind: EventEndFile, Reason: "eof"})
+	}
+	cursor, err := client.enqueueEventCursor(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumed := make(chan struct{})
+	go func() {
+		defer close(consumed)
+		for range client.Events() {
+		}
+	}()
+	select {
+	case <-cursor.done:
+	case <-time.After(time.Second):
+		t.Fatal("event cursor did not pass queued events")
+	}
+	if err := client.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-consumed:
+	case <-time.After(time.Second):
+		t.Fatal("event consumer did not stop")
+	}
+}
+
+func TestSessionWaitEventsThroughUsesPostCommandBarrier(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	client, err := NewClient(clientConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	defer serverConn.Close()
+	releaseServer := make(chan struct{})
+	serverDone := make(chan struct{})
+	go func() {
+		defer close(serverDone)
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		readRequest := func() (ipcWireRequest, bool) {
+			line, readErr := reader.ReadBytes('\n')
+			if readErr != nil {
+				return ipcWireRequest{}, false
+			}
+			var request ipcWireRequest
+			return request, json.Unmarshal(line, &request) == nil
+		}
+		respond := func(request ipcWireRequest, messageError string) bool {
+			payload, _ := json.Marshal(map[string]any{"error": messageError, "request_id": request.RequestID, "data": "mpv"})
+			_, writeErr := serverConn.Write(append(payload, '\n'))
+			return writeErr == nil
+		}
+		barrier, ok := readRequest()
+		if !ok || !respond(barrier, "success") {
+			return
+		}
+		load, ok := readRequest()
+		if !ok || !respond(load, "file not found") {
+			return
+		}
+		if _, err := serverConn.Write([]byte(`{"event":"file-loaded"}` + "\n")); err != nil {
+			return
+		}
+		postBarrier, ok := readRequest()
+		if !ok || !respond(postBarrier, "success") {
+			return
+		}
+		<-releaseServer
+	}()
+
+	receipt := client.loadFileSequenced(context.Background(), proxyMediaURL())
+	if !errors.Is(receipt.err, ErrIPCCommand) || receipt.ack == 0 {
+		t.Fatalf("load receipt = %+v", receipt)
+	}
+	eventDone := make(chan Event, 1)
+	go func() { eventDone <- <-client.Events() }()
+	processed, err := (&Session{client: client}).waitEventsThrough(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if processed != 1 {
+		t.Fatalf("processed events = %d", processed)
+	}
+	select {
+	case event := <-eventDone:
+		if event.Kind != EventFileLoaded || event.sequence <= receipt.ack {
+			t.Fatalf("event = %+v, ack = %d", event, receipt.ack)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("file-loaded event was not drained")
+	}
+	close(releaseServer)
+	select {
+	case <-serverDone:
+	case <-time.After(time.Second):
+		t.Fatal("server did not stop")
+	}
+}
+
+func TestClientCurrentMediaIsPrivateAndValidated(t *testing.T) {
+	for iteration := range 100 {
+		clientConn, serverConn := net.Pipe()
+		client, err := NewClient(clientConn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		serverDone := make(chan struct{})
+		go func() {
+			defer close(serverDone)
+			defer serverConn.Close()
+			line, err := bufio.NewReader(serverConn).ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var request ipcWireRequest
+			if json.Unmarshal(line, &request) != nil || len(request.Command) != 2 || request.Command[0] != "get_property" || request.Command[1] != "path" {
+				return
+			}
+			response, _ := json.Marshal(map[string]any{"error": "success", "request_id": request.RequestID, "data": proxyMediaURL()})
+			_, _ = serverConn.Write(append(response, '\n'))
+		}()
+		media, err := client.currentMedia(context.Background())
+		if err != nil || media != proxyMediaURL() {
+			t.Fatalf("iteration %d media = %q, %v", iteration, media, err)
+		}
+		<-serverDone
+		_ = client.Close()
+	}
+}
+
 func TestClientRejectsNonProxyMediaAndRedactsFormatting(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	client, err := NewClient(clientConn)
@@ -229,6 +506,31 @@ func TestClientPreservesTerminalEventWhenProgressQueueIsFull(t *testing.T) {
 	t.Fatal("terminal event was not preserved")
 }
 
+func TestClientPreservesFileLoadedEventWhenProgressQueueIsFull(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	client, err := NewClient(clientConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	defer serverConn.Close()
+	for index := range maxEventQueue {
+		client.publish(Event{Kind: EventPropertyChange, Property: fmt.Sprintf("property-%d", index)})
+	}
+	client.publish(Event{Kind: EventFileLoaded})
+	for range maxEventQueue + 1 {
+		select {
+		case event := <-client.Events():
+			if event.Kind == EventFileLoaded {
+				return
+			}
+		case <-time.After(time.Second):
+			t.Fatal("file-loaded event was not delivered")
+		}
+	}
+	t.Fatal("file-loaded event was not preserved")
+}
+
 func TestClientBackpressuresWithoutDroppingTerminalEvents(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	client, err := NewClient(clientConn)
@@ -258,6 +560,38 @@ func TestClientBackpressuresWithoutDroppingTerminalEvents(t *testing.T) {
 	case <-published:
 	case <-time.After(time.Second):
 		t.Fatal("terminal publisher remained blocked")
+	}
+}
+
+func TestClientBackpressuresWithoutDroppingFileLoadedEvents(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	client, err := NewClient(clientConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	defer serverConn.Close()
+	published := make(chan struct{})
+	go func() {
+		for range maxEventQueue + 1 {
+			client.publish(Event{Kind: EventFileLoaded})
+		}
+		close(published)
+	}()
+	for range maxEventQueue + 1 {
+		select {
+		case event := <-client.Events():
+			if event.Kind != EventFileLoaded {
+				t.Fatalf("event = %+v", event)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("file-loaded event was dropped")
+		}
+	}
+	select {
+	case <-published:
+	case <-time.After(time.Second):
+		t.Fatal("file-loaded publisher remained blocked")
 	}
 }
 

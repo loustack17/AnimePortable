@@ -40,6 +40,7 @@ const (
 	EventUnknown EventKind = iota
 	EventPropertyChange
 	EventEndFile
+	EventFileLoaded
 )
 
 type Event struct {
@@ -49,6 +50,7 @@ type Event struct {
 	Duration time.Duration
 	Paused   bool
 	Reason   string
+	sequence uint64
 }
 
 type ipcWireRequest struct {
@@ -66,18 +68,49 @@ type ipcWireMessage struct {
 }
 
 type ipcResult struct {
-	data json.RawMessage
-	err  error
+	data     json.RawMessage
+	err      error
+	sequence uint64
+}
+
+type ipcReceipt struct {
+	data     json.RawMessage
+	err      error
+	sequence uint64
+}
+
+type ipcLoadReceipt struct {
+	barrier uint64
+	ack     uint64
+	err     error
+}
+
+type ipcEventCursor struct {
+	done  chan struct{}
+	once  sync.Once
+	count uint64
+}
+
+func newEventCursor() *ipcEventCursor {
+	return &ipcEventCursor{done: make(chan struct{})}
+}
+
+func (cursor *ipcEventCursor) signal() {
+	if cursor == nil {
+		return
+	}
+	cursor.once.Do(func() { close(cursor.done) })
 }
 
 type Client struct {
 	conn net.Conn
 
-	writeMu sync.Mutex
-	mu      sync.Mutex
-	pending map[uint64]chan ipcResult
-	nextID  atomic.Uint64
-	err     error
+	writeMu         sync.Mutex
+	mu              sync.Mutex
+	pending         map[uint64]chan ipcResult
+	nextID          atomic.Uint64
+	receiveSequence atomic.Uint64
+	err             error
 
 	done       chan struct{}
 	readDone   chan struct{}
@@ -86,8 +119,14 @@ type Client struct {
 	eventSpace chan struct{}
 	eventWake  chan struct{}
 	eventMu    sync.Mutex
-	eventQueue []Event
+	eventQueue []ipcQueuedEvent
+	dispatched uint64
 	closeOnce  sync.Once
+}
+
+type ipcQueuedEvent struct {
+	event  Event
+	cursor *ipcEventCursor
 }
 
 func NewClient(conn net.Conn) (*Client, error) {
@@ -138,45 +177,60 @@ func (client *Client) Close() error {
 }
 
 func (client *Client) request(ctx context.Context, command []any) (json.RawMessage, error) {
+	receipt := client.requestReceipt(ctx, command)
+	if receipt.err != nil {
+		return nil, receipt.err
+	}
+	return responseData(receipt.data), nil
+}
+
+func (client *Client) requestReceipt(ctx context.Context, command []any) ipcReceipt {
 	if ctx == nil {
-		return nil, ErrIPC
+		return ipcReceipt{err: ErrIPC}
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return ipcReceipt{err: err}
 	}
 	id := client.nextID.Add(1)
 	if id == 0 || id > maxRequestID {
-		return nil, ErrIPCProtocol
+		return ipcReceipt{err: ErrIPCProtocol}
 	}
 	response := make(chan ipcResult, 1)
 	client.mu.Lock()
 	if client.err != nil {
 		err := client.err
 		client.mu.Unlock()
-		return nil, err
+		return ipcReceipt{err: err}
 	}
 	client.pending[id] = response
 	client.mu.Unlock()
 	if err := client.write(ctx, ipcWireRequest{Command: command, RequestID: id}); err != nil {
 		client.removePending(id)
-		return nil, err
+		return ipcReceipt{err: err}
 	}
 	select {
 	case result := <-response:
-		if result.err != nil {
-			return nil, result.err
-		}
-		if messageError := responseError(result.data); messageError != nil {
-			return nil, messageError
-		}
-		return responseData(result.data), nil
+		return receiptFromResult(result)
 	case <-ctx.Done():
 		client.removePending(id)
-		return nil, ctx.Err()
+		return ipcReceipt{err: ctx.Err()}
 	case <-client.done:
+		select {
+		case result := <-response:
+			return receiptFromResult(result)
+		default:
+		}
 		client.removePending(id)
-		return nil, ErrIPCClosed
+		return ipcReceipt{err: ErrIPCClosed}
 	}
+}
+
+func receiptFromResult(result ipcResult) ipcReceipt {
+	receipt := ipcReceipt{data: result.data, err: result.err, sequence: result.sequence}
+	if receipt.err == nil {
+		receipt.err = responseError(receipt.data)
+	}
+	return receipt
 }
 
 func (client *Client) removePending(id uint64) {
@@ -251,11 +305,12 @@ func (client *Client) readLoop() {
 		if json.Unmarshal(line, &message) != nil {
 			continue
 		}
+		sequence := client.receiveSequence.Add(1)
 		if message.RequestID != 0 {
-			client.deliver(message.RequestID, ipcResult{data: append(json.RawMessage(nil), line...)})
+			client.deliver(message.RequestID, ipcResult{data: append(json.RawMessage(nil), line...), sequence: sequence})
 			continue
 		}
-		client.handleEvent(message)
+		client.handleEvent(message, sequence)
 	}
 	client.shutdown(ErrIPCClosed)
 }
@@ -326,10 +381,12 @@ func sanitizedMPVError(value string) string {
 	}
 }
 
-func (client *Client) handleEvent(message ipcWireMessage) {
+func (client *Client) handleEvent(message ipcWireMessage, sequence uint64) {
 	switch message.Event {
 	case "end-file":
-		client.publish(Event{Kind: EventEndFile, Reason: sanitizedEndReason(message.Reason)})
+		client.publish(Event{Kind: EventEndFile, Reason: sanitizedEndReason(message.Reason), sequence: sequence})
+	case "file-loaded":
+		client.publish(Event{Kind: EventFileLoaded, sequence: sequence})
 	case "property-change":
 		property := message.Name
 		if property == "" {
@@ -338,7 +395,7 @@ func (client *Client) handleEvent(message ipcWireMessage) {
 		if property == "" {
 			return
 		}
-		event := Event{Kind: EventPropertyChange, Property: property}
+		event := Event{Kind: EventPropertyChange, Property: property, sequence: sequence}
 		switch property {
 		case propertyTimePos:
 			position, ok := decodeSeconds(message.Data)
@@ -363,6 +420,47 @@ func (client *Client) handleEvent(message ipcWireMessage) {
 	}
 }
 
+func (client *Client) enqueueEventCursor(ctx context.Context) (*ipcEventCursor, error) {
+	if client == nil || client.conn == nil {
+		return nil, ErrIPCClosed
+	}
+	if ctx == nil {
+		return nil, ErrIPC
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	select {
+	case <-client.done:
+		return nil, ErrIPCClosed
+	default:
+	}
+	cursor := newEventCursor()
+	for {
+		client.eventMu.Lock()
+		select {
+		case <-client.done:
+			client.eventMu.Unlock()
+			return nil, ErrIPCClosed
+		default:
+		}
+		if len(client.eventQueue) < maxEventQueue || client.discardQueuedProperty() {
+			client.eventQueue = append(client.eventQueue, ipcQueuedEvent{cursor: cursor})
+			client.eventMu.Unlock()
+			client.wakeEvents()
+			return cursor, nil
+		}
+		client.eventMu.Unlock()
+		select {
+		case <-client.eventSpace:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-client.done:
+			return nil, ErrIPCClosed
+		}
+	}
+}
+
 func propertyForID(id uint64) string {
 	switch id {
 	case 1:
@@ -381,23 +479,23 @@ func (client *Client) publish(event Event) {
 		client.eventMu.Lock()
 		if event.Kind == EventPropertyChange {
 			for index := range client.eventQueue {
-				queued := client.eventQueue[index]
+				queued := client.eventQueue[index].event
 				if queued.Kind == EventPropertyChange && queued.Property == event.Property {
-					client.eventQueue[index] = event
+					client.eventQueue[index].event = event
 					client.eventMu.Unlock()
 					client.wakeEvents()
 					return
 				}
 			}
 		}
-		if len(client.eventQueue) < maxEventQueue || (event.Kind == EventEndFile && client.discardQueuedProperty()) {
-			client.eventQueue = append(client.eventQueue, event)
+		if len(client.eventQueue) < maxEventQueue || (isPriorityEvent(event.Kind) && client.discardQueuedProperty()) {
+			client.eventQueue = append(client.eventQueue, ipcQueuedEvent{event: event})
 			client.eventMu.Unlock()
 			client.wakeEvents()
 			return
 		}
 		client.eventMu.Unlock()
-		if event.Kind != EventEndFile {
+		if !isPriorityEvent(event.Kind) {
 			return
 		}
 		select {
@@ -408,9 +506,13 @@ func (client *Client) publish(event Event) {
 	}
 }
 
+func isPriorityEvent(kind EventKind) bool {
+	return kind == EventEndFile || kind == EventFileLoaded
+}
+
 func (client *Client) discardQueuedProperty() bool {
-	for index, event := range client.eventQueue {
-		if event.Kind == EventPropertyChange {
+	for index, item := range client.eventQueue {
+		if item.event.Kind == EventPropertyChange {
 			client.eventQueue = append(client.eventQueue[:index], client.eventQueue[index+1:]...)
 			return true
 		}
@@ -428,11 +530,20 @@ func (client *Client) wakeEvents() {
 func (client *Client) dispatchEvents() {
 	defer close(client.eventDone)
 	defer close(client.events)
+	defer client.cancelEventCursors()
 	for {
 		client.eventMu.Lock()
 		if len(client.eventQueue) > 0 {
-			event := client.eventQueue[0]
+			item := client.eventQueue[0]
 			client.eventQueue = client.eventQueue[1:]
+			if item.cursor != nil {
+				item.cursor.count = client.dispatched
+				client.eventMu.Unlock()
+				item.cursor.signal()
+				continue
+			}
+			event := item.event
+			client.dispatched++
 			client.eventMu.Unlock()
 			select {
 			case client.eventSpace <- struct{}{}:
@@ -441,14 +552,9 @@ func (client *Client) dispatchEvents() {
 			select {
 			case client.events <- event:
 				continue
-			default:
-			}
-			select {
-			case client.events <- event:
 			case <-client.done:
 				return
 			}
-			continue
 		}
 		client.eventMu.Unlock()
 		select {
@@ -457,6 +563,17 @@ func (client *Client) dispatchEvents() {
 			return
 		}
 	}
+}
+
+func (client *Client) cancelEventCursors() {
+	client.eventMu.Lock()
+	defer client.eventMu.Unlock()
+	for _, item := range client.eventQueue {
+		if item.cursor != nil {
+			item.cursor.signal()
+		}
+	}
+	client.eventQueue = nil
 }
 
 func decodeSeconds(payload []byte) (time.Duration, bool) {
@@ -494,11 +611,25 @@ func validMediaURL(value string) bool {
 }
 
 func (client *Client) LoadFile(ctx context.Context, mediaURL string) error {
-	if !validMediaURL(mediaURL) {
-		return ErrInvalidMedia
+	return client.loadFileSequenced(ctx, mediaURL).err
+}
+
+func (client *Client) loadFileSequenced(ctx context.Context, mediaURL string) ipcLoadReceipt {
+	if client == nil || client.conn == nil {
+		return ipcLoadReceipt{err: ErrIPCClosed}
 	}
-	_, err := client.request(ctx, []any{"loadfile", mediaURL, "replace"})
-	return err
+	if !validMediaURL(mediaURL) {
+		return ipcLoadReceipt{err: ErrInvalidMedia}
+	}
+	barrier := client.requestReceipt(ctx, []any{"get_property", "mpv-version"})
+	receipt := ipcLoadReceipt{barrier: barrier.sequence, err: barrier.err}
+	if receipt.err != nil {
+		return receipt
+	}
+	ack := client.requestReceipt(ctx, []any{"loadfile", mediaURL, "replace"})
+	receipt.ack = ack.sequence
+	receipt.err = ack.err
+	return receipt
 }
 
 func (client *Client) Stop(ctx context.Context) error {
@@ -551,6 +682,18 @@ func (client *Client) Paused(ctx context.Context) (bool, error) {
 	var value bool
 	if json.Unmarshal(data, &value) != nil {
 		return false, ErrIPCProtocol
+	}
+	return value, nil
+}
+
+func (client *Client) currentMedia(ctx context.Context) (string, error) {
+	data, err := client.request(ctx, []any{"get_property", "path"})
+	if err != nil {
+		return "", err
+	}
+	var value string
+	if json.Unmarshal(data, &value) != nil || !validMediaURL(value) {
+		return "", ErrIPCProtocol
 	}
 	return value, nil
 }
@@ -709,6 +852,35 @@ func (session *Session) LoadFile(ctx context.Context, mediaURL string) error {
 	return session.client.LoadFile(ctx, mediaURL)
 }
 
+func (session *Session) loadFileSequenced(ctx context.Context, mediaURL string) ipcLoadReceipt {
+	if session == nil || session.client == nil {
+		return ipcLoadReceipt{err: ErrIPCClosed}
+	}
+	return session.client.loadFileSequenced(ctx, mediaURL)
+}
+
+func (session *Session) waitEventsThrough(ctx context.Context) (uint64, error) {
+	if session == nil || session.client == nil {
+		return 0, ErrIPCClosed
+	}
+	barrier := session.client.requestReceipt(ctx, []any{"get_property", "mpv-version"})
+	if barrier.err != nil {
+		return 0, barrier.err
+	}
+	cursor, err := session.client.enqueueEventCursor(ctx)
+	if err != nil {
+		return 0, err
+	}
+	select {
+	case <-cursor.done:
+		return cursor.count, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-session.client.done:
+		return 0, ErrIPCClosed
+	}
+}
+
 func (session *Session) Stop(ctx context.Context) error {
 	if session == nil || session.client == nil {
 		return ErrIPCClosed
@@ -735,6 +907,13 @@ func (session *Session) Paused(ctx context.Context) (bool, error) {
 		return false, ErrIPCClosed
 	}
 	return session.client.Paused(ctx)
+}
+
+func (session *Session) currentMedia(ctx context.Context) (string, error) {
+	if session == nil || session.client == nil {
+		return "", ErrIPCClosed
+	}
+	return session.client.currentMedia(ctx)
 }
 
 func (session *Session) Wait() error {

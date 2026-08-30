@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 12 — MPV JSON IPC — complete
+Loop 13 — Same-Session Episode Switching — complete
 
 ## Completed
 
@@ -88,6 +88,16 @@ Loop 12 — MPV JSON IPC — complete
 - [x] Deterministic timeout, cleanup, redaction, invalid-media, close, and process-reap coverage
 - [x] Live local MPV 0.41 named-pipe property, stop, close, and cleanup smoke
 - [x] MPV IPC simplify pass and independent security/lifecycle review approval
+- [x] Concrete MPV Player and PlaybackSession adapter with one process per viewing session
+- [x] Typed application episode switching with resolver secrets confined to the backend
+- [x] Per-episode proxy capability rotation with old-session revocation only after commit
+- [x] MPV receive-sequence, pre-load barrier, and post-rejection drain against stale event races
+- [x] ACK plus validated `file-loaded` commit with same-PID EP01 → EP02 → EP03 switching
+- [x] Fail-closed timeout, cancellation, NACK race, partial cleanup, and Load/Close lifecycle handling
+- [x] Coherent canonical playback events with bounded non-blocking delivery and terminal priority
+- [x] Deterministic sequence, backpressure, redaction, cleanup, concurrency, and high-count race coverage
+- [x] Live local MPV three-episode same-PID smoke with capability revocation checks
+- [x] Same-session switching simplify, Oracle, and security/lifecycle review approval
 
 ## In progress
 
@@ -101,6 +111,7 @@ None
 
 - Wails v3 remains pre-stable at v3.0.0-beta.12
 - Windows and macOS release validation remain deferred to their planned phases
+- Durable persist-on-switch remains deferred to Loops 14–15; PLAY-011/012 are not claimed yet
 
 ## Last verified commands
 
@@ -117,10 +128,15 @@ None
 - `go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...`
 - `go tool wails3 doctor`
 - `go tool wails3 build`
+- `ANIMEPORTABLE_MPV_LIVE=1 go test -count=1 -run '^TestLiveMPVLoadsThreeMediaURLsOnOneProcess$' ./adapters/player/mpv`
 - `go tool wails3 dev -config ./build/config.yml -port 9245`
 
-Loops 07–12 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
+Loops 07–13 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 13 — Same-Session Episode Switching
+Loop 14 — SQLite Adapter
+
+- canonical local IDs and provider-neutral schema
+- migrations plus Store contract coverage
+- no resolver URLs, cookies, headers, or capability tokens in persistent storage
