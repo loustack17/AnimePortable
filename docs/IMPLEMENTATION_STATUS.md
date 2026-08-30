@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 11 — MPV Detection and Process Lifecycle — complete
+Loop 12 — MPV JSON IPC — complete
 
 ## Completed
 
@@ -79,6 +79,15 @@ Loop 11 — MPV Detection and Process Lifecycle — complete
 - [x] Windows, Linux, and macOS MPV package cross-compilation
 - [x] Live local MPV 0.41 detection, start, PID, close, and reap smoke
 - [x] MPV lifecycle simplify pass and independent security/concurrency review approval
+- [x] Typed MPV JSON IPC commands for loopback proxy loading, playback properties, observation, stop, and quit
+- [x] Random short-lived Unix socket and Windows named-pipe endpoints with bounded startup dialing
+- [x] Unix private runtime directory, socket permissions, trusted temp fallback, path bounds, and exact cleanup
+- [x] Windows current-user protected named-pipe DACL applied before backend connection
+- [x] Bounded JSON framing, request-response demultiplexing, malformed-event tolerance, and sanitized errors
+- [x] Coalesced progress events with preserved terminal events and cancellable reader/dispatcher lifecycles
+- [x] Deterministic timeout, cleanup, redaction, invalid-media, close, and process-reap coverage
+- [x] Live local MPV 0.41 named-pipe property, stop, close, and cleanup smoke
+- [x] MPV IPC simplify pass and independent security/lifecycle review approval
 
 ## In progress
 
@@ -110,8 +119,8 @@ None
 - `go tool wails3 build`
 - `go tool wails3 dev -config ./build/config.yml -port 9245`
 
-Loops 07–11 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
+Loops 07–12 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 12 — MPV JSON IPC
+Loop 13 — Same-Session Episode Switching

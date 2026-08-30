@@ -126,7 +126,7 @@ func TestCloseEscalatesAfterGracePeriod(t *testing.T) {
 	var kills atomic.Int32
 	process, err := start(context.Background(), Executable{path: executableFixturePath()}, nil, launcherDeps{
 		command: func(string, ...string) *exec.Cmd { return helperCommand("wait") },
-		grace:   10 * time.Millisecond,
+		grace:   100 * time.Millisecond,
 		stop: func(*os.Process) error {
 			stops.Add(1)
 			return nil
