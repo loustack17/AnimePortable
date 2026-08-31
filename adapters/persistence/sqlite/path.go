@@ -34,11 +34,7 @@ func isRemoteOrDevicePath(path string) bool {
 	if strings.HasPrefix(path, `\??\`) || strings.HasPrefix(path, `\\.\`) || strings.HasPrefix(path, `\\?\`) {
 		return true
 	}
-	if isWindowsDrivePath(path) {
-		return false
-	}
-	parsed, err := url.Parse(path)
-	return err != nil || parsed.Scheme != ""
+	return false
 }
 
 func isWindowsDrivePath(path string) bool {
