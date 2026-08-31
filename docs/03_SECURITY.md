@@ -397,9 +397,11 @@ If crash reporting is added later:
 
 ## 23. Local database privacy
 
-SQLite is local-only.
+SQLite is local-only. Callers must provide an absolute path in a user-specific application-data directory.
 
-Store in user-specific application-data directories with normal OS user permissions.
+The final database path must be a regular file, never a symlink; open it with SQLite `nofollow` enabled. Creating or checking directory ancestors cannot eliminate a same-user replacement race, which remains a local residual risk.
+
+On Unix, create the database directory with private permissions and database, WAL, and SHM artifacts with `0600`. On Windows, use the inherited ACL of the user profile/application-data directory.
 
 MVP does not require DB encryption.
 

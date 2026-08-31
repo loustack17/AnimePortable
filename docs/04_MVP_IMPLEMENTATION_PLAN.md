@@ -384,15 +384,14 @@ Create local persistence.
 ### Tables / concepts
 
 - anime
-- episode
-- source_ref
+- source_refs
 - metadata
-- metadata_ref
-- follow
+- following
 - playback_progress
 - playback_history
 - settings
-- provider cache if necessary
+
+No `episode` table: the current Store port has no episode CRUD. No provider cache is included.
 
 ### Rules
 
@@ -401,6 +400,7 @@ Create local persistence.
 - no cookies
 - no stream tokens
 - no proxy tokens
+- no resolver URLs or playback headers
 
 ### Validation
 

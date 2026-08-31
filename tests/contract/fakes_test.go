@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"sync"
 	"testing"
@@ -311,7 +310,7 @@ func (store *memoryStore) SaveSettings(_ context.Context, settings core.Settings
 }
 func (store *memoryStore) Settings(context.Context) (core.Settings, error) {
 	if store.settings == nil {
-		return core.Settings{}, errors.New("settings unavailable")
+		return core.DefaultSettings(), nil
 	}
 	return *store.settings, nil
 }

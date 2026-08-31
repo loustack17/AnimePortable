@@ -319,6 +319,7 @@ anime-client/
 │   │   └── mpv/
 │   ├── persistence/
 │   │   └── sqlite/
+│   │       └── migrations/
 │   ├── network/
 │   │   └── securehttp/
 │   └── playback/
@@ -331,7 +332,6 @@ anime-client/
 │   │   └── main.go
 │   └── cli/
 │
-├── migrations/
 ├── testdata/
 ├── tests/
 │   ├── contract/

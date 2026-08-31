@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 13 — Same-Session Episode Switching — complete
+Loop 14 — SQLite Adapter — complete
 
 ## Completed
 
@@ -98,6 +98,11 @@ Loop 13 — Same-Session Episode Switching — complete
 - [x] Deterministic sequence, backpressure, redaction, cleanup, concurrency, and high-count race coverage
 - [x] Live local MPV three-episode same-PID smoke with capability revocation checks
 - [x] Same-session switching simplify, Oracle, and security/lifecycle review approval
+- [x] SQLite Store adapter with canonical local IDs and provider-neutral library state
+- [x] Embedded, checksum-verified transactional migrations and schema-tamper rejection
+- [x] Durable anime, source references, metadata, following, playback progress/history, and settings CRUD
+- [x] Store contract, persistence/reopen, migration, lifecycle, input-validation, and path-safety coverage
+- [x] Local database path validation, private Unix artifacts, final-path symlink rejection, and SQLite `nofollow`
 
 ## In progress
 
@@ -111,7 +116,7 @@ None
 
 - Wails v3 remains pre-stable at v3.0.0-beta.12
 - Windows and macOS release validation remain deferred to their planned phases
-- Durable persist-on-switch remains deferred to Loops 14–15; PLAY-011/012 are not claimed yet
+- Durable persist-on-switch orchestration remains deferred to Loop 15; PLAY-011/012 are not claimed yet
 
 ## Last verified commands
 
@@ -130,13 +135,15 @@ None
 - `go tool wails3 build`
 - `ANIMEPORTABLE_MPV_LIVE=1 go test -count=1 -run '^TestLiveMPVLoadsThreeMediaURLsOnOneProcess$' ./adapters/player/mpv`
 - `go tool wails3 dev -config ./build/config.yml -port 9245`
+- `go test -count=1 ./adapters/persistence/sqlite`
+- `go test -race -count=1 ./adapters/persistence/sqlite`
 
-Loops 07–13 passed focused and full tests, race detection, vet, live smoke validation, simplify review, and independent code-quality review.
+Loops 07–14 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 14 — SQLite Adapter
+Loop 15 — Progress/History Orchestration
 
-- canonical local IDs and provider-neutral schema
-- migrations plus Store contract coverage
-- no resolver URLs, cookies, headers, or capability tokens in persistent storage
+- observe MPV progress and persist checkpoints on pause, switch, end, and exit
+- update history and completed state without exposing playback secrets
+- resume safely after restart

@@ -134,12 +134,17 @@ func RunStore(t *testing.T, suite StoreSuite) {
 	})
 	t.Run("settings", func(t *testing.T) {
 		store := suite.New(t)
+		actual, err := store.Settings(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requireValid(t, equal(actual, core.DefaultSettings()))
 		settings := core.DefaultSettings()
 		settings.Language = core.LanguageTraditionalChinese
 		if err := store.SaveSettings(ctx, settings); err != nil {
 			t.Fatal(err)
 		}
-		actual, err := store.Settings(ctx)
+		actual, err = store.Settings(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
