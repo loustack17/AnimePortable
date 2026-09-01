@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 17 — AniList Metadata Adapter — complete
+Loop 18 — Bangumi Metadata Adapter — complete
 
 ## Completed
 
@@ -129,6 +129,13 @@ Loop 17 — AniList Metadata Adapter — complete
 - [x] Plain-text description normalization with linear HTML/Markdown processing and no frontend network access
 - [x] Provider contract, adversarial malformed/resource-bound, cancellation, redaction, request-shape, and live Search-to-Get coverage
 - [x] AniList simplify pass plus independent code-quality and Oracle final review approval
+- [x] Bangumi fallback/cross-check MetadataProvider through the shared exact-origin HTTPS client
+- [x] Versioned project User-Agent, anonymous Search/Get requests, and no Authorization propagation
+- [x] Chinese-title fallback, original-title preservation, strict date mapping, explicit total/regular episode precedence, and no inferred season/studio
+- [x] Provider-neutral atomic JSON and bounded remote plain-text helpers shared with the AniList adapter
+- [x] Required search envelope, Anime type, ID/text/date/numeric/cover/body/depth/result bounds, duplicate-key rejection, and sanitized status/error handling
+- [x] Tests-first provider contract, request-shape, nullable/malformed/adversarial/cancellation/redaction coverage, plus live Bangumi Search-to-Get smoke
+- [x] Bangumi simplify pass plus independent code-quality and Oracle final review approval
 
 ## In progress
 
@@ -168,13 +175,16 @@ None
 - `go test -shuffle=on -count=10 ./adapters/metadata/anilist`
 - `go test -race -shuffle=on -count=3 ./adapters/metadata/anilist`
 - `ANIMEPORTABLE_ANILIST_LIVE=1 go test -count=1 -run '^TestLiveAniListAdapter$' -v ./adapters/metadata/anilist`
+- `go test -shuffle=on -count=10 ./adapters/metadata/bangumi`
+- `go test -race -shuffle=on -count=3 ./adapters/metadata/bangumi`
+- `ANIMEPORTABLE_BANGUMI_LIVE=1 go test -count=1 -run '^TestLiveBangumiAdapter$' -v ./adapters/metadata/bangumi`
 
-Loops 07–17 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
+Loops 07–18 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 18 — Bangumi Metadata Adapter
+Loop 19 — Metadata Normalization and Matching
 
-- fetch subjects via the same secure HTTP policy
-- map into provider-neutral candidates/results
-- safe description normalization and cross-check compatibility
+- normalize Chinese/Japanese titles, punctuation, and full-width variants
+- score provider candidates without blindly selecting the first result
+- fail closed on low-confidence or conflicting matches

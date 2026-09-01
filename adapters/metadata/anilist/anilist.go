@@ -5,20 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	stdhtml "html"
-	"io"
 	"mime"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	metadatainternal "animeportable/adapters/metadata/internal"
 	"animeportable/adapters/network/securehttp"
 	"animeportable/core"
-	"golang.org/x/net/html"
 )
 
 const (
@@ -40,8 +37,6 @@ const (
 	searchDocument       = `query ($search: String!) { Page(page: 1, perPage: 10) { media(search: $search, type: ANIME) { id title { romaji native } seasonYear episodes } } }`
 	getDocument          = `query ($id: Int!) { Media(id: $id, type: ANIME) { id title { romaji native } seasonYear episodes description coverImage { extraLarge large medium } season studios(isMain: true) { nodes { name isAnimationStudio } } } }`
 )
-
-var markdownLinkPattern = regexp.MustCompile(`\[([^\[\]\r\n]*)\]\([^()\r\n]*\)`)
 
 var (
 	errMetadataUnavailable  = errors.New("anilist: metadata unavailable")
@@ -268,17 +263,11 @@ func mapDescription(description *string) (string, bool) {
 	if description == nil {
 		return "", true
 	}
-	if len(*description) > maxDescriptionBytes || !utf8.ValidString(*description) {
-		return "", false
-	}
-	plain := stripHTML(stdhtml.UnescapeString(*description))
-	plain = stripHTML(plain)
-	plain = strings.NewReplacer("<", " ", ">", " ").Replace(plain)
-	plain = strings.TrimSpace(stripMarkdown(plain))
-	if len(plain) > maxDescriptionBytes || utf8.RuneCountInString(plain) > maxDescriptionRunes || containsDisallowedControl(plain) {
-		return "", false
-	}
-	return strings.Join(strings.Fields(plain), " "), true
+	return metadatainternal.NormalizePlainText(*description, metadatainternal.PlainTextLimits{
+		MaxInputBytes:  maxDescriptionBytes,
+		MaxOutputBytes: maxDescriptionBytes,
+		MaxOutputRunes: maxDescriptionRunes,
+	})
 }
 
 func mapCoverURL(image coverImage) string {
@@ -375,68 +364,6 @@ func validCoverURL(value string) bool {
 	return strings.EqualFold(target.Hostname(), coverHost)
 }
 
-func stripHTML(value string) string {
-	var result strings.Builder
-	tokenizer := html.NewTokenizer(strings.NewReader(value))
-	skippedElement := ""
-	for {
-		switch tokenizer.Next() {
-		case html.ErrorToken:
-			return result.String()
-		case html.StartTagToken:
-			name, _ := tokenizer.TagName()
-			if skippedElement == "" && (string(name) == "script" || string(name) == "style") {
-				skippedElement = string(name)
-			}
-			result.WriteByte(' ')
-		case html.EndTagToken:
-			name, _ := tokenizer.TagName()
-			if string(name) == skippedElement {
-				skippedElement = ""
-			}
-			result.WriteByte(' ')
-		case html.TextToken:
-			if skippedElement == "" {
-				result.Write(tokenizer.Text())
-			}
-		}
-	}
-}
-
-func stripMarkdown(value string) string {
-	value = stripMarkdownLinks(value)
-	lines := strings.Split(value, "\n")
-	for index, line := range lines {
-		trimmed := strings.TrimLeft(line, " \t")
-		for len(trimmed) > 0 && trimmed[0] == '#' {
-			trimmed = trimmed[1:]
-		}
-		if len(trimmed) > 0 && (trimmed[0] == '>' || trimmed[0] == '-' || trimmed[0] == '+' || trimmed[0] == '*') {
-			trimmed = trimmed[1:]
-		}
-		lines[index] = trimmed
-	}
-	value = strings.Join(lines, " ")
-	var result strings.Builder
-	for index := 0; index < len(value); index++ {
-		switch value[index] {
-		case '*', '_', '~', '`':
-		case '\\':
-			if index+1 < len(value) && strings.ContainsRune("\\`*_{}[]()#+-.!~", rune(value[index+1])) {
-				continue
-			}
-			result.WriteByte(value[index])
-		default:
-			result.WriteByte(value[index])
-		}
-	}
-	return result.String()
-}
-
-func stripMarkdownLinks(value string) string {
-	return markdownLinkPattern.ReplaceAllString(value, "$1")
-}
-
 func containsDisallowedControl(value string) bool {
 	for _, character := range value {
 		if unicode.IsControl(character) && character != '\n' && character != '\r' && character != '\t' {
@@ -473,74 +400,10 @@ func sanitizeRequestError(err error) error {
 }
 
 func decodeResponse(body []byte, value any) error {
-	if len(body) == 0 || len(body) > maxResponseBodyBytes || !jsonObjectWithoutDuplicateKeys(body) {
-		return errMetadataMalformed
-	}
-	if err := json.Unmarshal(body, value); err != nil {
-		return errMetadataMalformed
-	}
-	return nil
-}
-
-func jsonObjectWithoutDuplicateKeys(body []byte) bool {
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	if err := scanJSONValue(decoder, true, 0); err != nil {
-		return false
-	}
-	_, err := decoder.Token()
-	return errors.Is(err, io.EOF)
-}
-
-func scanJSONValue(decoder *json.Decoder, requireObject bool, depth int) error {
-	if depth > maxJSONNestingDepth {
-		return errMetadataMalformed
-	}
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, isDelimiter := token.(json.Delim)
-	if requireObject && (!isDelimiter || delimiter != '{') {
-		return errMetadataMalformed
-	}
-	if !isDelimiter {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		seen := make(map[string]struct{})
-		for decoder.More() {
-			keyToken, err := decoder.Token()
-			if err != nil {
-				return err
-			}
-			key, ok := keyToken.(string)
-			if !ok {
-				return errMetadataMalformed
-			}
-			if _, exists := seen[key]; exists {
-				return errMetadataMalformed
-			}
-			seen[key] = struct{}{}
-			if err := scanJSONValue(decoder, false, depth+1); err != nil {
-				return err
-			}
-		}
-		closing, err := decoder.Token()
-		if err != nil || closing != json.Delim('}') {
-			return errMetadataMalformed
-		}
-	case '[':
-		for decoder.More() {
-			if err := scanJSONValue(decoder, false, depth+1); err != nil {
-				return err
-			}
-		}
-		closing, err := decoder.Token()
-		if err != nil || closing != json.Delim(']') {
-			return errMetadataMalformed
-		}
-	default:
+	if !metadatainternal.DecodeObject(body, value, metadatainternal.JSONLimits{
+		MaxBytes:        maxResponseBodyBytes,
+		MaxNestingDepth: maxJSONNestingDepth,
+	}) {
 		return errMetadataMalformed
 	}
 	return nil
