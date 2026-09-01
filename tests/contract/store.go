@@ -132,6 +132,33 @@ func RunStore(t *testing.T, suite StoreSuite) {
 		}
 		requireValid(t, equal(actual, progress))
 	})
+	t.Run("playback checkpoint", func(t *testing.T) {
+		store := suite.New(t)
+		seedAnime(t, ctx, store, animeA)
+		checkpoint := core.HistoryEntry{
+			Progress: core.PlaybackProgress{
+				AnimeID: animeA.ID, EpisodeID: episodeA, Position: time.Minute,
+				Duration: 24 * time.Minute, Completed: true,
+				UpdatedAt: time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC),
+			},
+			LastPlayedAt: time.Date(2026, 8, 31, 12, 0, 1, 0, time.UTC),
+		}
+		if err := store.SavePlaybackCheckpoint(ctx, checkpoint); err != nil {
+			t.Fatal(err)
+		}
+		actualProgress, err := store.Progress(ctx, animeA.ID, episodeA)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requireValid(t, equal(actualProgress, checkpoint.Progress))
+		history, err := store.History(ctx)
+		if err != nil || len(history) != 1 {
+			t.Fatalf("checkpoint history = %#v, error = %v", history, err)
+		}
+		if err := equal(history[0], checkpoint); err != nil {
+			t.Fatal(err)
+		}
+	})
 	t.Run("settings", func(t *testing.T) {
 		store := suite.New(t)
 		actual, err := store.Settings(ctx)

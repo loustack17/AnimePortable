@@ -297,6 +297,11 @@ func (store *memoryStore) SaveProgress(_ context.Context, progress core.Playback
 	store.progress[progressKey(progress.AnimeID, progress.EpisodeID)] = progress
 	return nil
 }
+func (store *memoryStore) SavePlaybackCheckpoint(_ context.Context, entry core.HistoryEntry) error {
+	store.progress[progressKey(entry.Progress.AnimeID, entry.Progress.EpisodeID)] = entry.Progress
+	store.history = append(store.history, entry)
+	return nil
+}
 func (store *memoryStore) Progress(_ context.Context, animeID core.AnimeID, episodeID core.EpisodeID) (core.PlaybackProgress, error) {
 	progress, ok := store.progress[progressKey(animeID, episodeID)]
 	if !ok {

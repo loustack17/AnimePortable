@@ -13,10 +13,11 @@ import (
 )
 
 var (
-	ErrPlayerClosed  = errors.New("mpv: playback session closed")
-	ErrPlayerFailed  = errors.New("mpv: playback session failed")
-	ErrLoadRejected  = errors.New("mpv: episode load rejected")
-	ErrPlayerCleanup = errors.New("mpv: playback cleanup failed")
+	ErrPlayerClosed   = errors.New("mpv: playback session closed")
+	ErrPlayerFailed   = errors.New("mpv: playback session failed")
+	ErrLoadRejected   = errors.New("mpv: episode load rejected")
+	ErrPlayerCleanup  = errors.New("mpv: playback cleanup failed")
+	ErrInvalidStartAt = errors.New("mpv: playback start position is invalid")
 )
 
 const defaultLoadTimeout = 30 * time.Second
@@ -32,6 +33,14 @@ type rawPlaybackSession interface {
 type sequencedRawPlaybackSession interface {
 	loadFileSequenced(context.Context, string) ipcLoadReceipt
 	waitEventsThrough(context.Context) (uint64, error)
+}
+
+type snapshotRawPlaybackSession interface {
+	Snapshot(context.Context) (core.PlaybackSnapshot, error)
+}
+
+type seekRawPlaybackSession interface {
+	Seek(context.Context, time.Duration) error
 }
 
 type proxyCapability interface {
@@ -389,24 +398,23 @@ func (relay *playbackRelay) publish(event core.PlaybackEvent) {
 	}
 	relay.mu.Lock()
 	if isCoalesciblePlaybackEvent(event.Kind) {
-		for index := range relay.queue {
-			queued := relay.queue[index]
+		last := len(relay.queue) - 1
+		if last >= 0 {
+			queued := relay.queue[last]
 			if queued.AnimeID == event.AnimeID && queued.EpisodeID == event.EpisodeID && isCoalesciblePlaybackEvent(queued.Kind) {
-				relay.queue[index] = event
+				relay.queue[last] = event
 				relay.mu.Unlock()
 				relay.wakeRelay()
 				return
 			}
 		}
-		if len(relay.queue) >= playbackRelayCapacity {
+	}
+	if len(relay.queue) >= playbackRelayCapacity && !relay.dropCoalescible() {
+		if !isPriorityPlaybackEvent(event.Kind) {
 			relay.mu.Unlock()
 			return
 		}
-	} else if len(relay.queue) >= playbackRelayCapacity {
-		if !relay.dropCoalescible() {
-			relay.mu.Unlock()
-			return
-		}
+		relay.queue = relay.queue[1:]
 	}
 	relay.queue = append(relay.queue, event)
 	relay.mu.Unlock()
@@ -414,7 +422,11 @@ func (relay *playbackRelay) publish(event core.PlaybackEvent) {
 }
 
 func isCoalesciblePlaybackEvent(kind core.PlaybackEventKind) bool {
-	return kind == core.PlaybackEventProgress || kind == core.PlaybackEventPaused
+	return kind == core.PlaybackEventProgress
+}
+
+func isPriorityPlaybackEvent(kind core.PlaybackEventKind) bool {
+	return kind == core.PlaybackEventEnded || kind == core.PlaybackEventStopped || kind == core.PlaybackEventFailed
 }
 
 func (relay *playbackRelay) dropCoalescible() bool {
@@ -549,6 +561,9 @@ func (player *Player) Start(ctx context.Context, request core.PlayRequest) (core
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if err := validateStartAt(request.StartAt); err != nil {
+		return nil, err
+	}
 	deps := normalizePlayerDeps(player.deps)
 	server, err := deps.newProxy()
 	if err != nil {
@@ -625,6 +640,9 @@ func (session *playbackSession) Load(ctx context.Context, request core.PlayReque
 		return ErrPlayerClosed
 	}
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := validateStartAt(request.StartAt); err != nil {
 		return err
 	}
 	session.opMu.Lock()
@@ -721,6 +739,17 @@ func (session *playbackSession) loadFile(ctx context.Context, mediaURL string) i
 	return ipcLoadReceipt{err: session.raw.LoadFile(ctx, mediaURL)}
 }
 
+func (session *playbackSession) applyStartAt(ctx context.Context, startAt time.Duration) error {
+	if startAt == 0 {
+		return nil
+	}
+	seeker, ok := session.raw.(seekRawPlaybackSession)
+	if !ok {
+		return ErrPlayerFailed
+	}
+	return seeker.Seek(ctx, startAt)
+}
+
 func (session *playbackSession) waitEventsThrough(ctx context.Context) error {
 	if sequenced, ok := session.raw.(sequencedRawPlaybackSession); ok {
 		processed, err := sequenced.waitEventsThrough(ctx)
@@ -777,6 +806,10 @@ func (session *playbackSession) finish(attempt *loadAttempt, ctx context.Context
 		session.failClosed()
 		return ErrPlayerFailed
 	}
+	if err := session.applyStartAt(ctx, attempt.request.StartAt); err != nil {
+		session.failClosed()
+		return sanitizePlayerError(err)
+	}
 	session.mu.Lock()
 	if session.closed || session.pending != attempt {
 		session.mu.Unlock()
@@ -785,7 +818,7 @@ func (session *playbackSession) finish(attempt *loadAttempt, ctx context.Context
 	session.pending = nil
 	session.current = attempt.request
 	session.currentProxy = attempt.candidate
-	session.position = 0
+	session.position = attempt.request.StartAt
 	session.duration = 0
 	session.paused = false
 	session.mu.Unlock()
@@ -838,6 +871,43 @@ func (session *playbackSession) Events() <-chan core.PlaybackEvent {
 	return session.relay.events
 }
 
+func (session *playbackSession) Snapshot(ctx context.Context) (core.PlaybackSnapshot, error) {
+	if session == nil || ctx == nil {
+		return core.PlaybackSnapshot{}, ErrPlayerClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return core.PlaybackSnapshot{}, err
+	}
+	session.opMu.Lock()
+	defer session.opMu.Unlock()
+	session.mu.Lock()
+	if session.closed {
+		session.mu.Unlock()
+		return core.PlaybackSnapshot{}, ErrPlayerClosed
+	}
+	raw := session.raw
+	snapshot := core.PlaybackSnapshot{Position: session.position, Duration: session.duration, Paused: session.paused}
+	session.mu.Unlock()
+	if rawSnapshot, ok := raw.(snapshotRawPlaybackSession); ok {
+		var err error
+		snapshot, err = rawSnapshot.Snapshot(ctx)
+		if err != nil {
+			return core.PlaybackSnapshot{}, sanitizePlayerError(err)
+		}
+		if !validPlaybackSnapshot(snapshot) {
+			return core.PlaybackSnapshot{}, ErrPlayerFailed
+		}
+		session.mu.Lock()
+		if !session.closed {
+			session.position = snapshot.Position
+			session.duration = snapshot.Duration
+			session.paused = snapshot.Paused
+		}
+		session.mu.Unlock()
+	}
+	return snapshot, nil
+}
+
 func (session *playbackSession) PID() int {
 	if session == nil || session.raw == nil {
 		return 0
@@ -872,10 +942,15 @@ func (session *playbackSession) handleRawClosed() {
 		return
 	}
 	request := session.current
+	position := session.position
+	duration := session.duration
 	hasRequest := request.AnimeID != "" || request.EpisodeID != ""
 	session.mu.Unlock()
 	if hasRequest {
-		session.emitTerminal(core.PlaybackEvent{AnimeID: request.AnimeID, EpisodeID: request.EpisodeID, Kind: core.PlaybackEventFailed, Err: ErrIPCClosed})
+		session.emitTerminal(core.PlaybackEvent{
+			AnimeID: request.AnimeID, EpisodeID: request.EpisodeID,
+			Kind: core.PlaybackEventFailed, Position: position, Duration: duration, Err: ErrIPCClosed,
+		})
 	}
 	session.failClosed()
 }
@@ -931,9 +1006,12 @@ func (session *playbackSession) handleEvent(event Event) {
 			Duration:  duration,
 		})
 	case EventEndFile:
-		kind := core.PlaybackEventEnded
+		kind := core.PlaybackEventStopped
 		var eventErr error
-		if event.Reason == "error" {
+		switch event.Reason {
+		case "eof":
+			kind = core.PlaybackEventEnded
+		case "error":
 			kind = core.PlaybackEventFailed
 			eventErr = ErrPlayerFailed
 		}
@@ -1066,9 +1144,22 @@ func sanitizePlayerError(err error) error {
 		return ErrStart
 	case errors.Is(err, ErrPlayerCleanup):
 		return ErrPlayerCleanup
+	case errors.Is(err, ErrInvalidStartAt):
+		return ErrInvalidStartAt
 	default:
 		return ErrPlayerFailed
 	}
+}
+
+func validateStartAt(startAt time.Duration) error {
+	if startAt < 0 {
+		return ErrInvalidStartAt
+	}
+	return nil
+}
+
+func validPlaybackSnapshot(snapshot core.PlaybackSnapshot) bool {
+	return snapshot.Position >= 0 && snapshot.Duration >= 0
 }
 
 func isNilDependency(value any) bool {

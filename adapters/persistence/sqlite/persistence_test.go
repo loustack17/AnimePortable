@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -197,6 +198,275 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	if got, err := store.History(cancelled); err == nil || got == nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled history = %#v, %v", got, err)
 	}
+}
+
+func TestPlaybackCheckpointRejectsMissingAnimeAndCancellation(t *testing.T) {
+	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
+	defer store.Close()
+	ctx := context.Background()
+	entry := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: "missing", EpisodeID: "episode"}}
+	if err := store.SavePlaybackCheckpoint(ctx, entry); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("missing anime error = %v, want ErrInvalidInput", err)
+	}
+	if _, err := store.Progress(ctx, entry.Progress.AnimeID, entry.Progress.EpisodeID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("missing anime progress = %v, want ErrNotFound", err)
+	}
+	if history, err := store.History(ctx); err != nil || len(history) != 0 {
+		t.Fatalf("missing anime history = %#v, %v", history, err)
+	}
+	if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	entry.Progress.AnimeID = "anime"
+	if err := store.SavePlaybackCheckpoint(cancelled, entry); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled checkpoint error = %v, want context.Canceled", err)
+	}
+	if _, err := store.Progress(ctx, entry.Progress.AnimeID, entry.Progress.EpisodeID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("cancelled checkpoint progress = %v, want ErrNotFound", err)
+	}
+}
+
+func TestPlaybackCheckpointRollsBackWhenHistoryWriteFails(t *testing.T) {
+	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
+	defer store.Close()
+	ctx := context.Background()
+	if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`CREATE TRIGGER checkpoint_abort BEFORE INSERT ON playback_history
+	BEGIN SELECT RAISE(ABORT, 'checkpoint abort'); END`); err != nil {
+		t.Fatal(err)
+	}
+	entry := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: "anime", EpisodeID: "episode", Position: time.Minute}}
+	if err := store.SavePlaybackCheckpoint(ctx, entry); !errors.Is(err, ErrStorage) {
+		t.Fatalf("triggered checkpoint error = %v, want ErrStorage", err)
+	}
+	if _, err := store.db.Exec("DROP TRIGGER checkpoint_abort"); err != nil {
+		t.Fatal(err)
+	}
+	var progressCount, historyCount int
+	if err := store.db.QueryRow("SELECT count(*) FROM playback_progress").Scan(&progressCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRow("SELECT count(*) FROM playback_history").Scan(&historyCount); err != nil {
+		t.Fatal(err)
+	}
+	if progressCount != 0 || historyCount != 0 {
+		t.Fatalf("rolled back rows = progress:%d history:%d", progressCount, historyCount)
+	}
+}
+
+func TestPlaybackCheckpointReopensConsistently(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	store := openLibraryStore(t, path)
+	ctx := context.Background()
+	if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
+		t.Fatal(err)
+	}
+	entry := core.HistoryEntry{
+		Progress: core.PlaybackProgress{
+			AnimeID: "anime", EpisodeID: "episode", Position: 3 * time.Minute,
+			Duration: 24 * time.Minute, UpdatedAt: time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC),
+		},
+		LastPlayedAt: time.Date(2026, 8, 31, 12, 0, 1, 0, time.UTC),
+	}
+	if err := store.SavePlaybackCheckpoint(ctx, entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store = openLibraryStore(t, path)
+	defer store.Close()
+	if got, err := store.Progress(ctx, entry.Progress.AnimeID, entry.Progress.EpisodeID); err != nil || got != entry.Progress {
+		t.Fatalf("reopened checkpoint progress = %#v, %v", got, err)
+	}
+	history, err := store.History(ctx)
+	if err != nil || len(history) != 1 {
+		t.Fatalf("reopened checkpoint history = %#v, %v", history, err)
+	}
+	if err := equalHistoryEntry(history[0], entry); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPlaybackCheckpointGuardsStaleWritesAndCompletion(t *testing.T) {
+	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
+	defer store.Close()
+	ctx := context.Background()
+	if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	earlier := core.HistoryEntry{Progress: core.PlaybackProgress{
+		AnimeID: "anime", EpisodeID: "episode", Position: time.Minute, Duration: 20 * time.Minute, UpdatedAt: base,
+	}, LastPlayedAt: base}
+	later := core.HistoryEntry{Progress: core.PlaybackProgress{
+		AnimeID: "anime", EpisodeID: "episode", Position: 4 * time.Minute, Duration: 24 * time.Minute, UpdatedAt: base.Add(time.Minute),
+	}, LastPlayedAt: base.Add(time.Minute)}
+	staleComplete := earlier
+	staleComplete.Progress.Position = 30 * time.Minute
+	staleComplete.Progress.Completed = true
+	staleComplete.LastPlayedAt = base.Add(-time.Second)
+	for _, entry := range []core.HistoryEntry{earlier, later, staleComplete} {
+		if err := store.SavePlaybackCheckpoint(ctx, entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := later.Progress
+	want.Completed = true
+	if got, err := store.Progress(ctx, "anime", "episode"); err != nil || got != want {
+		t.Fatalf("stale checkpoint progress = %#v, %v, want %#v", got, err, want)
+	}
+	history, err := store.History(ctx)
+	if err != nil || len(history) != 1 {
+		t.Fatalf("stale checkpoint history = %#v, %v", history, err)
+	}
+	wantEntry := later
+	wantEntry.Progress.Completed = true
+	if err := equalHistoryEntry(history[0], wantEntry); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPlaybackCheckpointSameTimestampUsesDeterministicMaximums(t *testing.T) {
+	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
+	defer store.Close()
+	ctx := context.Background()
+	if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
+		t.Fatal(err)
+	}
+	timestamp := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	first := core.HistoryEntry{Progress: core.PlaybackProgress{
+		AnimeID: "anime", EpisodeID: "episode", Position: time.Minute, Duration: 24 * time.Minute, UpdatedAt: timestamp,
+	}, LastPlayedAt: timestamp}
+	second := first
+	second.Progress.Position = 2 * time.Minute
+	second.Progress.Duration = 20 * time.Minute
+	second.Progress.Completed = true
+	second.LastPlayedAt = timestamp.Add(time.Second)
+	for _, entry := range []core.HistoryEntry{first, second} {
+		if err := store.SavePlaybackCheckpoint(ctx, entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantProgress := first.Progress
+	wantProgress.Position = second.Progress.Position
+	wantProgress.Completed = true
+	if got, err := store.Progress(ctx, "anime", "episode"); err != nil || got != wantProgress {
+		t.Fatalf("same timestamp progress = %#v, %v, want %#v", got, err, wantProgress)
+	}
+	history, err := store.History(ctx)
+	if err != nil || len(history) != 1 {
+		t.Fatalf("same timestamp history = %#v, %v", history, err)
+	}
+	wantEntry := core.HistoryEntry{Progress: wantProgress, LastPlayedAt: second.LastPlayedAt}
+	if err := equalHistoryEntry(history[0], wantEntry); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPlaybackCheckpointConcurrentWritesKeepNewestTimestamp(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	first := openLibraryStore(t, path)
+	second := openLibraryStore(t, path)
+	defer first.Close()
+	defer second.Close()
+	ctx := context.Background()
+	if err := first.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	older := core.HistoryEntry{Progress: core.PlaybackProgress{
+		AnimeID: "anime", EpisodeID: "episode", Position: time.Minute, Duration: 20 * time.Minute, Completed: true, UpdatedAt: base,
+	}, LastPlayedAt: base}
+	newer := older
+	newer.Progress.Position = 4 * time.Minute
+	newer.Progress.Duration = 24 * time.Minute
+	newer.Progress.Completed = false
+	newer.Progress.UpdatedAt = base.Add(time.Minute)
+	newer.LastPlayedAt = base.Add(time.Minute)
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var group sync.WaitGroup
+	group.Add(2)
+	go func() {
+		defer group.Done()
+		<-start
+		results <- first.SavePlaybackCheckpoint(ctx, older)
+	}()
+	go func() {
+		defer group.Done()
+		<-start
+		results <- second.SavePlaybackCheckpoint(ctx, newer)
+	}()
+	close(start)
+	group.Wait()
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatalf("concurrent checkpoint error = %v", err)
+		}
+	}
+	want := newer.Progress
+	want.Completed = true
+	if got, err := first.Progress(ctx, "anime", "episode"); err != nil || got != want {
+		t.Fatalf("concurrent checkpoint progress = %#v, %v, want %#v", got, err, want)
+	}
+}
+
+func TestPlaybackCheckpointRejectsCorruptDurableRows(t *testing.T) {
+	tests := []struct {
+		name   string
+		table  string
+		column string
+		value  int
+	}{
+		{name: "negative progress position", table: "playback_progress", column: "position_ns", value: -1},
+		{name: "invalid progress completed", table: "playback_progress", column: "completed", value: 2},
+		{name: "negative history duration", table: "playback_history", column: "duration_ns", value: -1},
+		{name: "invalid history completed", table: "playback_history", column: "completed", value: 2},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
+			defer store.Close()
+			ctx := context.Background()
+			if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
+				t.Fatal(err)
+			}
+			entry := core.HistoryEntry{
+				Progress: core.PlaybackProgress{
+					AnimeID: "anime", EpisodeID: "episode", Position: time.Minute,
+					Duration: 24 * time.Minute, UpdatedAt: time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC),
+				},
+				LastPlayedAt: time.Date(2026, 8, 31, 12, 0, 1, 0, time.UTC),
+			}
+			if err := store.SavePlaybackCheckpoint(ctx, entry); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.db.ExecContext(ctx, "PRAGMA ignore_check_constraints = ON"); err != nil {
+				t.Fatal(err)
+			}
+			query := "UPDATE " + test.table + " SET " + test.column + " = ? WHERE anime_id = ? AND episode_id = ?"
+			if _, err := store.db.ExecContext(ctx, query, test.value, "anime", "episode"); err != nil {
+				t.Fatal(err)
+			}
+			entry.Progress.UpdatedAt = entry.Progress.UpdatedAt.Add(time.Minute)
+			entry.LastPlayedAt = entry.LastPlayedAt.Add(time.Minute)
+			if err := store.SavePlaybackCheckpoint(ctx, entry); !errors.Is(err, ErrStorage) {
+				t.Fatalf("corrupt checkpoint error = %v, want ErrStorage", err)
+			}
+		})
+	}
+}
+
+func equalHistoryEntry(actual, expected core.HistoryEntry) error {
+	if !reflect.DeepEqual(actual, expected) {
+		return errors.New("history entry mismatch")
+	}
+	return nil
 }
 
 func TestEncodeStoredTimeRejectsUTCYearOverflow(t *testing.T) {

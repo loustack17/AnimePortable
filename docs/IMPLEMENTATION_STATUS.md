@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 14 — SQLite Adapter — complete
+Loop 15 — Progress/History Orchestration — complete
 
 ## Completed
 
@@ -103,6 +103,17 @@ Loop 14 — SQLite Adapter — complete
 - [x] Durable anime, source references, metadata, following, playback progress/history, and settings CRUD
 - [x] Store contract, persistence/reopen, migration, lifecycle, input-validation, and path-safety coverage
 - [x] Local database path validation, private Unix artifacts, final-path symlink rejection, and SQLite `nofollow`
+- [x] Optional synchronous playback snapshots with fail-closed production capability checks
+- [x] Durable resume policy with explicit-start precedence and completed/near-complete suppression
+- [x] In-memory progress tracking with 15-second and pause/switch/end/stop/failure/exit checkpoints
+- [x] Atomic SQLite progress/history checkpoints with stale-write rejection and monotonic completion
+- [x] Double-snapshot episode switching with persistence-before-resolve/load failure safety
+- [x] EOF-only completion semantics with distinct stopped/failed terminal states
+- [x] Bounded, terminal-safe event delivery across backpressure, reload, and episode ownership changes
+- [x] Concurrent idempotent close with cancellable final persistence, raw-player cleanup, and owned-run shutdown
+- [x] Restart resume, terminal race, corrupt-state, rollback, backpressure, and lifecycle race coverage
+- [x] Live MPV IPC and same-process three-media smoke after playback tracking integration
+- [x] Progress/history simplify pass plus independent concurrency and Oracle review approval
 
 ## In progress
 
@@ -116,7 +127,6 @@ None
 
 - Wails v3 remains pre-stable at v3.0.0-beta.12
 - Windows and macOS release validation remain deferred to their planned phases
-- Durable persist-on-switch orchestration remains deferred to Loop 15; PLAY-011/012 are not claimed yet
 
 ## Last verified commands
 
@@ -137,13 +147,16 @@ None
 - `go tool wails3 dev -config ./build/config.yml -port 9245`
 - `go test -count=1 ./adapters/persistence/sqlite`
 - `go test -race -count=1 ./adapters/persistence/sqlite`
+- `ANIMEPORTABLE_MPV_LIVE=1 go test -count=1 ./adapters/player/mpv -run 'TestLive' -v`
+- `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./core ./adapters/... ./tests/...`
+- `CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build ./core ./adapters/... ./tests/...`
 
-Loops 07–14 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
+Loops 07–15 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 15 — Progress/History Orchestration
+Loop 16 — Following
 
-- observe MPV progress and persist checkpoints on pause, switch, end, and exit
-- update history and completed state without exposing playback secrets
-- resume safely after restart
+- add local follow and unfollow operations
+- compare watched progress with the latest known episode
+- preserve follow state across restart using canonical local anime identity

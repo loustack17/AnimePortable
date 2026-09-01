@@ -15,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"animeportable/core"
 )
 
 var (
@@ -637,6 +639,14 @@ func (client *Client) Stop(ctx context.Context) error {
 	return err
 }
 
+func (client *Client) Seek(ctx context.Context, position time.Duration) error {
+	if position < 0 {
+		return ErrIPCProtocol
+	}
+	_, err := client.request(ctx, []any{"seek", float64(position) / float64(time.Second), "absolute"})
+	return err
+}
+
 func (client *Client) ObserveTimePos(ctx context.Context) error {
 	return client.observe(ctx, 1, propertyTimePos)
 }
@@ -686,6 +696,22 @@ func (client *Client) Paused(ctx context.Context) (bool, error) {
 	return value, nil
 }
 
+func (client *Client) Snapshot(ctx context.Context) (core.PlaybackSnapshot, error) {
+	position, err := client.TimePos(ctx)
+	if err != nil {
+		return core.PlaybackSnapshot{}, err
+	}
+	duration, err := client.Duration(ctx)
+	if err != nil {
+		return core.PlaybackSnapshot{}, err
+	}
+	paused, err := client.Paused(ctx)
+	if err != nil {
+		return core.PlaybackSnapshot{}, err
+	}
+	return core.PlaybackSnapshot{Position: position, Duration: duration, Paused: paused}, nil
+}
+
 func (client *Client) currentMedia(ctx context.Context) (string, error) {
 	data, err := client.request(ctx, []any{"get_property", "path"})
 	if err != nil {
@@ -716,9 +742,11 @@ type Session struct {
 	client   *Client
 	endpoint *ipcEndpoint
 
+	opMu      sync.Mutex
 	closeOnce sync.Once
 	closeDone chan struct{}
 	reapDone  chan struct{}
+	closing   chan struct{}
 	mu        sync.Mutex
 	closeErr  error
 }
@@ -798,6 +826,7 @@ func startIPC(ctx context.Context, executable Executable, deps ipcStartDeps) (*S
 		endpoint:  endpoint,
 		closeDone: make(chan struct{}),
 		reapDone:  make(chan struct{}),
+		closing:   make(chan struct{}),
 	}
 	go session.reap()
 	return session, nil
@@ -849,6 +878,11 @@ func (session *Session) LoadFile(ctx context.Context, mediaURL string) error {
 	if session == nil || session.client == nil {
 		return ErrIPCClosed
 	}
+	session.opMu.Lock()
+	defer session.opMu.Unlock()
+	if session.isClosing() {
+		return ErrIPCClosed
+	}
 	return session.client.LoadFile(ctx, mediaURL)
 }
 
@@ -888,6 +922,18 @@ func (session *Session) Stop(ctx context.Context) error {
 	return session.client.Stop(ctx)
 }
 
+func (session *Session) Seek(ctx context.Context, position time.Duration) error {
+	if session == nil || session.client == nil {
+		return ErrIPCClosed
+	}
+	session.opMu.Lock()
+	defer session.opMu.Unlock()
+	if session.isClosing() {
+		return ErrIPCClosed
+	}
+	return session.client.Seek(ctx, position)
+}
+
 func (session *Session) TimePos(ctx context.Context) (time.Duration, error) {
 	if session == nil || session.client == nil {
 		return 0, ErrIPCClosed
@@ -909,6 +955,21 @@ func (session *Session) Paused(ctx context.Context) (bool, error) {
 	return session.client.Paused(ctx)
 }
 
+func (session *Session) Snapshot(ctx context.Context) (core.PlaybackSnapshot, error) {
+	if session == nil || session.client == nil {
+		return core.PlaybackSnapshot{}, ErrIPCClosed
+	}
+	session.opMu.Lock()
+	defer session.opMu.Unlock()
+	if session.isClosing() {
+		return core.PlaybackSnapshot{}, ErrIPCClosed
+	}
+	if _, err := session.waitEventsThrough(ctx); err != nil {
+		return core.PlaybackSnapshot{}, err
+	}
+	return session.client.Snapshot(ctx)
+}
+
 func (session *Session) currentMedia(ctx context.Context) (string, error) {
 	if session == nil || session.client == nil {
 		return "", ErrIPCClosed
@@ -928,10 +989,12 @@ func (session *Session) Close() error {
 		return nil
 	}
 	session.closeOnce.Do(func() {
-		quitCtx, cancelQuit := context.WithTimeout(context.Background(), 500*time.Millisecond)
-		_ = session.client.sendNoWait(quitCtx, []any{"quit"})
-		cancelQuit()
+		if session.closing != nil {
+			close(session.closing)
+		}
 		_ = session.client.Close()
+		session.opMu.Lock()
+		session.opMu.Unlock()
 		session.setCloseError(session.process.Close())
 		select {
 		case <-session.reapDone:
@@ -946,6 +1009,18 @@ func (session *Session) Close() error {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	return session.closeErr
+}
+
+func (session *Session) isClosing() bool {
+	if session == nil || session.closing == nil {
+		return false
+	}
+	select {
+	case <-session.closing:
+		return true
+	default:
+		return false
+	}
 }
 
 func (session *Session) String() string {

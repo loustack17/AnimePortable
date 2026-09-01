@@ -16,6 +16,7 @@ type Store interface {
 	History(ctx context.Context) ([]HistoryEntry, error)
 	RemoveHistory(ctx context.Context, animeID AnimeID) error
 	SaveProgress(ctx context.Context, progress PlaybackProgress) error
+	SavePlaybackCheckpoint(ctx context.Context, entry HistoryEntry) error
 	Progress(ctx context.Context, animeID AnimeID, episodeID EpisodeID) (PlaybackProgress, error)
 	SaveSettings(ctx context.Context, settings Settings) error
 	Settings(ctx context.Context) (Settings, error)

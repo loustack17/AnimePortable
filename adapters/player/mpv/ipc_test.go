@@ -26,6 +26,7 @@ func TestClientUsesTypedCommandsAndSurvivesMalformedJSON(t *testing.T) {
 	}
 	defer client.Close()
 	serverDone := make(chan struct{})
+	seekSeen := make(chan struct{})
 	go func() {
 		defer close(serverDone)
 		defer serverConn.Close()
@@ -59,6 +60,12 @@ func TestClientUsesTypedCommandsAndSurvivesMalformedJSON(t *testing.T) {
 				if len(request.Command) != 3 || request.Command[2] != "replace" {
 					return
 				}
+			case "seek":
+				if len(request.Command) != 3 || request.Command[1] != 42.25 || request.Command[2] != "absolute" {
+					response["error"] = "invalid parameter"
+				} else {
+					close(seekSeen)
+				}
 			}
 			payload, _ := json.Marshal(response)
 			if _, writeErr := serverConn.Write(append(payload, '\n')); writeErr != nil {
@@ -84,6 +91,18 @@ func TestClientUsesTypedCommandsAndSurvivesMalformedJSON(t *testing.T) {
 	}
 	if err := client.Stop(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	if err := client.Seek(context.Background(), 42*time.Second+250*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-seekSeen:
+	case <-time.After(time.Second):
+		t.Fatal("typed seek was not sent")
+	}
+	snapshot, err := client.Snapshot(context.Background())
+	if err != nil || snapshot.Position != 12*time.Second+500*time.Millisecond || snapshot.Duration != 24*time.Minute || !snapshot.Paused {
+		t.Fatalf("snapshot = %+v, %v", snapshot, err)
 	}
 
 	if _, err := serverConn.Write([]byte("not json\n")); err != nil {

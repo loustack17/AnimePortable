@@ -90,16 +90,18 @@ func (*fakeMetadataProvider) Get(context.Context, MetadataRef) (AnimeMetadata, e
 }
 
 type fakeSession struct {
-	events  chan PlaybackEvent
-	context context.Context
-	request PlayRequest
-	loads   int
-	err     error
+	events   chan PlaybackEvent
+	context  context.Context
+	request  PlayRequest
+	snapshot PlaybackSnapshot
+	loads    int
+	err      error
 }
 
 func (session *fakeSession) Load(ctx context.Context, request PlayRequest) error {
 	session.context = ctx
 	session.request = request
+	session.snapshot.Position = request.StartAt
 	session.loads++
 	return session.err
 }
@@ -108,22 +110,48 @@ func (session *fakeSession) Events() <-chan PlaybackEvent {
 	return session.events
 }
 
+func (session *fakeSession) Snapshot(ctx context.Context) (PlaybackSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return PlaybackSnapshot{}, err
+	}
+	return session.snapshot, nil
+}
+
 func (*fakeSession) Close() error {
 	return nil
 }
 
+func trackFakeSession(t *testing.T, session *fakeSession, store *fakeStore) *trackedPlaybackSession {
+	t.Helper()
+	tracked, err := newTrackedPlaybackSession(session, store, PlayRequest{AnimeID: "old-anime", EpisodeID: "old-episode"}, playbackTrackingConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tracked.Close() })
+	return tracked
+}
+
 type fakeStore struct {
-	context context.Context
-	anime   []Anime
-	err     error
+	context     context.Context
+	anime       []Anime
+	animeErr    error
+	err         error
+	settings    Settings
+	settingsErr error
+	progress    PlaybackProgress
+	progressErr error
+	checkpoints []HistoryEntry
 }
 
 func (*fakeStore) SaveAnime(context.Context, Anime) error {
 	return nil
 }
 
-func (*fakeStore) Anime(context.Context, AnimeID) (Anime, error) {
-	return Anime{}, ErrNotFound
+func (store *fakeStore) Anime(_ context.Context, id AnimeID) (Anime, error) {
+	if store.animeErr != nil {
+		return Anime{}, store.animeErr
+	}
+	return Anime{ID: id}, nil
 }
 
 func (store *fakeStore) ListAnime(ctx context.Context) ([]Anime, error) {
@@ -171,16 +199,30 @@ func (*fakeStore) SaveProgress(context.Context, PlaybackProgress) error {
 	return nil
 }
 
-func (*fakeStore) Progress(context.Context, AnimeID, EpisodeID) (PlaybackProgress, error) {
-	return PlaybackProgress{}, ErrNotFound
+func (store *fakeStore) SavePlaybackCheckpoint(_ context.Context, entry HistoryEntry) error {
+	store.checkpoints = append(store.checkpoints, entry)
+	return nil
+}
+
+func (store *fakeStore) Progress(context.Context, AnimeID, EpisodeID) (PlaybackProgress, error) {
+	if store.progressErr != nil {
+		return PlaybackProgress{}, store.progressErr
+	}
+	if store.progress.AnimeID == "" {
+		return PlaybackProgress{}, ErrNotFound
+	}
+	return store.progress, nil
 }
 
 func (*fakeStore) SaveSettings(context.Context, Settings) error {
 	return nil
 }
 
-func (*fakeStore) Settings(context.Context) (Settings, error) {
-	return Settings{}, ErrNotFound
+func (store *fakeStore) Settings(context.Context) (Settings, error) {
+	if store.settingsErr != nil {
+		return Settings{}, store.settingsErr
+	}
+	return store.settings, nil
 }
 
 var (
@@ -227,8 +269,9 @@ func TestAppPlayEpisodeResolvesBeforeStartingPlayer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if actual != session {
-		t.Fatal("unexpected playback session")
+	tracked, ok := actual.(*trackedPlaybackSession)
+	if !ok || tracked.raw != session {
+		t.Fatalf("unexpected playback session %T", actual)
 	}
 	if source.resolveRef != ref {
 		t.Fatalf("resolved ref = %#v", source.resolveRef)
@@ -270,17 +313,18 @@ func TestAppSwitchEpisodeResolvesAndLoadsCanonicalRequest(t *testing.T) {
 	ref := EpisodeRef{Anime: SourceRef{Provider: "source", ID: "anime"}, ID: "episode"}
 	session := &fakeSession{events: make(chan PlaybackEvent)}
 	source := &fakeSource{resolved: resolved}
-	app := NewApp(source, &fakePlayer{}, &fakeStore{})
+	store := &fakeStore{}
+	app := NewApp(source, &fakePlayer{}, store)
 	ctx := context.WithValue(context.Background(), contextKey{}, "switch")
 
-	err := app.SwitchEpisode(ctx, session, AnimeID("local-anime"), EpisodeID("local-episode"), ref, 90*time.Second)
+	err := app.SwitchEpisode(ctx, trackFakeSession(t, session, store), AnimeID("local-anime"), EpisodeID("local-episode"), ref, 90*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if source.resolveRef != ref {
 		t.Fatalf("resolved ref = %#v", source.resolveRef)
 	}
-	if session.context != ctx {
+	if session.context == nil || session.context.Value(contextKey{}) != "switch" {
 		t.Fatal("switch context was not forwarded")
 	}
 	if session.loads != 1 {
@@ -300,9 +344,10 @@ func TestAppSwitchEpisodeResolvesAndLoadsCanonicalRequest(t *testing.T) {
 func TestAppSwitchEpisodeDoesNotLoadWhenResolveFails(t *testing.T) {
 	expected := errors.New("resolve failed")
 	session := &fakeSession{events: make(chan PlaybackEvent)}
-	app := NewApp(&fakeSource{resolveErr: expected}, &fakePlayer{}, &fakeStore{})
+	store := &fakeStore{}
+	app := NewApp(&fakeSource{resolveErr: expected}, &fakePlayer{}, store)
 
-	err := app.SwitchEpisode(context.Background(), session, "anime", "episode", EpisodeRef{}, 0)
+	err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{}, 0)
 	if !errors.Is(err, expected) {
 		t.Fatalf("error = %v", err)
 	}
@@ -315,9 +360,10 @@ func TestAppSwitchEpisodeReturnsLoadFailureWithoutSourceDetails(t *testing.T) {
 	loadErr := errors.New("load failed")
 	source := &fakeSource{resolved: NewPlaybackSource("https://media.example/episode.m3u8?token=secret", nil)}
 	session := &fakeSession{events: make(chan PlaybackEvent), err: loadErr}
-	app := NewApp(source, &fakePlayer{}, &fakeStore{})
+	store := &fakeStore{}
+	app := NewApp(source, &fakePlayer{}, store)
 
-	err := app.SwitchEpisode(context.Background(), session, "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
 	if !errors.Is(err, loadErr) {
 		t.Fatalf("error = %v", err)
 	}
@@ -331,9 +377,10 @@ func TestAppSwitchEpisodeCancellationDoesNotLoad(t *testing.T) {
 	cancel()
 	session := &fakeSession{events: make(chan PlaybackEvent)}
 	source := &fakeSource{resolved: NewPlaybackSource("https://media.example/episode.m3u8", nil)}
-	app := NewApp(source, &fakePlayer{}, &fakeStore{})
+	store := &fakeStore{}
+	app := NewApp(source, &fakePlayer{}, store)
 
-	err := app.SwitchEpisode(ctx, session, "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	err := app.SwitchEpisode(ctx, trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}
@@ -353,9 +400,10 @@ func TestAppSwitchEpisodeCancellationAfterResolveDoesNotLoad(t *testing.T) {
 		return source.resolved, nil
 	}
 	session := &fakeSession{events: make(chan PlaybackEvent)}
-	app := NewApp(source, &fakePlayer{}, &fakeStore{})
+	store := &fakeStore{}
+	app := NewApp(source, &fakePlayer{}, store)
 
-	err := app.SwitchEpisode(ctx, session, "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	err := app.SwitchEpisode(ctx, trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}

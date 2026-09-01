@@ -62,6 +62,12 @@ type PlaybackProgress struct {
 	UpdatedAt time.Time
 }
 
+type PlaybackSnapshot struct {
+	Position time.Duration
+	Duration time.Duration
+	Paused   bool
+}
+
 type HistoryEntry struct {
 	Progress     PlaybackProgress
 	LastPlayedAt time.Time
@@ -112,6 +118,7 @@ const (
 	PlaybackEventPaused
 	PlaybackEventEnded
 	PlaybackEventFailed
+	PlaybackEventStopped
 )
 
 type PlaybackEvent struct {

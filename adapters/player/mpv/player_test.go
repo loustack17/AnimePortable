@@ -124,6 +124,8 @@ type fakeRawSession struct {
 	closeErr       error
 	currentPath    string
 	currentMediaFn func() (string, error)
+	seekPositions  []time.Duration
+	seekErr        error
 }
 
 type sequencedLoadPlan struct {
@@ -314,6 +316,20 @@ func (raw *fakeRawSession) LoadFile(ctx context.Context, mediaURL string) error 
 	return nil
 }
 
+func (raw *fakeRawSession) Seek(ctx context.Context, position time.Duration) error {
+	if ctx == nil {
+		return ErrIPC
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	raw.mu.Lock()
+	raw.seekPositions = append(raw.seekPositions, position)
+	err := raw.seekErr
+	raw.mu.Unlock()
+	return err
+}
+
 func (raw *fakeRawSession) publish(event Event) {
 	select {
 	case <-raw.closed:
@@ -338,6 +354,12 @@ func (raw *fakeRawSession) loadURLs() []string {
 	raw.mu.Lock()
 	defer raw.mu.Unlock()
 	return append([]string(nil), raw.urls...)
+}
+
+func (raw *fakeRawSession) seekCalls() []time.Duration {
+	raw.mu.Lock()
+	defer raw.mu.Unlock()
+	return append([]time.Duration(nil), raw.seekPositions...)
 }
 
 func testRequest(id string) core.PlayRequest {
@@ -427,6 +449,179 @@ func TestPlayerCommitsFileLoadedAndAckInEitherOrder(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestPlayerAppliesPositiveStartAtAfterLoad(t *testing.T) {
+	raw := newFakeRaw(fakeLoadPlan{event: true})
+	service := &fakeProxyService{}
+	request := testRequest("ep01")
+	request.StartAt = 12*time.Second + 250*time.Millisecond
+	session, err := newTestPlayer(raw, service).Start(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	playback := session.(*playbackSession)
+	if calls := raw.seekCalls(); len(calls) != 1 || calls[0] != request.StartAt {
+		t.Fatalf("seek calls = %v", calls)
+	}
+	snapshot, err := playback.Snapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Position != request.StartAt {
+		t.Fatalf("snapshot position = %s", snapshot.Position)
+	}
+	if err := playback.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPlayerSeekFailureFailsClosed(t *testing.T) {
+	raw := newFakeRaw(fakeLoadPlan{event: true})
+	raw.seekErr = ErrIPCCommand
+	service := &fakeProxyService{}
+	request := testRequest("ep01")
+	request.StartAt = time.Second
+	if _, err := newTestPlayer(raw, service).Start(context.Background(), request); !errors.Is(err, ErrLoadRejected) {
+		t.Fatalf("seek failure = %v", err)
+	}
+	service.mu.Lock()
+	serverClosed := service.closed
+	service.mu.Unlock()
+	if len(raw.seekCalls()) != 1 || raw.closeCount != 1 || !serverClosed {
+		t.Fatalf("seek cleanup = calls:%d raw:%d server:%t", len(raw.seekCalls()), raw.closeCount, serverClosed)
+	}
+}
+
+func TestPlayerRejectsNegativeStartAtBeforeStartingResources(t *testing.T) {
+	raw := newFakeRaw()
+	service := &fakeProxyService{}
+	request := testRequest("ep01")
+	request.StartAt = -time.Nanosecond
+	if _, err := newTestPlayer(raw, service).Start(context.Background(), request); !errors.Is(err, ErrInvalidStartAt) {
+		t.Fatalf("negative startAt = %v", err)
+	}
+	service.mu.Lock()
+	capabilities := len(service.caps)
+	service.mu.Unlock()
+	if capabilities != 0 || raw.closeCount != 0 {
+		t.Fatalf("negative startAt created resources: capabilities=%d raw=%d", capabilities, raw.closeCount)
+	}
+}
+
+func TestPlayerMapsEndFileReasonsToProviderNeutralKinds(t *testing.T) {
+	tests := []struct {
+		reason string
+		kind   core.PlaybackEventKind
+		err    error
+	}{
+		{reason: "eof", kind: core.PlaybackEventEnded},
+		{reason: "stop", kind: core.PlaybackEventStopped},
+		{reason: "quit", kind: core.PlaybackEventStopped},
+		{reason: "redirect", kind: core.PlaybackEventStopped},
+		{reason: "unknown", kind: core.PlaybackEventStopped},
+		{reason: "error", kind: core.PlaybackEventFailed, err: ErrPlayerFailed},
+	}
+	for _, test := range tests {
+		t.Run(test.reason, func(t *testing.T) {
+			raw := newFakeRaw(fakeLoadPlan{event: true})
+			service := &fakeProxyService{}
+			session, err := newTestPlayer(raw, service).Start(context.Background(), testRequest("ep01"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			playback := session.(*playbackSession)
+			raw.publish(Event{Kind: EventEndFile, Reason: test.reason})
+			event := waitEvent(t, playback.Events())
+			if event.Kind != test.kind || !errors.Is(event.Err, test.err) {
+				t.Fatalf("event = %+v, want kind %d error %v", event, test.kind, test.err)
+			}
+			if err := playback.Close(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestPlayerRawCloseTerminalCarriesLastCheckpoint(t *testing.T) {
+	raw := newFakeRaw(fakeLoadPlan{event: true})
+	service := &fakeProxyService{}
+	session, err := newTestPlayer(raw, service).Start(context.Background(), testRequest("ep01"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	playback := session.(*playbackSession)
+	raw.publish(Event{Kind: EventPropertyChange, Property: propertyTimePos, Position: 42 * time.Second})
+	if event := waitEvent(t, playback.Events()); event.Position != 42*time.Second {
+		t.Fatalf("position event = %+v", event)
+	}
+	raw.publish(Event{Kind: EventPropertyChange, Property: propertyDuration, Duration: 24 * time.Minute})
+	if event := waitEvent(t, playback.Events()); event.Duration != 24*time.Minute {
+		t.Fatalf("duration event = %+v", event)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	event := waitEvent(t, playback.Events())
+	if event.Kind != core.PlaybackEventFailed || event.Position != 42*time.Second || event.Duration != 24*time.Minute || !errors.Is(event.Err, ErrIPCClosed) {
+		t.Fatalf("terminal event = %+v", event)
+	}
+	_ = playback.Close()
+}
+
+func TestPlaybackRelayOnlyCoalescesProgress(t *testing.T) {
+	stop := make(chan struct{})
+	relay := newPlaybackRelay(stop)
+	firstProgress := core.PlaybackEvent{AnimeID: "anime", EpisodeID: "ep01", Kind: core.PlaybackEventProgress, Position: time.Second}
+	paused := core.PlaybackEvent{AnimeID: "anime", EpisodeID: "ep01", Kind: core.PlaybackEventPaused, Position: time.Second}
+	progress := core.PlaybackEvent{AnimeID: "anime", EpisodeID: "ep01", Kind: core.PlaybackEventProgress, Position: 2 * time.Second}
+	relay.publish(firstProgress)
+	relay.publish(paused)
+	relay.publish(progress)
+	if event := waitEvent(t, relay.events); event.Kind != core.PlaybackEventProgress || event.Position != time.Second {
+		t.Fatalf("first relay event = %+v", event)
+	}
+	if event := waitEvent(t, relay.events); event.Kind != core.PlaybackEventPaused || event.Position != time.Second {
+		t.Fatalf("second relay event = %+v", event)
+	}
+	if event := waitEvent(t, relay.events); event.Kind != core.PlaybackEventProgress || event.Position != 2*time.Second {
+		t.Fatalf("third relay event = %+v", event)
+	}
+	close(stop)
+	select {
+	case <-relay.done:
+	case <-time.After(time.Second):
+		t.Fatal("relay did not stop")
+	}
+}
+
+func TestPlaybackRelayKeepsTerminalWhenPauseQueueIsFull(t *testing.T) {
+	stop := make(chan struct{})
+	relay := newPlaybackRelay(stop)
+	for index := 0; index < playbackRelayCapacity+2; index++ {
+		relay.publish(core.PlaybackEvent{
+			AnimeID: "anime", EpisodeID: "episode", Kind: core.PlaybackEventPaused,
+			Position: time.Duration(index) * time.Second,
+		})
+	}
+	relay.publish(core.PlaybackEvent{AnimeID: "anime", EpisodeID: "episode", Kind: core.PlaybackEventEnded})
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case event := <-relay.events:
+			if event.Kind == core.PlaybackEventEnded {
+				close(stop)
+				select {
+				case <-relay.done:
+				case <-time.After(time.Second):
+					t.Fatal("relay did not stop")
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatal("terminal event was dropped")
+		}
 	}
 }
 

@@ -47,3 +47,8 @@ type PlaybackSession interface {
 	Events() <-chan PlaybackEvent
 	Close() error
 }
+
+type PlaybackSnapshotter interface {
+	PlaybackSession
+	Snapshot(ctx context.Context) (PlaybackSnapshot, error)
+}
