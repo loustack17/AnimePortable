@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 16 — Following — complete
+Loop 17 — AniList Metadata Adapter — complete
 
 ## Completed
 
@@ -123,6 +123,12 @@ Loop 16 — Following — complete
 - [x] Playback mapping persistence after successful resolve and before player/session mutation without storing resolver secrets
 - [x] Fresh, upgrade, reopen, validation, cancellation, concurrent-conflict, rewatch, and legacy-unmapped regression coverage
 - [x] Following simplify pass plus independent code-quality and Oracle review approval
+- [x] AniList anonymous GraphQL MetadataProvider through the shared exact-origin HTTPS client
+- [x] Bounded Search/Get queries for the MVP title, native title, cover, synopsis, season, year, episode count, and main animation studio fields
+- [x] Atomic malformed-candidate rejection, nullable-schema handling, positive IDs, enum/numeric/text/URL/depth bounds, and sanitized HTTP/GraphQL failures
+- [x] Plain-text description normalization with linear HTML/Markdown processing and no frontend network access
+- [x] Provider contract, adversarial malformed/resource-bound, cancellation, redaction, request-shape, and live Search-to-Get coverage
+- [x] AniList simplify pass plus independent code-quality and Oracle final review approval
 
 ## In progress
 
@@ -159,13 +165,16 @@ None
 - `ANIMEPORTABLE_MPV_LIVE=1 go test -count=1 ./adapters/player/mpv -run 'TestLive' -v`
 - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./core ./adapters/... ./tests/...`
 - `CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build ./core ./adapters/... ./tests/...`
+- `go test -shuffle=on -count=10 ./adapters/metadata/anilist`
+- `go test -race -shuffle=on -count=3 ./adapters/metadata/anilist`
+- `ANIMEPORTABLE_ANILIST_LIVE=1 go test -count=1 -run '^TestLiveAniListAdapter$' -v ./adapters/metadata/anilist`
 
-Loops 07–16 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
+Loops 07–17 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 17 — AniList Metadata Adapter
+Loop 18 — Bangumi Metadata Adapter
 
-- retrieve the MVP metadata subset through the shared secure HTTP layer
-- add provider contract and malformed-response coverage
-- keep metadata retrieval behind the backend boundary
+- fetch subjects via the same secure HTTP policy
+- map into provider-neutral candidates/results
+- safe description normalization and cross-check compatibility
