@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"testing"
@@ -209,6 +210,7 @@ type memoryStore struct {
 	sourceRefs map[core.AnimeID][]core.SourceRef
 	metadata   map[core.AnimeID]core.AnimeMetadata
 	following  map[core.AnimeID]bool
+	mappings   map[core.AnimeID][]core.EpisodeMapping
 	history    []core.HistoryEntry
 	progress   map[[2]string]core.PlaybackProgress
 	settings   *core.Settings
@@ -220,6 +222,7 @@ func newMemoryStore() *memoryStore {
 		sourceRefs: map[core.AnimeID][]core.SourceRef{},
 		metadata:   map[core.AnimeID]core.AnimeMetadata{},
 		following:  map[core.AnimeID]bool{},
+		mappings:   map[core.AnimeID][]core.EpisodeMapping{},
 		progress:   map[[2]string]core.PlaybackProgress{},
 	}
 }
@@ -248,6 +251,22 @@ func (store *memoryStore) SaveSourceRef(_ context.Context, id core.AnimeID, ref 
 }
 func (store *memoryStore) SourceRefs(_ context.Context, id core.AnimeID) ([]core.SourceRef, error) {
 	return append([]core.SourceRef(nil), store.sourceRefs[id]...), nil
+}
+func (store *memoryStore) SaveEpisodeMapping(_ context.Context, mapping core.EpisodeMapping) error {
+	for _, existing := range store.mappings[mapping.AnimeID] {
+		if existing.Ref == mapping.Ref {
+			if existing.EpisodeID == mapping.EpisodeID {
+				return nil
+			}
+			return errors.New("identity conflict")
+		}
+	}
+	store.mappings[mapping.AnimeID] = append(store.mappings[mapping.AnimeID], mapping)
+	return nil
+}
+func (store *memoryStore) EpisodeMappings(_ context.Context, animeID core.AnimeID) ([]core.EpisodeMapping, error) {
+	items := make([]core.EpisodeMapping, 0, len(store.mappings[animeID]))
+	return append(items, store.mappings[animeID]...), nil
 }
 func (store *memoryStore) SaveMetadata(_ context.Context, id core.AnimeID, metadata core.AnimeMetadata) error {
 	store.metadata[id] = metadata

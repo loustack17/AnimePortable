@@ -53,6 +53,31 @@ func RunStore(t *testing.T, suite StoreSuite) {
 			t.Fatalf("source refs = %#v, error = %v", refs, err)
 		}
 	})
+	t.Run("episode mappings", func(t *testing.T) {
+		store := suite.New(t)
+		seedAnime(t, ctx, store, animeA)
+		ref := core.EpisodeRef{
+			Anime: core.SourceRef{Provider: "source", ID: "external-a"},
+			ID:    "episode-a",
+		}
+		if err := store.SaveSourceRef(ctx, animeA.ID, ref.Anime); err != nil {
+			t.Fatal(err)
+		}
+		mapping := core.EpisodeMapping{AnimeID: animeA.ID, EpisodeID: episodeA, Ref: ref}
+		if err := store.SaveEpisodeMapping(ctx, mapping); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.SaveEpisodeMapping(ctx, mapping); err != nil {
+			t.Fatalf("idempotent episode mapping save: %v", err)
+		}
+		mappings, err := store.EpisodeMappings(ctx, animeA.ID)
+		if err != nil || len(mappings) != 1 || mappings[0] != mapping {
+			t.Fatalf("episode mappings = %#v, error = %v", mappings, err)
+		}
+		if mappings, err := store.EpisodeMappings(ctx, animeB.ID); err != nil || mappings == nil || len(mappings) != 0 {
+			t.Fatalf("empty episode mappings = %#v, error = %v", mappings, err)
+		}
+	})
 	t.Run("metadata", func(t *testing.T) {
 		store := suite.New(t)
 		seedAnime(t, ctx, store, animeA)

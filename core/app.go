@@ -66,6 +66,175 @@ func (app *App) Library(ctx context.Context) ([]Anime, error) {
 	return app.store.ListAnime(ctx)
 }
 
+func (app *App) Follow(ctx context.Context, animeID AnimeID) error {
+	return app.setFollowing(ctx, animeID, true)
+}
+
+func (app *App) Unfollow(ctx context.Context, animeID AnimeID) error {
+	return app.setFollowing(ctx, animeID, false)
+}
+
+func (app *App) setFollowing(ctx context.Context, animeID AnimeID, following bool) error {
+	if ctx == nil || app == nil || app.store == nil {
+		return ErrInvalidPlayback
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := app.store.Anime(ctx, animeID); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return app.store.SetFollowing(ctx, animeID, following)
+}
+
+func (app *App) ListFollowing(ctx context.Context) ([]FollowingEntry, error) {
+	if ctx == nil || app == nil || app.store == nil || app.source == nil {
+		return nil, ErrInvalidPlayback
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	ids, err := app.store.Following(ctx)
+	if err != nil {
+		return nil, err
+	}
+	history, err := app.store.History(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	watched, recent := indexPlaybackHistory(history)
+	entries := make([]FollowingEntry, 0, len(ids))
+	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if _, err := app.store.Anime(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		refs, err := app.store.SourceRefs(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		mappings, err := app.store.EpisodeMappings(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		watchedEpisodes := watched[id]
+		entry := FollowingEntry{
+			AnimeID:       id,
+			LatestWatched: recent[id],
+			HasWatched:    len(watchedEpisodes) > 0,
+		}
+		episodes, loaded, err := app.followingEpisodes(ctx, refs)
+		if err != nil {
+			return nil, err
+		}
+		if loaded && len(episodes) > 0 {
+			mappingByRef := episodeMappingIndex(mappings)
+			entry.LatestAvailable = episodes[len(episodes)-1].Ref
+			entry.HasAvailable = true
+			entry.LatestWatched = latestWatchedEpisode(episodes, mappingByRef, watchedEpisodes, entry.LatestWatched)
+			entry.NewEpisode = latestEpisodeIsNew(episodes[len(episodes)-1].Ref, mappingByRef, watchedEpisodes)
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
+func indexPlaybackHistory(history []HistoryEntry) (map[AnimeID]map[EpisodeID]struct{}, map[AnimeID]EpisodeID) {
+	watched := make(map[AnimeID]map[EpisodeID]struct{})
+	recent := make(map[AnimeID]EpisodeID)
+	recentAt := make(map[AnimeID]time.Time)
+	for _, entry := range history {
+		animeID := entry.Progress.AnimeID
+		episodeID := entry.Progress.EpisodeID
+		if animeID == "" || episodeID == "" {
+			continue
+		}
+		if watched[animeID] == nil {
+			watched[animeID] = make(map[EpisodeID]struct{})
+		}
+		watched[animeID][episodeID] = struct{}{}
+		playedAt, found := recentAt[animeID]
+		if !found || !entry.LastPlayedAt.Before(playedAt) {
+			recent[animeID] = episodeID
+			recentAt[animeID] = entry.LastPlayedAt
+		}
+	}
+	return watched, recent
+}
+
+func (app *App) followingEpisodes(ctx context.Context, refs []SourceRef) ([]SourceEpisode, bool, error) {
+	for _, ref := range refs {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		episodes, err := app.source.Episodes(ctx, ref)
+		if err == nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, false, ctxErr
+			}
+			return episodes, true, nil
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, false, ctxErr
+		}
+	}
+	return nil, false, nil
+}
+
+func latestWatchedEpisode(episodes []SourceEpisode, byRef map[EpisodeRef]EpisodeID, watched map[EpisodeID]struct{}, fallback EpisodeID) EpisodeID {
+	latest := fallback
+	for _, episode := range episodes {
+		episodeID, ok := byRef[episode.Ref]
+		if ok {
+			if _, watched := watched[episodeID]; watched {
+				latest = episodeID
+			}
+		}
+	}
+	return latest
+}
+
+func latestEpisodeIsNew(latest EpisodeRef, byRef map[EpisodeRef]EpisodeID, watched map[EpisodeID]struct{}) bool {
+	episodeID, ok := byRef[latest]
+	if !ok {
+		return true
+	}
+	_, watchedEpisode := watched[episodeID]
+	return !watchedEpisode
+}
+
+func episodeMappingIndex(mappings []EpisodeMapping) map[EpisodeRef]EpisodeID {
+	byRef := make(map[EpisodeRef]EpisodeID, len(mappings))
+	for _, mapping := range mappings {
+		if mapping.EpisodeID == "" || mapping.Ref.ID == "" {
+			continue
+		}
+		byRef[mapping.Ref] = mapping.EpisodeID
+	}
+	return byRef
+}
+
 func (app *App) preparePlayRequest(ctx context.Context, animeID AnimeID, episodeID EpisodeID, ref EpisodeRef, startAt time.Duration) (PlayRequest, error) {
 	if ctx == nil || app == nil || app.source == nil || app.player == nil || app.store == nil || startAt < 0 {
 		return PlayRequest{}, ErrInvalidPlayback
@@ -82,6 +251,18 @@ func (app *App) preparePlayRequest(ctx context.Context, animeID AnimeID, episode
 	}
 	playbackSource, err := app.source.Resolve(ctx, ref)
 	if err != nil {
+		return PlayRequest{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return PlayRequest{}, err
+	}
+	if err := app.store.SaveSourceRef(ctx, animeID, ref.Anime); err != nil {
+		return PlayRequest{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return PlayRequest{}, err
+	}
+	if err := app.store.SaveEpisodeMapping(ctx, EpisodeMapping{AnimeID: animeID, EpisodeID: episodeID, Ref: ref}); err != nil {
 		return PlayRequest{}, err
 	}
 	if err := ctx.Err(); err != nil {

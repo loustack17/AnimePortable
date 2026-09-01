@@ -16,6 +16,12 @@ type EpisodeRef struct {
 	ID    string
 }
 
+type EpisodeMapping struct {
+	AnimeID   AnimeID
+	EpisodeID EpisodeID
+	Ref       EpisodeRef
+}
+
 type MetadataRef struct {
 	Provider string
 	ID       string
@@ -71,6 +77,15 @@ type PlaybackSnapshot struct {
 type HistoryEntry struct {
 	Progress     PlaybackProgress
 	LastPlayedAt time.Time
+}
+
+type FollowingEntry struct {
+	AnimeID         AnimeID
+	LatestAvailable EpisodeRef
+	LatestWatched   EpisodeID
+	HasAvailable    bool
+	HasWatched      bool
+	NewEpisode      bool
 }
 
 type Appearance uint8

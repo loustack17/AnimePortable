@@ -8,6 +8,8 @@ type Store interface {
 	ListAnime(ctx context.Context) ([]Anime, error)
 	SaveSourceRef(ctx context.Context, animeID AnimeID, ref SourceRef) error
 	SourceRefs(ctx context.Context, animeID AnimeID) ([]SourceRef, error)
+	SaveEpisodeMapping(ctx context.Context, mapping EpisodeMapping) error
+	EpisodeMappings(ctx context.Context, animeID AnimeID) ([]EpisodeMapping, error)
 	SaveMetadata(ctx context.Context, animeID AnimeID, metadata AnimeMetadata) error
 	Metadata(ctx context.Context, animeID AnimeID) (AnimeMetadata, error)
 	SetFollowing(ctx context.Context, animeID AnimeID, following bool) error

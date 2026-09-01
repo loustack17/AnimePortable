@@ -2,7 +2,7 @@
 
 ## Current loop
 
-Loop 15 — Progress/History Orchestration — complete
+Loop 16 — Following — complete
 
 ## Completed
 
@@ -114,6 +114,15 @@ Loop 15 — Progress/History Orchestration — complete
 - [x] Restart resume, terminal race, corrupt-state, rollback, backpressure, and lifecycle race coverage
 - [x] Live MPV IPC and same-process three-media smoke after playback tracking integration
 - [x] Progress/history simplify pass plus independent concurrency and Oracle review approval
+- [x] Canonical local follow/unfollow application operations with anime preflight and Store error propagation
+- [x] Durable canonical episode-to-provider reference mappings with checksum-verified SQLite migration 0002
+- [x] Idempotent mapping writes, global provider-episode conflict protection, composite anime-source ownership, and multi-provider canonical support
+- [x] Provider-neutral watched sets with source-order latest-watched and new-episode calculation
+- [x] Correct canonical/provider identity handling when local and external episode IDs differ
+- [x] Multi-source-ref fallback with caller-cancellation propagation and remote-source graceful degradation
+- [x] Playback mapping persistence after successful resolve and before player/session mutation without storing resolver secrets
+- [x] Fresh, upgrade, reopen, validation, cancellation, concurrent-conflict, rewatch, and legacy-unmapped regression coverage
+- [x] Following simplify pass plus independent code-quality and Oracle review approval
 
 ## In progress
 
@@ -151,12 +160,12 @@ None
 - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./core ./adapters/... ./tests/...`
 - `CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build ./core ./adapters/... ./tests/...`
 
-Loops 07–15 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
+Loops 07–16 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
 
 ## Next loop
 
-Loop 16 — Following
+Loop 17 — AniList Metadata Adapter
 
-- add local follow and unfollow operations
-- compare watched progress with the latest known episode
-- preserve follow state across restart using canonical local anime identity
+- retrieve the MVP metadata subset through the shared secure HTTP layer
+- add provider contract and malformed-response coverage
+- keep metadata retrieval behind the backend boundary
