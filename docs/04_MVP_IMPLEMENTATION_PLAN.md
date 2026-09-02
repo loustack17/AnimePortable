@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 # MVP Implementation Plan
 
 This document defines the implementation order.

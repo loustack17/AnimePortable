@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 # Architecture
 
 ## 1. Architecture style
@@ -255,6 +257,16 @@ Matching may use:
 Never accept `searchResults[0]` blindly.
 
 Low-confidence matches must fail safely.
+
+The core matcher exposes normalized title comparison and an explicit decision:
+
+- accepted high-confidence matches
+- medium-confidence matches awaiting provider cross-check
+- no-metadata results for low-confidence, ambiguous, or conflicting input
+
+Provider implementations only return candidates; they do not select metadata.
+
+Application-level provider orchestration is deferred until the application wiring phase; the core matcher remains a pure, provider-neutral policy seam.
 
 ## 12. UI boundary
 

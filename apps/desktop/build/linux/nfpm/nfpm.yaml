@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MPL-2.0
+
 # Feel free to remove those if you don't want/need to use them.
 # Make sure to check the documentation at https://nfpm.goreleaser.com
 #
@@ -13,7 +15,7 @@ maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
 description: "A lightweight desktop anime client"
 vendor: "AnimePortable"
 homepage: "https://github.com/loustack17/AnimePortable"
-license: "MIT"
+license: "MPL-2.0"
 release: "1"
 
 contents:
@@ -23,6 +25,10 @@ contents:
     dst: "/usr/share/icons/hicolor/128x128/apps/animeportable.png"
   - src: "./build/linux/animeportable.desktop"
     dst: "/usr/share/applications/animeportable.desktop"
+  - src: "../../LICENSE"
+    dst: "/usr/share/doc/animeportable/LICENSE"
+  - src: "../../THIRD_PARTY_NOTICES.md"
+    dst: "/usr/share/doc/animeportable/THIRD_PARTY_NOTICES.md"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

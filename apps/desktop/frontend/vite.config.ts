@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import wails from "@wailsio/runtime/plugins/vite";

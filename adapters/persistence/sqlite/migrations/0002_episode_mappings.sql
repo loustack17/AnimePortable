@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: MPL-2.0
+
 CREATE TABLE episode_mappings (
     anime_id TEXT NOT NULL CHECK (length(anime_id) > 0 AND length(anime_id) <= 1024),
     episode_id TEXT NOT NULL CHECK (length(episode_id) > 0 AND length(episode_id) <= 1024),

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 package core
 
 import "context"
@@ -5,6 +7,7 @@ import "context"
 type MetadataQuery struct {
 	Title        string
 	NativeTitle  string
+	Season       string
 	Year         int
 	EpisodeCount int
 }
@@ -13,6 +16,7 @@ type MetadataCandidate struct {
 	Ref          MetadataRef
 	Title        string
 	NativeTitle  string
+	Season       string
 	Year         int
 	EpisodeCount int
 }

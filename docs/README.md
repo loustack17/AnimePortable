@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 # Anime Client MVP Engineering Plan
 
 This directory is the source of truth for implementing the MVP.

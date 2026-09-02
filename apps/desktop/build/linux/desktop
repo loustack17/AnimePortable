@@ -1,4 +1,5 @@
 [Desktop Entry]
+# SPDX-License-Identifier: MPL-2.0
 Version=1.0
 Name=AnimePortable
 Comment=A lightweight desktop anime client

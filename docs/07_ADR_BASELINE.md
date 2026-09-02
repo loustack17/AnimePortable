@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 # ADR Baseline
 
 These are the initial architectural decisions.

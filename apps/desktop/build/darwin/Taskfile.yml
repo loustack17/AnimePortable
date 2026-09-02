@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MPL-2.0
+
 version: '3'
 
 includes:
@@ -67,6 +69,8 @@ tasks:
     cmds:
       - mkdir -p {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/{MacOS,Resources}
       - cp build/darwin/icons.icns {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources
+      - cp ../../LICENSE {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources
+      - cp ../../THIRD_PARTY_NOTICES.md {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources
       - cp {{.BIN_DIR}}/{{.APP_NAME}} {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS
       - cp build/darwin/Info.plist {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents
       - codesign --force --deep --sign - {{.BIN_DIR}}/{{.APP_NAME}}.app
@@ -75,6 +79,8 @@ tasks:
     cmds:
       - mkdir -p {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/{MacOS,Resources}
       - cp build/darwin/icons.icns {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources
+      - cp ../../LICENSE {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources
+      - cp ../../THIRD_PARTY_NOTICES.md {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources
       - cp {{.BIN_DIR}}/{{.APP_NAME}} {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS
       - cp build/darwin/Info.dev.plist {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Info.plist
       - codesign --force --deep --sign - {{.BIN_DIR}}/{{.APP_NAME}}.dev.app

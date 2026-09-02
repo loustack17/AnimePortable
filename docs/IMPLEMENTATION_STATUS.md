@@ -1,8 +1,10 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 # Implementation Status
 
 ## Current loop
 
-Loop 18 — Bangumi Metadata Adapter — complete
+Loop 19 — Metadata Normalization and Matching — refactor and MPL-2.0 migration complete; final post-patch verification, commit, and release gate pending
 
 ## Completed
 
@@ -136,14 +138,23 @@ Loop 18 — Bangumi Metadata Adapter — complete
 - [x] Required search envelope, Anime type, ID/text/date/numeric/cover/body/depth/result bounds, duplicate-key rejection, and sanitized status/error handling
 - [x] Tests-first provider contract, request-shape, nullable/malformed/adversarial/cancellation/redaction coverage, plus live Bangumi Search-to-Get smoke
 - [x] Bangumi simplify pass plus independent code-quality and Oracle final review approval
+- [x] Provider-neutral metadata title normalization for NFKC/full-width, punctuation, conservative season/episode suffixes, and bounded Traditional/Simplified variants
+- [x] Deterministic metadata confidence scoring across title/native title, season/year, and episode-count hints without first-result selection
+- [x] Fail-closed low-confidence and conflicting-match handling with medium-confidence cross-provider confirmation and stable AniList/Bangumi tie ordering
+- [x] Metadata matching fixture coverage for variants, native titles, hints, ambiguity, conflicts, malformed candidates, and empty input
+- [x] Metadata matching simplify pass plus focused, shuffle, race, vet, and full repository validation
+- [x] MPL-2.0 project license, SPDX coverage, dependency notices, and package metadata migration
+- [x] Local standard-library qsort compatibility module replacing the unlicensed upstream source
+- [x] Generated build artifacts removed from the repository workspace
 
 ## In progress
 
-None
+- Loop 19 final gate: rerun tests after the final matcher/packaging patch, staged review, commit, exact-SHA Linux CI, and final handoff removal
 
 ## Blocked
 
-None
+- Git staging cannot create `.git/index.lock` in the managed workspace; the elevated retry was rejected after the active usage limit was reached.
+- Final post-patch Go tests were blocked by the environment usage-limit gate; formal files remain unstaged, so commit, push, and exact-SHA Linux CI cannot run yet.
 
 ## Known technical risks
 
@@ -178,13 +189,21 @@ None
 - `go test -shuffle=on -count=10 ./adapters/metadata/bangumi`
 - `go test -race -shuffle=on -count=3 ./adapters/metadata/bangumi`
 - `ANIMEPORTABLE_BANGUMI_LIVE=1 go test -count=1 -run '^TestLiveBangumiAdapter$' -v ./adapters/metadata/bangumi`
+- `go test -shuffle=on -count=10 ./core ./tests/contract ./adapters/metadata/...`
+- `go test -race -shuffle=on -count=3 ./core ./tests/contract ./adapters/metadata/...`
+- `go test ./...`
+- `go vet ./...`
+- `go test -shuffle=on -count=10 ./core ./tests/contract ./adapters/metadata/...`
+- `go test -race -shuffle=on -count=3 ./core ./tests/contract ./adapters/metadata/...`
+- `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./core ./adapters/... ./tests/...`
+- `go mod verify`
+- `git diff --check`
 
-Loops 07–18 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
+Loops 07–18 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review. Loop 19 functional tests, clean-code refactor, license migration, and local validation before the final matcher/packaging patch passed; final post-patch tests, Git, and exact-SHA CI gates remain open. Requested independent review agents were unavailable because of the active usage limit.
 
 ## Next loop
 
-Loop 19 — Metadata Normalization and Matching
+Loop 20 — Remote Metadata Content Security
 
-- normalize Chinese/Japanese titles, punctuation, and full-width variants
-- score provider candidates without blindly selecting the first result
-- fail closed on low-confidence or conflicting matches
+- validate untrusted metadata content and resource bounds
+- preserve fail-closed behavior across provider payloads and cached metadata

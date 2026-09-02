@@ -1,3 +1,5 @@
+; SPDX-License-Identifier: MPL-2.0
+
 Unicode true
 
 !define INFO_PROJECTNAME "animeportable"
@@ -28,6 +30,7 @@ ManifestDPIAware true
 !define MUI_ABORTWARNING
 
 !insertmacro MUI_PAGE_WELCOME
+!insertmacro MUI_PAGE_LICENSE "..\..\..\..\..\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -53,6 +56,8 @@ Section
 
     SetOutPath $INSTDIR
     !insertmacro wails.files
+    File "..\..\..\..\..\LICENSE"
+    File "..\..\..\..\..\THIRD_PARTY_NOTICES.md"
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortcut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MPL-2.0
+
 version: '3'
 
 includes:
@@ -49,6 +51,8 @@ tasks:
       - cp {{.APP_BINARY}} {{.APP_NAME}}
       - cp ../../appicon.png appicon.png
       - go tool wails3 generate appimage -binary {{.APP_NAME}} -icon {{.ICON}} -desktopfile {{.DESKTOP_FILE}} -outputdir {{.OUTPUT_DIR}} -builddir {{.ROOT_DIR}}/build/linux/appimage/build
+      - cp ../../../../../LICENSE {{.OUTPUT_DIR}}/LICENSE
+      - cp ../../../../../THIRD_PARTY_NOTICES.md {{.OUTPUT_DIR}}/THIRD_PARTY_NOTICES.md
     vars:
       APP_NAME: '{{.APP_NAME}}'
       APP_BINARY: '../../../bin/{{.APP_NAME}}'

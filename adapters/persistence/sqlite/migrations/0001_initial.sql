@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: MPL-2.0
+
 CREATE TABLE anime (
     id TEXT PRIMARY KEY CHECK (length(id) > 0 AND length(id) <= 1024),
     title TEXT NOT NULL CHECK (length(title) <= 65536),

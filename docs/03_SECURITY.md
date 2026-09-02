@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 # Security and Privacy Requirements
 
 ## 1. Security model

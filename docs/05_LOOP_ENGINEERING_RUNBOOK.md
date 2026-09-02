@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 # Loop Engineering Runbook
 
 This document tells an AI coding agent exactly how to execute the project incrementally.

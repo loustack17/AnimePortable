@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 # MVP Acceptance Criteria
 
 Use these criteria as hard gates.
