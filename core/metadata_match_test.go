@@ -18,6 +18,9 @@ func TestNormalizeMetadataTitle(t *testing.T) {
 		{name: "full width", input: "Ａｎｉｍｅ：第０２話", want: "anime"},
 		{name: "japanese season suffix", input: "Show 第2期", want: "show"},
 		{name: "part remains part of title", input: "Show Season 4 Part 2", want: "show part 2"},
+		{name: "cour remains part of title", input: "Show Season 4 Cour 2", want: "show cour 2"},
+		{name: "ordinal season before part", input: "Show 4th Season Part 2", want: "show part 2"},
+		{name: "japanese season before cour", input: "Show 第2季 Cour 2", want: "show cour 2"},
 		{name: "episode marker", input: "進擊の巨人 #12", want: "进击の巨人"},
 		{name: "invalid utf8", input: string([]byte{0xff}), want: ""},
 	}
@@ -90,6 +93,18 @@ func TestMatchMetadataKeepsPartIdentity(t *testing.T) {
 		},
 	})
 	if result.Decision != MetadataMatchNoMetadata || result.Candidate != (MetadataCandidate{}) {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestMatchMetadataExtractsSeasonBeforePart(t *testing.T) {
+	result := MatchMetadata(MetadataMatchRequest{
+		Query: MetadataQuery{Title: "Show Season 4 Part 2"},
+		Candidates: []MetadataCandidate{
+			{Ref: MetadataRef{Provider: "anilist", ID: "show-part-2"}, Title: "Show Part 2", Season: "4"},
+		},
+	})
+	if result.Decision != MetadataMatchAccepted || result.Confidence != MetadataMatchConfidenceHigh || result.Candidate.Ref.ID != "show-part-2" {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 }

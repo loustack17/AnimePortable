@@ -14,6 +14,12 @@ var (
 		regexp.MustCompile(`[\s\p{P}]+第\s*0*([0-9]+)\s*[季期][\s\p{P}]*$`),
 		regexp.MustCompile(`[\s\p{P}]+第([一二三四五六七八九十]+)[季期][\s\p{P}]*$`),
 	}
+	metadataSeasonBeforePartSuffixes = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)[\s\p{P}]+(?:season|s)\s*0*([0-9]+)([\s\p{P}]+(?:part|cour)\b)`),
+		regexp.MustCompile(`(?i)[\s\p{P}]+0*([0-9]+)(?:st|nd|rd|th)\s*season([\s\p{P}]+(?:part|cour)\b)`),
+		regexp.MustCompile(`(?i)[\s\p{P}]+第\s*0*([0-9]+)\s*[季期]([\s\p{P}]+(?:part|cour)\b)`),
+		regexp.MustCompile(`(?i)[\s\p{P}]+第([一二三四五六七八九十]+)[季期]([\s\p{P}]+(?:part|cour)\b)`),
+	}
 	metadataEpisodeSuffixes = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)[\s\p{P}]+(episode|ep|#)\s*0*[0-9]+[\s\p{P}]*$`),
 		regexp.MustCompile(`[\s\p{P}]+第\s*0*[0-9]+\s*[話集][\s\p{P}]*$`),

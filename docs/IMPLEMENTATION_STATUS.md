@@ -153,8 +153,8 @@ Loop 19 — Metadata Normalization and Matching — refactor and MPL-2.0 migrati
 
 ## Blocked
 
-- Git staging cannot create `.git/index.lock` in the managed workspace; the elevated retry was rejected after the active usage limit was reached.
-- Final post-patch Go tests were blocked by the environment usage-limit gate; formal files remain unstaged, so commit, push, and exact-SHA Linux CI cannot run yet.
+- The managed Codex workspace cannot write `.git`; commit `7fd9870c` was created and pushed from an Administrator terminal.
+- Final verification exposed two local preconditions: the ignored frontend `dist` output must exist before root Go package tests, and season markers before Part/Cour required a normalization fix.
 
 ## Known technical risks
 
@@ -199,7 +199,7 @@ Loop 19 — Metadata Normalization and Matching — refactor and MPL-2.0 migrati
 - `go mod verify`
 - `git diff --check`
 
-Loops 07–18 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review. Loop 19 functional tests, clean-code refactor, license migration, and local validation before the final matcher/packaging patch passed; final post-patch tests, Git, and exact-SHA CI gates remain open. Requested independent review agents were unavailable because of the active usage limit.
+Loops 07–18 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review. Loop 19 functional tests, clean-code refactor, license migration, and local validation passed before the final matcher/packaging patch. Commit `7fd9870c` is pushed; the post-push matcher fix and exact-SHA CI verification remain open.
 
 ## Next loop
 

@@ -51,6 +51,9 @@ func metadataTitleParts(value string) (string, string, bool) {
 		if season == "" {
 			season = metadataSeasonFromTitle(stripped)
 		}
+		for _, pattern := range metadataSeasonBeforePartSuffixes {
+			stripped = pattern.ReplaceAllString(stripped, "$2")
+		}
 		for _, pattern := range metadataSeasonSuffixes {
 			stripped = pattern.ReplaceAllString(stripped, "")
 		}
@@ -63,6 +66,16 @@ func metadataTitleParts(value string) (string, string, bool) {
 }
 
 func metadataSeasonFromTitle(value string) string {
+	for _, pattern := range metadataSeasonBeforePartSuffixes {
+		match := pattern.FindStringSubmatch(value)
+		if len(match) == 0 {
+			continue
+		}
+		if numeric, ok := chineseNumeral(match[1]); ok {
+			return numeric
+		}
+		return strings.TrimLeft(match[1], "0")
+	}
 	for _, pattern := range metadataSeasonSuffixes {
 		match := pattern.FindStringSubmatch(value)
 		if len(match) == 0 {
