@@ -9,7 +9,3 @@ func Slice[T any](values []T, compare func(T, T) int) {
 		return compare(values[i], values[j]) < 0
 	})
 }
-
-func HeapSort[T any](values []T, compare func(T, T) int) {
-	Slice(values, compare)
-}

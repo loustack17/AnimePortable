@@ -14,14 +14,3 @@ func TestSliceSortsUsingComparator(t *testing.T) {
 		}
 	}
 }
-
-func TestHeapSortSortsUsingComparator(t *testing.T) {
-	values := []int{4, 1, 3, 2}
-	HeapSort(values, func(left, right int) int { return right - left })
-
-	for index, value := range []int{4, 3, 2, 1} {
-		if values[index] != value {
-			t.Fatalf("values[%d] = %d, want %d", index, values[index], value)
-		}
-	}
-}

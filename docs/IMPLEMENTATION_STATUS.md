@@ -4,7 +4,7 @@
 
 ## Current loop
 
-Loop 19 — Metadata Normalization and Matching — refactor and MPL-2.0 migration complete; final post-patch verification, commit, and release gate pending
+Loop 20 — Remote Metadata Content Security
 
 ## Completed
 
@@ -149,12 +149,11 @@ Loop 19 — Metadata Normalization and Matching — refactor and MPL-2.0 migrati
 
 ## In progress
 
-- Loop 19 final gate: rerun tests after the final matcher/packaging patch, staged review, commit, exact-SHA Linux CI, and final handoff removal
+- Loop 20: validate untrusted metadata content and resource bounds while preserving fail-closed behavior across provider payloads and cached metadata
 
 ## Blocked
 
-- The managed Codex workspace cannot write `.git`; commit `7fd9870c` was created and pushed from an Administrator terminal.
-- Final verification exposed two local preconditions: the ignored frontend `dist` output must exist before root Go package tests, and season markers before Part/Cour required a normalization fix.
+- None.
 
 ## Known technical risks
 
@@ -193,17 +192,8 @@ Loop 19 — Metadata Normalization and Matching — refactor and MPL-2.0 migrati
 - `go test -race -shuffle=on -count=3 ./core ./tests/contract ./adapters/metadata/...`
 - `go test ./...`
 - `go vet ./...`
-- `go test -shuffle=on -count=10 ./core ./tests/contract ./adapters/metadata/...`
-- `go test -race -shuffle=on -count=3 ./core ./tests/contract ./adapters/metadata/...`
 - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./core ./adapters/... ./tests/...`
 - `go mod verify`
 - `git diff --check`
 
-Loops 07–18 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review. Loop 19 functional tests, clean-code refactor, license migration, and local validation passed before the final matcher/packaging patch. Commit `7fd9870c` is pushed; the post-push matcher fix and exact-SHA CI verification remain open.
-
-## Next loop
-
-Loop 20 — Remote Metadata Content Security
-
-- validate untrusted metadata content and resource bounds
-- preserve fail-closed behavior across provider payloads and cached metadata
+Loops 07–19 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review. Loop 19 metadata normalization and matching, license migration, final matcher fix, exact-SHA CI, and clean-worktree verification are complete.

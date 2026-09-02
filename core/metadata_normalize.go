@@ -109,7 +109,7 @@ func normalizeMetadataSeason(value string) (string, bool) {
 }
 
 func normalizeMetadataText(value string) string {
-	value = metadataTraditionalSimplified.Replace(norm.NFKC.String(strings.ToLower(value)))
+	value = metadataTraditionalSimplified.Replace(strings.ToLower(value))
 	var normalized strings.Builder
 	space := false
 	for _, character := range value {
