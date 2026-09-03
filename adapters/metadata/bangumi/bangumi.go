@@ -19,6 +19,7 @@ import (
 	metadatainternal "animeportable/adapters/metadata/internal"
 	"animeportable/adapters/network/securehttp"
 	"animeportable/core"
+	metadatapolicy "animeportable/internal/metadata"
 )
 
 const (
@@ -29,11 +30,11 @@ const (
 	providerID           = "bangumi"
 	maxSearchResults     = 10
 	maxResponseBodyBytes = 1 << 20
-	maxTitleTextBytes    = 4 << 10
-	maxTitleTextRunes    = 1024
-	maxDescriptionBytes  = 64 << 10
-	maxDescriptionRunes  = 16384
-	maxCoverURLBytes     = 8 << 10
+	maxTitleTextBytes    = metadatapolicy.MaxTitleTextBytes
+	maxTitleTextRunes    = metadatapolicy.MaxTitleTextRunes
+	maxDescriptionBytes  = metadatapolicy.MaxDescriptionTextBytes
+	maxDescriptionRunes  = metadatapolicy.MaxDescriptionTextRunes
+	maxCoverURLBytes     = metadatapolicy.MaxCoverURLBytes
 	maxJSONNestingDepth  = 64
 	maxEpisodeCount      = 100000
 	maxYear              = 3000
@@ -268,11 +269,7 @@ func mapDescription(summary *string) (string, bool) {
 	if summary == nil {
 		return "", true
 	}
-	return metadatainternal.NormalizePlainText(*summary, metadatainternal.PlainTextLimits{
-		MaxInputBytes:  maxDescriptionBytes,
-		MaxOutputBytes: maxDescriptionBytes,
-		MaxOutputRunes: maxDescriptionRunes,
-	})
+	return metadatapolicy.NormalizePlainText(*summary, metadatapolicy.DescriptionLimits())
 }
 
 func mapCoverURL(images *subjectImages) string {
@@ -283,7 +280,7 @@ func mapCoverURL(images *subjectImages) string {
 		if value == nil || *value == "" {
 			continue
 		}
-		if len(*value) <= maxCoverURLBytes && validCoverURL(*value) {
+		if validCoverURL(*value) {
 			return *value
 		}
 		return ""
@@ -295,10 +292,7 @@ func boundedText(value *string, maxBytes, maxRunes int) (string, bool) {
 	if value == nil {
 		return "", true
 	}
-	if len(*value) > maxBytes || utf8.RuneCountInString(*value) > maxRunes || !utf8.ValidString(*value) || containsDisallowedControl(*value) {
-		return "", false
-	}
-	return strings.TrimSpace(*value), true
+	return metadatapolicy.NormalizePlainText(*value, metadatapolicy.PlainTextLimits{MaxInputBytes: maxBytes, MaxOutputBytes: maxBytes, MaxOutputRunes: maxRunes})
 }
 
 func validSearchQuery(value string) bool {
@@ -357,11 +351,11 @@ func parseJSONMetadataID(value json.RawMessage) (string, int, bool) {
 }
 
 func validCoverURL(value string) bool {
-	if len(value) == 0 || !utf8.ValidString(value) || containsDisallowedControl(value) {
+	if value == "" || !metadatapolicy.IsSafeCoverURL(value) {
 		return false
 	}
 	target, err := url.Parse(value)
-	if err != nil || target == nil || !strings.EqualFold(target.Scheme, "https") || target.Opaque != "" || target.User != nil || target.Fragment != "" || target.Host == "" || target.Port() != "" {
+	if err != nil {
 		return false
 	}
 	return strings.EqualFold(target.Hostname(), coverHost)

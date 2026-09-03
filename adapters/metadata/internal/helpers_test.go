@@ -4,7 +4,6 @@ package internal
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -79,40 +78,5 @@ func TestDecodeObjectRejectsInvalidTargets(t *testing.T) {
 		if DecodeObject([]byte(`{"value":1}`), target, JSONLimits{MaxBytes: 1024, MaxNestingDepth: 8}) {
 			t.Fatalf("invalid target accepted: %#v", target)
 		}
-	}
-}
-
-func TestNormalizePlainText(t *testing.T) {
-	got, ok := NormalizePlainText("# **A synopsis** <br><p>[with a link](https://example.test)</p>", PlainTextLimits{MaxInputBytes: 1024, MaxOutputBytes: 1024, MaxOutputRunes: 1024})
-	if !ok || got != "A synopsis with a link" {
-		t.Fatalf("result = %q, %v", got, ok)
-	}
-	got, ok = NormalizePlainText("&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;", PlainTextLimits{MaxInputBytes: 1024, MaxOutputBytes: 1024, MaxOutputRunes: 1024})
-	if !ok || strings.Contains(got, "alert(1)") || strings.Contains(got, "<") {
-		t.Fatalf("unsafe result = %q, %v", got, ok)
-	}
-}
-
-func TestNormalizePlainTextEnforcesLimitsAndControls(t *testing.T) {
-	limits := PlainTextLimits{MaxInputBytes: 8, MaxOutputBytes: 8, MaxOutputRunes: 8}
-	if _, ok := NormalizePlainText("123456789", limits); ok {
-		t.Fatal("oversized input accepted")
-	}
-	if _, ok := NormalizePlainText("123456789", PlainTextLimits{MaxInputBytes: 32, MaxOutputBytes: 8, MaxOutputRunes: 32}); ok {
-		t.Fatal("oversized output accepted")
-	}
-	if _, ok := NormalizePlainText("123456789", PlainTextLimits{MaxInputBytes: 32, MaxOutputBytes: 32, MaxOutputRunes: 8}); ok {
-		t.Fatal("oversized rune output accepted")
-	}
-	if _, ok := NormalizePlainText("a\x00b", PlainTextLimits{MaxInputBytes: 32, MaxOutputBytes: 32, MaxOutputRunes: 32}); ok {
-		t.Fatal("control character accepted")
-	}
-}
-
-func TestNormalizePlainTextAdversarialOpenDelimiters(t *testing.T) {
-	value := strings.Repeat("<", 4096) + strings.Repeat("[", 4096)
-	got, ok := NormalizePlainText(value, PlainTextLimits{MaxInputBytes: 16 * 1024, MaxOutputBytes: 16 * 1024, MaxOutputRunes: 16 * 1024})
-	if !ok || got == "" {
-		t.Fatalf("result = %q, %v", got, ok)
 	}
 }

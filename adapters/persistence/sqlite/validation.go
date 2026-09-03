@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"animeportable/core"
+	metadatapolicy "animeportable/internal/metadata"
 )
 
 const (
@@ -38,12 +39,12 @@ func validSourceRef(ref core.SourceRef) bool {
 func validMetadata(metadata core.AnimeMetadata) bool {
 	return validIdentity(metadata.Ref.Provider) &&
 		validIdentity(metadata.Ref.ID) &&
-		validText(metadata.Title, maxTitleBytes) &&
-		validText(metadata.NativeTitle, maxTitleBytes) &&
-		validText(metadata.Description, maxDescriptionBytes) &&
-		validText(metadata.CoverURL, maxCoverURLBytes) &&
-		validText(metadata.Season, maxSeasonBytes) &&
+		metadatapolicy.IsCanonicalPlainText(metadata.Title, metadatapolicy.TitleLimits()) &&
+		metadatapolicy.IsCanonicalPlainText(metadata.NativeTitle, metadatapolicy.TitleLimits()) &&
+		metadatapolicy.IsCanonicalPlainText(metadata.Description, metadatapolicy.DescriptionLimits()) &&
+		metadatapolicy.IsSafeCoverURL(metadata.CoverURL) &&
+		metadatapolicy.IsCanonicalPlainText(metadata.Season, metadatapolicy.SeasonLimits()) &&
 		metadata.Year >= 0 && metadata.Year <= 9999 &&
-		validText(metadata.Studio, maxIdentityBytes) &&
+		metadatapolicy.IsCanonicalPlainText(metadata.Studio, metadatapolicy.StudioLimits()) &&
 		metadata.EpisodeCount >= 0
 }

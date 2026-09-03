@@ -304,6 +304,94 @@ func TestAniListGetSanitizesDescriptionMarkup(t *testing.T) {
 	}
 }
 
+func TestAniListNormalizesRemoteDisplayFields(t *testing.T) {
+	media := validMedia()
+	media["title"] = map[string]any{
+		"romaji": " <b>Romaji</b>\n Title ",
+		"native": " **Native**\tTitle ",
+	}
+	media["description"] = " <p>Plain <em>synopsis</em></p> "
+	media["season"] = " **WINTER** "
+	media["studios"] = map[string]any{"nodes": []any{
+		map[string]any{"name": " <b>Animation</b> **Studio** ", "isAnimationStudio": true},
+	}}
+	provider := newWithDo(&fakeClient{handler: func(_ *http.Request, body []byte) (*securehttp.Response, error) {
+		if strings.Contains(string(body), "Page(") {
+			return jsonResponse(t, searchPayload(media)), nil
+		}
+		return jsonResponse(t, getPayload(media)), nil
+	}})
+	items, err := provider.Search(context.Background(), core.MetadataQuery{Title: "Anime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Title != "Romaji Title" || items[0].NativeTitle != "Native Title" {
+		t.Fatalf("candidate = %#v", items)
+	}
+	got, err := provider.Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := core.AnimeMetadata{
+		Ref:          core.MetadataRef{Provider: providerID, ID: "123"},
+		Title:        "Romaji Title",
+		NativeTitle:  "Native Title",
+		Description:  "Plain synopsis",
+		CoverURL:     "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/123.jpg",
+		Season:       "WINTER",
+		Year:         2024,
+		Studio:       "Animation Studio",
+		EpisodeCount: 12,
+	}
+	if got != want {
+		t.Fatalf("metadata = %#v, want %#v", got, want)
+	}
+}
+
+func TestAniListDropsUnsafeStudio(t *testing.T) {
+	media := validMedia()
+	media["studios"] = map[string]any{"nodes": []any{
+		map[string]any{"name": "Unsafe\x00Studio", "isAnimationStudio": true},
+	}}
+	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Studio != "" {
+		t.Fatalf("unsafe studio retained: %q", metadata.Studio)
+	}
+}
+
+func TestAniListRejectsUnsafeDisplayFieldsAtomically(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "title control", mutate: func(media map[string]any) {
+			media["title"] = map[string]any{"romaji": "Romaji\x00Title", "native": "Native Title"}
+		}},
+		{name: "native title control", mutate: func(media map[string]any) {
+			media["title"] = map[string]any{"romaji": "Romaji Title", "native": "Native\x00Title"}
+		}},
+		{name: "description control", mutate: func(media map[string]any) {
+			media["description"] = "Synopsis\x00Secret"
+		}},
+		{name: "season control", mutate: func(media map[string]any) {
+			media["season"] = "WIN\x00TER"
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			media := validMedia()
+			test.mutate(media)
+			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+			if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
+				t.Fatalf("metadata = %#v, error = %v", metadata, err)
+			}
+		})
+	}
+}
+
 func TestAniListGetDropsInvalidCoverAndNonAnimationStudios(t *testing.T) {
 	media := validMedia()
 	media["coverImage"] = map[string]any{"extraLarge": "https://evil.example/cover.jpg"}

@@ -18,6 +18,7 @@ import (
 	metadatainternal "animeportable/adapters/metadata/internal"
 	"animeportable/adapters/network/securehttp"
 	"animeportable/core"
+	metadatapolicy "animeportable/internal/metadata"
 )
 
 const (
@@ -26,13 +27,13 @@ const (
 	providerID           = "anilist"
 	maxSearchResults     = 10
 	maxResponseBodyBytes = 1 << 20
-	maxTitleTextBytes    = 4 << 10
-	maxTitleTextRunes    = 1024
-	maxDescriptionBytes  = 64 << 10
-	maxDescriptionRunes  = 16384
-	maxCoverURLBytes     = 8 << 10
+	maxTitleTextBytes    = metadatapolicy.MaxTitleTextBytes
+	maxTitleTextRunes    = metadatapolicy.MaxTitleTextRunes
+	maxDescriptionBytes  = metadatapolicy.MaxDescriptionTextBytes
+	maxDescriptionRunes  = metadatapolicy.MaxDescriptionTextRunes
+	maxCoverURLBytes     = metadatapolicy.MaxCoverURLBytes
 	maxMetadataIDDigits  = 10
-	maxStudioTextBytes   = 1 << 10
+	maxStudioTextBytes   = metadatapolicy.MaxStudioTextBytes
 	maxJSONNestingDepth  = 64
 	maxSeasonYear        = 3000
 	maxEpisodeCount      = 100000
@@ -232,10 +233,11 @@ func mapMetadata(media mediaResponse) (core.AnimeMetadata, bool) {
 		EpisodeCount: numericValue(media.Episodes),
 	}
 	if media.Season != nil {
-		if !validSeason(*media.Season) {
+		season, ok := metadatapolicy.NormalizePlainText(*media.Season, metadatapolicy.SeasonLimits())
+		if !ok || !validSeason(season) {
 			return core.AnimeMetadata{}, false
 		}
-		metadata.Season = *media.Season
+		metadata.Season = season
 	}
 	if media.CoverImage != nil {
 		metadata.CoverURL = mapCoverURL(*media.CoverImage)
@@ -265,11 +267,7 @@ func mapDescription(description *string) (string, bool) {
 	if description == nil {
 		return "", true
 	}
-	return metadatainternal.NormalizePlainText(*description, metadatainternal.PlainTextLimits{
-		MaxInputBytes:  maxDescriptionBytes,
-		MaxOutputBytes: maxDescriptionBytes,
-		MaxOutputRunes: maxDescriptionRunes,
-	})
+	return metadatapolicy.NormalizePlainText(*description, metadatapolicy.DescriptionLimits())
 }
 
 func mapCoverURL(image coverImage) string {
@@ -277,7 +275,7 @@ func mapCoverURL(image coverImage) string {
 		if value == nil || *value == "" {
 			continue
 		}
-		if len(*value) <= maxCoverURLBytes && validCoverURL(*value) {
+		if validCoverURL(*value) {
 			return *value
 		}
 		return ""
@@ -290,7 +288,7 @@ func mapStudio(studios studioConnection) string {
 		if !studio.IsAnimationStudio || studio.Name == nil {
 			continue
 		}
-		name, ok := boundedText(studio.Name, maxStudioTextBytes, maxTitleTextRunes)
+		name, ok := boundedText(studio.Name, maxStudioTextBytes, metadatapolicy.MaxStudioTextRunes)
 		if ok && name != "" {
 			return name
 		}
@@ -311,10 +309,7 @@ func boundedText(value *string, maxBytes, maxRunes int) (string, bool) {
 	if value == nil {
 		return "", true
 	}
-	if len(*value) > maxBytes || utf8.RuneCountInString(*value) > maxRunes || !utf8.ValidString(*value) || containsDisallowedControl(*value) {
-		return "", false
-	}
-	return strings.TrimSpace(*value), true
+	return metadatapolicy.NormalizePlainText(*value, metadatapolicy.PlainTextLimits{MaxInputBytes: maxBytes, MaxOutputBytes: maxBytes, MaxOutputRunes: maxRunes})
 }
 
 func validSearchQuery(value string) bool {
@@ -356,11 +351,11 @@ func parseJSONMetadataID(value json.RawMessage) (string, int, bool) {
 }
 
 func validCoverURL(value string) bool {
-	if len(value) == 0 || !utf8.ValidString(value) {
+	if value == "" || !metadatapolicy.IsSafeCoverURL(value) {
 		return false
 	}
 	target, err := url.Parse(value)
-	if err != nil || target == nil || !strings.EqualFold(target.Scheme, "https") || target.Opaque != "" || target.User != nil || target.Fragment != "" || target.Host == "" || target.Port() != "" {
+	if err != nil {
 		return false
 	}
 	return strings.EqualFold(target.Hostname(), coverHost)

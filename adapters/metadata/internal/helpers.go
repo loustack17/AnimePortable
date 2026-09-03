@@ -6,15 +6,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	stdhtml "html"
 	"io"
 	"reflect"
-	"regexp"
-	"strings"
-	"unicode"
-	"unicode/utf8"
-
-	"golang.org/x/net/html"
 )
 
 type JSONLimits struct {
@@ -43,95 +36,6 @@ func DecodeObject(body []byte, target any, limits JSONLimits) bool {
 	}
 	targetValue.Elem().Set(decoded.Elem())
 	return true
-}
-
-type PlainTextLimits struct {
-	MaxInputBytes  int
-	MaxOutputBytes int
-	MaxOutputRunes int
-}
-
-func NormalizePlainText(value string, limits PlainTextLimits) (string, bool) {
-	if limits.MaxInputBytes <= 0 || limits.MaxOutputBytes <= 0 || limits.MaxOutputRunes <= 0 || len(value) > limits.MaxInputBytes || !utf8.ValidString(value) {
-		return "", false
-	}
-	plain := stripHTML(stdhtml.UnescapeString(value))
-	plain = stripHTML(plain)
-	plain = strings.NewReplacer("<", " ", ">", " ").Replace(plain)
-	plain = strings.TrimSpace(stripMarkdown(plain))
-	if len(plain) > limits.MaxOutputBytes || utf8.RuneCountInString(plain) > limits.MaxOutputRunes || containsDisallowedControl(plain) {
-		return "", false
-	}
-	return strings.Join(strings.Fields(plain), " "), true
-}
-
-var markdownLinkPattern = regexp.MustCompile(`\[([^\[\]\r\n]*)\]\([^()\r\n]*\)`)
-
-func stripHTML(value string) string {
-	var result strings.Builder
-	tokenizer := html.NewTokenizer(strings.NewReader(value))
-	skippedElement := ""
-	for {
-		switch tokenizer.Next() {
-		case html.ErrorToken:
-			return result.String()
-		case html.StartTagToken:
-			name, _ := tokenizer.TagName()
-			if skippedElement == "" && (string(name) == "script" || string(name) == "style") {
-				skippedElement = string(name)
-			}
-			result.WriteByte(' ')
-		case html.EndTagToken:
-			name, _ := tokenizer.TagName()
-			if string(name) == skippedElement {
-				skippedElement = ""
-			}
-			result.WriteByte(' ')
-		case html.TextToken:
-			if skippedElement == "" {
-				result.Write(tokenizer.Text())
-			}
-		}
-	}
-}
-
-func stripMarkdown(value string) string {
-	value = markdownLinkPattern.ReplaceAllString(value, "$1")
-	lines := strings.Split(value, "\n")
-	for index, line := range lines {
-		trimmed := strings.TrimLeft(line, " \t")
-		for len(trimmed) > 0 && trimmed[0] == '#' {
-			trimmed = trimmed[1:]
-		}
-		if len(trimmed) > 0 && (trimmed[0] == '>' || trimmed[0] == '-' || trimmed[0] == '+' || trimmed[0] == '*') {
-			trimmed = trimmed[1:]
-		}
-		lines[index] = trimmed
-	}
-	value = strings.Join(lines, " ")
-	var result strings.Builder
-	for index := 0; index < len(value); index++ {
-		switch value[index] {
-		case '*', '_', '~', '`':
-		case '\\':
-			if index+1 < len(value) && strings.ContainsRune("\\`*_{}[]()#+-.!~", rune(value[index+1])) {
-				continue
-			}
-			result.WriteByte(value[index])
-		default:
-			result.WriteByte(value[index])
-		}
-	}
-	return result.String()
-}
-
-func containsDisallowedControl(value string) bool {
-	for _, character := range value {
-		if unicode.IsControl(character) && character != '\n' && character != '\r' && character != '\t' {
-			return true
-		}
-	}
-	return false
 }
 
 func scanJSONValue(decoder *json.Decoder, requireObject bool, depth, maxDepth int) error {

@@ -157,6 +157,9 @@ func (store *Store) Metadata(ctx context.Context, animeID core.AnimeID) (core.An
 		if err == sql.ErrNoRows {
 			return core.ErrNotFound
 		}
+		if err == nil && !validMetadata(metadata) {
+			return ErrStorage
+		}
 		return err
 	})
 	if err != nil {

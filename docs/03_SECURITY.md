@@ -238,14 +238,15 @@ Raw HTML must not be passed to the frontend.
 
 ## 13. Metadata text policy
 
-AniList/Bangumi descriptions are remote input.
+AniList/Bangumi display fields are remote input.
 
 Frontend must not render them using raw HTML injection.
 
 Preferred MVP behavior:
 
-- strip/sanitize markup
+- normalize titles, native titles, descriptions, seasons, and studios to bounded plain text
 - render plain text
+- reject unsafe or non-canonical cached metadata on write and read
 
 Do not use raw remote HTML rendering.
 
@@ -255,16 +256,20 @@ Covers are untrusted binary data.
 
 Requirements:
 
-- HTTPS
-- allow expected image content types only
-- byte-size limit
-- timeout
-- decoded-dimension limit
-- avoid decoding unlimited images simultaneously
-- lazy-load images
-- reject malformed or suspicious content
+- fixed AniList and Bangumi HTTPS cover origins
+- existing secure HTTP DNS, SSRF, redirect, TLS, and timeout enforcement
+- final HTTP status `200`
+- JPEG or PNG only, with header MIME, content signature, and decoder format agreement
+- identity content encoding only
+- 4 MiB encoded byte limit
+- 4096-pixel per-dimension limit and 4,194,304-pixel total limit before full decode
+- at most four concurrent fetch-and-validation operations
+- explicit on-demand loading with no memory cache
+- fixed sanitized errors and zero content on failure
 
 Do not allow image URLs to become arbitrary fetch primitives.
+
+The desktop binding must return typed validated image bytes and dimensions. It must not expose the loader as a caller-configurable URL fetch API.
 
 ## 15. Media validation
 

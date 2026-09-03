@@ -4,7 +4,7 @@
 
 ## Current loop
 
-Loop 20 — Remote Metadata Content Security
+Loop 21 — Desktop Application Binding Layer
 
 ## Completed
 
@@ -146,10 +146,18 @@ Loop 20 — Remote Metadata Content Security
 - [x] MPL-2.0 project license, SPDX coverage, dependency notices, and package metadata migration
 - [x] Local standard-library qsort compatibility module replacing the unlicensed upstream source
 - [x] Generated build artifacts removed from the repository workspace
+- [x] Shared bounded plain-text policy for remote metadata titles, descriptions, seasons, and studios
+- [x] AniList/Bangumi Search/Get display-field normalization with provider-neutral contract enforcement
+- [x] Fixed-origin on-demand cover loader isolated from provider API clients and frontend network access
+- [x] JPEG/PNG status, encoding, MIME, signature, full-decode, byte, dimension, and pixel validation
+- [x] Four-operation cancellable cover concurrency bound with owned result bytes and sanitized errors
+- [x] SQLite metadata write validation and fail-closed cached-row revalidation
+- [x] Malformed/config-only image, unsafe cache, URL, cancellation, redaction, and resource-bound coverage
+- [x] Metadata content-security simplify pass plus full validation and independent final review approval
 
 ## In progress
 
-- Loop 20: validate untrusted metadata content and resource bounds while preserving fail-closed behavior across provider payloads and cached metadata
+- Loop 21: expose typed application actions through Wails without leaking infrastructure details or arbitrary network capabilities
 
 ## Blocked
 
@@ -195,5 +203,7 @@ Loop 20 — Remote Metadata Content Security
 - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./core ./adapters/... ./tests/...`
 - `go mod verify`
 - `git diff --check`
+- `go test -shuffle=on -count=10 ./internal/metadata ./adapters/metadata/... ./adapters/persistence/sqlite ./tests/contract`
+- `go test -race -shuffle=on -count=3 ./internal/metadata ./adapters/metadata/... ./adapters/persistence/sqlite ./tests/contract`
 
-Loops 07–19 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review. Loop 19 metadata normalization and matching, license migration, final matcher fix, exact-SHA CI, and clean-worktree verification are complete.
+Loops 07–20 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review. Loop 20 remote metadata text, cover content, cached-row validation, and local clean-worktree verification are complete.

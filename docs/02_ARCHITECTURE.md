@@ -268,6 +268,15 @@ Provider implementations only return candidates; they do not select metadata.
 
 Application-level provider orchestration is deferred until the application wiring phase; the core matcher remains a pure, provider-neutral policy seam.
 
+Metadata display content crosses one shared backend policy before it can be cached:
+
+- provider titles, descriptions, seasons, and studios are normalized to bounded plain text
+- SQLite rejects unsafe writes and fails closed when cached rows no longer satisfy that policy
+- cover URLs remain backend-only inputs to a fixed-origin loader
+- cover bytes are exposed as typed validated content, not as an arbitrary frontend fetch capability
+
+The cover loader performs work only when called and keeps no memory cache. The Wails binding layer must map this seam to a safe DTO without exposing raw provider payloads or a general-purpose URL loader.
+
 ## 12. UI boundary
 
 Svelte/Wails must not know about:

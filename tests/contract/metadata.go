@@ -59,6 +59,7 @@ func RunMetadataProvider(t *testing.T, suite MetadataProviderSuite) {
 		}
 		requireNoError(t, err, suite.ForbiddenStrings)
 		requireValid(t, validateForbidden(metadata, suite.ForbiddenStrings))
+		requireValid(t, validateAnimeMetadata(metadata))
 		requireValid(t, equal(metadata, suite.Get.Expected))
 		checkCanceled(t, suite.ForbiddenStrings, func(ctx context.Context) error { _, err := provider.Get(ctx, suite.Get.Ref); return err })
 	})
@@ -88,6 +89,7 @@ func validateMetadataSuite(t *testing.T, suite MetadataProviderSuite) {
 	validateMetadataFixtures(t, suite.Search.Expected)
 	if suite.Get.Supported {
 		requireValid(t, validateMetadataRef(suite.Get.Ref))
+		requireValid(t, validateAnimeMetadata(suite.Get.Expected))
 		if suite.Get.Expected.Ref != suite.Get.Ref {
 			t.Fatal("expected metadata ref does not match get ref")
 		}

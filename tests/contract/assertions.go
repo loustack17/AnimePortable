@@ -9,8 +9,23 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"animeportable/core"
+	metadatapolicy "animeportable/internal/metadata"
+)
+
+const (
+	metadataTitleBytes       = 4 << 10
+	metadataTitleRunes       = 1024
+	metadataDescriptionBytes = 64 << 10
+	metadataDescriptionRunes = 16384
+	metadataSeasonBytes      = 128
+	metadataSeasonRunes      = 128
+	metadataStudioBytes      = 1 << 10
+	metadataStudioRunes      = 1024
+	metadataCoverURLBytes    = 8 << 10
 )
 
 func validateSourceRef(ref core.SourceRef) error {
@@ -153,7 +168,7 @@ func validateMetadataCandidates(actual []core.MetadataCandidate, expected []core
 	}
 	refs := make([]core.MetadataRef, 0, len(actual))
 	for _, candidate := range actual {
-		if err := validateMetadataRef(candidate.Ref); err != nil {
+		if err := validateMetadataCandidate(candidate); err != nil {
 			return err
 		}
 		refs = append(refs, candidate.Ref)
@@ -171,6 +186,86 @@ func validateMetadataCandidates(actual []core.MetadataCandidate, expected []core
 		if !found {
 			return fmt.Errorf("missing metadata ref %#v", expectedRef)
 		}
+	}
+	return nil
+}
+
+func validateMetadataCandidate(candidate core.MetadataCandidate) error {
+	if err := validateMetadataRef(candidate.Ref); err != nil {
+		return err
+	}
+	for _, field := range []struct {
+		name     string
+		value    string
+		maxBytes int
+		maxRunes int
+	}{
+		{name: "title", value: candidate.Title, maxBytes: metadataTitleBytes, maxRunes: metadataTitleRunes},
+		{name: "native title", value: candidate.NativeTitle, maxBytes: metadataTitleBytes, maxRunes: metadataTitleRunes},
+		{name: "season", value: candidate.Season, maxBytes: metadataSeasonBytes, maxRunes: metadataSeasonRunes},
+	} {
+		if err := validateMetadataText(field.name, field.value, field.maxBytes, field.maxRunes); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAnimeMetadata(value core.AnimeMetadata) error {
+	if err := validateMetadataRef(value.Ref); err != nil {
+		return err
+	}
+	fields := []struct {
+		name     string
+		value    string
+		maxBytes int
+		maxRunes int
+	}{
+		{name: "title", value: value.Title, maxBytes: metadataTitleBytes, maxRunes: metadataTitleRunes},
+		{name: "native title", value: value.NativeTitle, maxBytes: metadataTitleBytes, maxRunes: metadataTitleRunes},
+		{name: "description", value: value.Description, maxBytes: metadataDescriptionBytes, maxRunes: metadataDescriptionRunes},
+		{name: "season", value: value.Season, maxBytes: metadataSeasonBytes, maxRunes: metadataSeasonRunes},
+		{name: "studio", value: value.Studio, maxBytes: metadataStudioBytes, maxRunes: metadataStudioRunes},
+	}
+	for _, field := range fields {
+		if err := validateMetadataText(field.name, field.value, field.maxBytes, field.maxRunes); err != nil {
+			return err
+		}
+	}
+	return validateMetadataCoverURL(value.CoverURL)
+}
+
+func validateMetadataText(name, value string, maxBytes, maxRunes int) error {
+	if !utf8.ValidString(value) || len(value) > maxBytes || utf8.RuneCountInString(value) > maxRunes || strings.Join(strings.Fields(value), " ") != value {
+		return fmt.Errorf("metadata %s is not bounded canonical text", name)
+	}
+	for _, character := range value {
+		if unicode.IsControl(character) || character == '<' || character == '>' {
+			return fmt.Errorf("metadata %s contains unsafe text", name)
+		}
+	}
+	limits := metadatapolicy.PlainTextLimits{MaxInputBytes: maxBytes, MaxOutputBytes: maxBytes, MaxOutputRunes: maxRunes}
+	if !metadatapolicy.IsCanonicalPlainText(value, limits) {
+		return fmt.Errorf("metadata %s does not satisfy the canonical display policy", name)
+	}
+	return nil
+}
+
+func validateMetadataCoverURL(value string) error {
+	if value == "" {
+		return nil
+	}
+	if !utf8.ValidString(value) || len(value) > metadataCoverURLBytes {
+		return errors.New("metadata cover URL is invalid")
+	}
+	for _, character := range value {
+		if unicode.IsControl(character) {
+			return errors.New("metadata cover URL contains a control character")
+		}
+	}
+	target, err := url.Parse(value)
+	if err != nil || target == nil || !strings.EqualFold(target.Scheme, "https") || target.Opaque != "" || target.User != nil || target.Fragment != "" || target.Host == "" || target.Hostname() == "" || target.Port() != "" || strings.HasSuffix(target.Host, ":") {
+		return errors.New("metadata cover URL is not structurally safe")
 	}
 	return nil
 }

@@ -585,6 +585,33 @@ func TestBangumiDescriptionNormalization(t *testing.T) {
 	}
 }
 
+func TestBangumiNormalizesRemoteDisplayFields(t *testing.T) {
+	subject := validSubject()
+	subject["name_cn"] = " <b>中文</b>\n 標題 "
+	subject["name"] = " **日本語**\tタイトル "
+	subject["summary"] = " <p>Plain <em>synopsis</em></p> "
+	provider := newWithDo(&fakeClient{handler: func(request *http.Request, _ []byte) (*securehttp.Response, error) {
+		if request.Method == http.MethodPost {
+			return jsonResponse(t, searchPayload(subject)), nil
+		}
+		return jsonResponse(t, subject), nil
+	}})
+	items, err := provider.Search(context.Background(), core.MetadataQuery{Title: "Anime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Title != "中文 標題" || items[0].NativeTitle != "日本語 タイトル" {
+		t.Fatalf("candidate = %#v", items)
+	}
+	metadata, err := provider.Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Title != "中文 標題" || metadata.NativeTitle != "日本語 タイトル" || metadata.Description != "Plain synopsis" {
+		t.Fatalf("metadata = %#v", metadata)
+	}
+}
+
 func TestBangumiRejectsControlCharactersAtomically(t *testing.T) {
 	for _, test := range []struct {
 		name  string
