@@ -4,7 +4,7 @@
 
 ## Current loop
 
-Loop 21 — Desktop Application Binding Layer
+Loop 21 — Desktop Application Binding Layer — complete
 
 ## Completed
 
@@ -154,10 +154,19 @@ Loop 21 — Desktop Application Binding Layer
 - [x] SQLite metadata write validation and fail-closed cached-row revalidation
 - [x] Malformed/config-only image, unsafe cache, URL, cancellation, redaction, and resource-bound coverage
 - [x] Metadata content-security simplify pass plus full validation and independent final review approval
+- [x] Typed Wails desktop service covering library, catalog/search, detail/episodes, following, schedule, history, settings, play, and cover-by-local-ID
+- [x] Atomic source-anime ingestion transaction with persisted canonical identity reuse and description preservation
+- [x] Bounded request admission, lifecycle-scoped cancellation, and ordered shutdown (session before dependencies and store)
+- [x] Frontend DTO allowlist with explicit json tags; no provider refs, URLs, credentials, SQL, or raw MPV operations
+- [x] Player recovery on terminal playback errors with close-before-restart and actionable MPV configuration errors
+- [x] Binding-boundary plain-text normalization for persisted anime titles and offline Following with latest-watched history
+- [x] Schedule input/response validation before persistence; episodes multi-ref fallback with correct parent ownership
+- [x] Generated TypeScript bindings and reflection-gated method surface test
+- [x] Backend simplify, independent security/lifecycle/final review approval
 
 ## In progress
 
-- Loop 21: expose typed application actions through Wails without leaking infrastructure details or arbitrary network capabilities
+None
 
 ## Blocked
 
@@ -206,4 +215,12 @@ Loop 21 — Desktop Application Binding Layer
 - `go test -shuffle=on -count=10 ./internal/metadata ./adapters/metadata/... ./adapters/persistence/sqlite ./tests/contract`
 - `go test -race -shuffle=on -count=3 ./internal/metadata ./adapters/metadata/... ./adapters/persistence/sqlite ./tests/contract`
 
-Loops 07–20 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review. Loop 20 remote metadata text, cover content, cached-row validation, and local clean-worktree verification are complete.
+Loops 07–21 passed focused and full tests, race detection, vet, live smoke validation where applicable, simplify review, and independent code-quality review.
+
+## Next loop
+
+Loop 22 — Svelte App Shell
+
+- desktop-first navigation shell: Home, Schedule, Following, History, Search, Settings
+- calm minimal visual design with obvious focus states
+- no mobile-first interaction assumptions

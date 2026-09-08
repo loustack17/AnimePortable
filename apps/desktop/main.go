@@ -6,6 +6,8 @@ import (
 	"embed"
 	"log"
 
+	"animeportable/apps/desktop/backend"
+
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -16,6 +18,9 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "AnimePortable",
 		Description: "AnimePortable desktop application",
+		Services: []application.Service{
+			application.NewService(backend.New()),
+		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
