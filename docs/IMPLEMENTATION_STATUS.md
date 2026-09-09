@@ -4,9 +4,14 @@
 
 ## Current loop
 
-Loop 21 — Desktop Application Binding Layer — complete
+Loop 22 — Svelte App Shell
 
 ## Completed
+
+- [x] Six-section desktop Svelte shell with native keyboard/mouse navigation and explicit active-page state
+- [x] Functional skip link, visible focus, Traditional Chinese document language and small-desktop reflow
+- [x] Dependency-free Node/Svelte SSR shell contract test integrated into Linux CI
+- [x] Shell simplify and independent review, browser interaction checks, full Go/race/vet and Windows build verification
 
 - [x] Root Go module and minimal architecture boundaries
 - [x] Wails v3.0.0-beta.12 desktop shell
@@ -219,8 +224,8 @@ Loops 07–21 passed focused and full tests, race detection, vet, live smoke val
 
 ## Next loop
 
-Loop 22 — Svelte App Shell
+Loop 23 — Home UI
 
-- desktop-first navigation shell: Home, Schedule, Following, History, Search, Settings
-- calm minimal visual design with obvious focus states
-- no mobile-first interaction assumptions
+- local cached Home sections through typed bindings
+- continue watching, recently updated, following and today where persisted data supports them
+- preserve shell navigation and offline startup; no unrelated page features
