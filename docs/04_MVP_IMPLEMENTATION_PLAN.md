@@ -8,6 +8,21 @@ Do not reorder major phases without a new ADR.
 
 The plan intentionally proves the highest-risk assumptions before spending time on UI polish.
 
+## Global implementation-quality requirements
+
+Every phase that changes production code must preserve the architecture in `docs/02_ARCHITECTURE.md` and satisfy the code-quality criteria in `docs/06_ACCEPTANCE_CRITERIA.md`. Functional success alone is not phase completion.
+
+Required throughout the plan:
+
+- pragmatic SOLID: cohesive responsibilities, substitutable ports/adapters, narrow interfaces, inward dependencies
+- readable domain-oriented naming and straightforward control flow
+- clear file/package placement under the existing repository structure
+- no `utils`/`helpers`/`common` dumping grounds, god objects/files, duplicate policy logic, dead code, or unnecessary abstraction
+- production-code changes receive independent code-quality review before loop PASS
+- any local cleanup required by the changed code is completed in the same loop; unrelated cleanup remains out of scope
+
+These requirements do not authorize broad refactoring. If satisfying them would materially redesign architecture, stop and use the ADR process.
+
 ---
 
 ## Phase 0 — Repository and Contracts
@@ -904,7 +919,7 @@ Do not add store distribution.
 
 ## Phase 36 — Final MVP Acceptance
 
-Run every criterion in `06_ACCEPTANCE_CRITERIA.md`.
+Run every criterion in `docs/06_ACCEPTANCE_CRITERIA.md`.
 
 Do not call the MVP complete if only happy-path playback works.
 
@@ -918,3 +933,4 @@ All categories must pass:
 - privacy
 - resource lifecycle
 - cross-platform build
+- code quality / maintainability / file structure

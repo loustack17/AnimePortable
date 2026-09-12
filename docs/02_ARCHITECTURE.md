@@ -429,7 +429,48 @@ Player contract examples:
 - events stop after close
 - cleanup is deterministic
 
-## 19. Architectural acceptance rules
+## 19. Pragmatic SOLID and code-quality rule
+
+This project uses SOLID as a design-quality constraint, not as a reason to add abstraction. The existing minimal Ports & Adapters design is the project-specific Clean Architecture boundary. Do not add enterprise-style layer chains merely to claim Clean Architecture compliance.
+
+Apply the principles as follows:
+
+- **Single Responsibility (SRP):** packages, files, types, and major functions have one coherent reason to change. Split mixed responsibilities when the boundary is real; do not split mechanically by line count.
+- **Open/Closed (OCP):** expected external replacement happens through the existing ports/adapters and explicit policies. Prefer adding an adapter or strategy at a real seam over growing provider-specific conditionals in core.
+- **Liskov Substitution (LSP):** every implementation of `AnimeSource`, `MetadataProvider`, `Player`/`PlaybackSession`, and `Store` must honor the same documented contract, cancellation, error, lifecycle, and security semantics. Passing only the happy path is insufficient.
+- **Interface Segregation (ISP):** ports stay cohesive and no broader than the consumers require. Do not create one interface per helper or force consumers to depend on methods they do not use.
+- **Dependency Inversion (DIP):** core policy depends on core-owned abstractions; concrete Wails, source, metadata, player, persistence, network, and platform details remain outward.
+
+Code-quality rules:
+
+- choose names that reveal domain intent; avoid vague `manager`, `handler`, `helper`, `util`, `common`, or `misc` dumping grounds unless the name is genuinely the domain concept
+- keep control flow straightforward; prefer early validation/returns over deeply nested branching when behavior remains clear
+- keep exported APIs minimal and typed
+- centralize cross-cutting security/policy logic instead of duplicating it in adapters
+- remove dead code and obsolete compatibility paths when their removal is in scope and verified
+- avoid copy/paste behavior when one stable shared rule already exists, but do not extract one-off code prematurely
+- comments should explain non-obvious constraints, invariants, security reasoning, or why a choice exists; comments must not merely narrate obvious syntax
+- tests must remain readable and describe behavior, not implementation trivia
+
+There is no universal hard file-length limit. A file fails the quality gate when it mixes unrelated responsibilities, hides ownership, becomes difficult to review safely, or contains a structure that should clearly live in an existing package/file boundary.
+
+## 20. File and package placement
+
+The suggested repository layout in section 15 is a real placement constraint, not decorative documentation.
+
+For every new production file, the implementer and reviewer must be able to answer:
+
+1. What single responsibility does this file own?
+2. Which architectural layer owns that responsibility?
+3. Why is this the narrowest existing package that fits it?
+4. Does placing it here introduce an inward dependency violation, circular dependency, provider leakage, or generic dumping ground?
+5. Would a future maintainer find this behavior where they would reasonably expect it?
+
+Do not create new top-level directories or broad shared packages without a concrete need and independent architecture review.
+
+If a feature causes one file/type/package to accumulate multiple independent responsibilities, restructure within the same loop before PASS when the correction is local and low-risk. If the correction materially changes architecture, stop and use the ADR rule instead.
+
+## 21. Architectural acceptance rules
 
 MVP is not accepted unless:
 
@@ -441,3 +482,7 @@ MVP is not accepted unless:
 - Anime1 can be replaced by a fake source in tests
 - UI can be removed while core tests still pass
 - source failure does not break cached local library/history
+- production files have coherent responsibilities and live in the documented architectural layer
+- no new generic dumping-ground package/file is introduced
+- external adapters remain substitutable under shared contracts
+- core policy remains readable without concrete infrastructure knowledge

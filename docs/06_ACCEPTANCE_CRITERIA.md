@@ -2,12 +2,84 @@
 
 # MVP Acceptance Criteria
 
-Use these criteria as hard gates.
+These criteria are hard gates. They are requirements, not suggestions and not a prompt for the implementation agent to reinterpret.
 
-Each criterion should eventually be tracked as Pass / Fail / Blocked with evidence.
+## Verification semantics
+
+Every criterion is tracked with one of:
+
+- `NOT_RUN`
+- `PASS`
+- `FAIL`
+- `BLOCKED`
+- `NEEDS_HUMAN`
+- `NOT_APPLICABLE`
+
+`PASS` is valid only when the required verifier in `docs/08_VERIFICATION_MATRIX.md` produced evidence against the final relevant repository state.
+
+### PASS
+
+Use `PASS` only when:
+
+- every mandatory observable in the criterion is satisfied
+- all required deterministic checks pass
+- no required regression check fails
+- required independent review has no unresolved must-fix finding
+- required human gate is `HUMAN_PASS`
+- protected acceptance/test/CI semantics were not weakened to obtain the result
+
+### FAIL
+
+Use `FAIL` when reproducible evidence shows one or more required observables are not satisfied.
+
+A failing required deterministic check is FAIL even when an AI reviewer believes the implementation is acceptable.
+
+### BLOCKED
+
+Use `BLOCKED` when the required verification cannot be executed because of an external environment, unavailable platform/tool, or upstream dependency. A substitute check may add evidence but cannot silently turn a blocked required check into PASS.
+
+### NEEDS_HUMAN
+
+Use `NEEDS_HUMAN` when a mandatory human judgment/approval is pending or when available automation cannot decide the criterion reliably.
+
+### NOT_APPLICABLE
+
+Use only when the criterion genuinely does not apply. Record the rationale. It cannot be used to hide unfinished work.
+
+## Evidence requirements
+
+Evidence should include, as applicable:
+
+- criterion ID
+- tested commit/working-tree state
+- exact command or manual procedure
+- exit code/result
+- platform/environment
+- test name/count or measured observation
+- relevant log/artifact
+- independent reviewer result
+- human reviewer result
+
+Free-form statements such as `looks correct`, `reviewed`, or `tests should pass` are not sufficient evidence.
+
+Any later code/config change that can affect a criterion invalidates its previous PASS evidence until that criterion is reverified.
+
+## Verification authority order
+
+When signals disagree:
+
+1. documented product/architecture/security contract defines intended behavior
+2. deterministic executable evidence decides objective behavior where available
+3. independent AI review detects gaps but cannot override deterministic failure
+4. human judgment decides explicitly subjective/product/exception gates
+
+An implementation agent's self-report is never sufficient for PASS.
+
+## Anti-bypass rule
+
+A criterion cannot pass if the implementation agent obtained green status by weakening the thing that measures success. Relevant test/CI/acceptance changes require the controls in `docs/05_LOOP_ENGINEERING_RUNBOOK.md`.
 
 ---
-
 ## A. Architecture
 
 ### ARCH-001
@@ -465,12 +537,206 @@ Platform release artifacts can be produced.
 
 # MVP final gate
 
-MVP status may be marked COMPLETE only when:
+MVP status may be marked `COMPLETE` only when:
 
-- no critical acceptance criterion is Fail
-- security criteria pass
-- architecture criteria pass
-- same-session MPV switching passes
-- keyboard-only workflow passes
-- resource stress tests show no clear leak pattern
-- all three desktop platforms have a validated build path
+- every applicable critical product criterion is `PASS`
+- no required criterion is `FAIL`, `BLOCKED`, `NEEDS_HUMAN`, or `NOT_RUN`
+- all security and architecture criteria are `PASS`
+- same-session MPV switching is `PASS` with PID evidence
+- keyboard-only workflow is `PASS` with required human verification
+- resource stress criteria are `PASS` with repeated-cycle evidence
+- all three desktop platforms have the required build/runtime evidence defined by the verification matrix
+- required CI/release criteria are `PASS` on the final state
+- applicable `LOOP-001..025` integrity criteria are `PASS`
+- all applicable `QUAL-001..012` code-quality criteria are `PASS`
+- the final human MVP/release gate returns `HUMAN_PASS`
+- no critical criterion is covered only by an exception or manual bypass
+
+---
+
+## N. Loop integrity and verification process
+
+These are engineering-process gates. They do not replace the product criteria above; they determine whether product PASS evidence is trustworthy.
+
+### LOOP-001 — Contract before mutation
+
+Each v2 loop records target acceptance criteria, verifier types, human-gate requirement, and stop-loss budgets before new code mutation.
+
+### LOOP-002 — Deterministic verification precedence
+
+Where an objective executable check exists, final status is derived from that check rather than implementer self-assessment.
+
+### LOOP-003 — No verifier weakening
+
+Required tests, CI checks, security policy, acceptance meaning, or verifier logic are not weakened, deleted, skipped, or special-cased to obtain PASS.
+
+### LOOP-004 — Failure-driven correction
+
+A failed gate produces structured failure evidence, classification, diagnosis, a bounded corrective change, and re-verification.
+
+### LOOP-005 — Bounded convergence
+
+The loop respects corrective-iteration, same-failure, replan, turn, and available provider budget limits defined in the runbook.
+
+### LOOP-006 — No-progress termination
+
+Two consecutive corrective iterations with no meaningful progress trigger non-convergence stop rather than continued blind retries.
+
+### LOOP-007 — Regression protection
+
+Focused fixes are followed by affected regression checks; a new regression prevents PASS.
+
+### LOOP-008 — Independent review
+
+Loops that meet independent-review triggers receive a fresh-context/read-only review and resolve all must-fix findings before PASS.
+
+### LOOP-009 — Human gate integrity
+
+Criteria or changes requiring human review are not marked PASS until the documented human procedure is executed and returns `HUMAN_PASS`.
+
+### LOOP-010 — Final-state evidence
+
+Final PASS evidence applies to the final implementation after correction, simplify, and review; relevant changes after verification trigger re-verification.
+
+### LOOP-011 — Clean final verification
+
+Important final acceptance is verified in a clean or otherwise reproducible environment so stale state cannot create a false PASS.
+
+### LOOP-012 — Historical migration safety
+
+Loops 01-22 are retrospectively audited for evidence without reimplementation unless an actual failing criterion is found.
+
+### LOOP-013 — Sandbox containment
+
+Autonomous agent execution occurs inside an isolated sandbox/workspace boundary; the active repository is the only persistent local project area writable by default.
+
+### LOOP-014 — Host filesystem protection
+
+No persistent write is made to the user's host filesystem outside the active repository. Sandbox-owned ephemeral temp/cache state is permitted and discarded after use.
+
+### LOOP-015 — Repository-scoped GitHub access
+
+GitHub access is restricted to the explicitly connected repository. The agent does not read/write unrelated private repositories or organization resources as part of the loop.
+
+### LOOP-016 — CI observability without broad write authority
+
+The agent can read the connected repository's required checks, Actions status, and diagnostic logs/artifacts needed for verification without requiring host-system access or broad GitHub administration permission.
+
+### LOOP-017 — Least-privilege credentials
+
+GitHub credentials are repository-scoped and least-privilege; CI diagnosis uses read access where sufficient, and host SSH keys/global credential stores are not imported into the sandbox.
+
+### LOOP-018 — Controlled network egress
+
+Sandbox network access is deny-by-default or equivalently constrained to documented destinations required by GitHub observation, dependency restore, or explicit live integration tests. Repository/source contents and credentials are not uploaded to arbitrary services.
+
+### LOOP-019 — Protected remote administration
+
+Direct default-branch writes, workflow administration/reruns, releases/tags, repository settings, secrets, variables, webhooks, branch protection, deploy keys, environments, and equivalent GitHub administration actions require an explicit human-approved scope and are not autonomous feature-loop operations.
+
+### LOOP-020 — Boundary violation fail-safe
+
+Any detected write/access outside the allowed local repo, sandbox-ephemeral state, or connected GitHub boundary stops mutation and results in `NEEDS_HUMAN`; the agent must not respond by granting itself broader permissions.
+
+### LOOP-021 — Codex execution profile
+
+Protocol v2.3 implementation uses Codex App or Codex CLI under the documented sandbox/approval profile. Full Access/danger-full-access is not used on the host to bypass blocked work.
+
+### LOOP-022 — AGENTS instruction integrity
+
+Applicable repository `AGENTS.md` instructions are present in the Codex execution context before mutation, and no nested instruction file silently weakens the project safety/quality baseline.
+
+### LOOP-023 — Multi-agent write isolation
+
+Parallel code-changing agents use isolated Codex worktrees or otherwise disjoint write sets; concurrent overlapping mutation of the same files/worktree is not accepted as a valid loop execution.
+
+### LOOP-024 — Reviewer independence
+
+The final code-quality reviewer is fresh-context/read-only for its review pass and did not author the final changed code it approves. Specialized security/concurrency reviewers follow the same principle where required.
+
+### LOOP-025 — No alternate-harness dependency
+
+The implementation/verification process does not depend on OpenCode Go or another coding-agent harness. Reintroducing an alternate harness requires explicit human approval plus verification that its sandbox, instruction loading, multi-agent isolation, and evidence semantics meet or exceed this protocol.
+
+---
+
+## O. Code quality, maintainability, and structure
+
+### QUAL-001 — Pragmatic SOLID
+
+Changed production code follows the project-specific SOLID interpretation in `docs/02_ARCHITECTURE.md` without adding ceremonial abstractions.
+
+### QUAL-002 — Single responsibility and cohesion
+
+Changed files, types, packages, and major functions have coherent responsibilities; unrelated responsibilities are not accumulated merely because the existing location is convenient.
+
+### QUAL-003 — Dependency direction
+
+Core/application policy does not gain concrete Wails, provider, MPV, SQLite, network, or platform dependencies.
+
+### QUAL-004 — Interface quality
+
+Existing/new interfaces remain narrow, consumer-relevant, and justified by a real boundary; no implementation forces unrelated consumers to depend on extra methods.
+
+### QUAL-005 — Substitutability
+
+Port/adapter implementations preserve shared contract behavior including typed errors, cancellation, lifecycle, security, and failure semantics.
+
+### QUAL-006 — Readability
+
+Names, control flow, error handling, and side effects are understandable from the code without unnecessary indirection or misleading abstractions.
+
+### QUAL-007 — File/package placement
+
+New or moved production code lives in the narrowest existing architectural package that owns the responsibility. New top-level/shared packages are justified and reviewed.
+
+### QUAL-008 — No dumping grounds or god structures
+
+The loop does not introduce/grow generic `utils`/`helpers`/`common`/`misc` dumping grounds, god objects/files, circular ownership, or mixed unrelated responsibilities.
+
+### QUAL-009 — No unnecessary duplication/dead scaffolding
+
+The final diff contains no avoidable duplicated domain/security policy, dead code, temporary debug path, obsolete compatibility branch, or stale scaffolding introduced by the loop.
+
+### QUAL-010 — Documentation/comment accuracy
+
+Non-obvious invariants and security/architecture reasoning are documented where needed; comments and docs changed by the loop are accurate and do not narrate obvious syntax.
+
+### QUAL-011 — Minimal public surface
+
+New exported/public APIs, bindings, and shared helpers are no broader than required by the current feature and acceptance criteria.
+
+### QUAL-012 — Independent code-quality review
+
+A fresh-context independent reviewer reports no unresolved `MUST_FIX` finding for architecture, maintainability, readability, responsibility, or file placement on the final diff.
+## P. Durable agent state and session recovery
+
+### STATE-001 — Bounded handoff exists
+When an active loop may be paused/handed off, `docs/AGENT_HANDOFF.md` exists and is parseable/current enough to resume after Git reconciliation.
+
+### STATE-002 — Handoff is size bounded
+`docs/AGENT_HANDOFF.md` targets <= 4 KiB and MUST remain <= 8 KiB and <= 160 lines.
+
+### STATE-003 — Recovery-critical fields
+The handoff records protocol/instruction version, active loop/state, branch/observed HEAD, goal/acceptance IDs, current progress, unresolved failures, ordered next actions, relevant paths, verification state, blockers/gates, and material budget counters.
+
+### STATE-004 — No transcript or secret dumping
+The handoff contains no chain-of-thought, full logs/diffs/source copies, credentials/tokens/cookies/authenticated URLs, or duplicated engineering-document sections.
+
+### STATE-005 — Git reconciliation on new root session
+A new root session reconciles handoff branch/HEAD/dirty paths against current Git state before mutation; current Git/verifier truth overrides stale handoff text.
+
+### STATE-006 — Progressive source loading
+A continuing session reads the handoff and only the referenced/relevant source-of-truth sections first; full-repository/full-doc rediscovery is reserved for invalid/stale/conflicting state, new loops, or material boundary uncertainty.
+
+### STATE-007 — Material checkpointing
+The root updates the handoff at recoverability boundaries defined in `docs/10_DURABLE_AGENT_STATE.md`, including before intentional pause/handoff and at loop exit states.
+
+### STATE-008 — Root-only global memory ownership
+Workers/subagents do not concurrently mutate the global handoff. The root aggregates material worker results after integration/rejection.
+
+### STATE-009 — Durable decisions promoted out of handoff
+Long-lived architectural/security/product decisions are captured in ADR/source-of-truth docs/tests rather than surviving only in the transient handoff.
+
+### STATE-010 — Resume after instruction changes is safe
+When `AGENTS.md`/protocol materially changes after a Codex session began, continuation uses a fresh/reconciled session rather than assuming an old resumed session has current instructions.
