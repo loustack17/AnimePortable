@@ -5,6 +5,8 @@
 </svelte:head>
 
 <script lang="ts">
+  import Home from './HomeView.svelte'
+
   type SectionId = 'home' | 'schedule' | 'following' | 'history' | 'search' | 'settings'
 
   type Section = {
@@ -71,13 +73,9 @@
       <h1>{activeDetails.label}</h1>
       <p class="description">{activeDetails.description}</p>
 
-      <section class="empty-state" aria-labelledby="empty-state-title">
-        <div class="empty-state-mark" aria-hidden="true">✦</div>
-        <div>
-          <h2 id="empty-state-title">這裡很快就會準備好</h2>
-          <p>目前沒有可顯示的內容。這個區域會在功能完成後呈現於此。</p>
-        </div>
-      </section>
+      {#if activeSection === 'home'}
+        <Home />
+      {:else}<section class="empty-state"><div class="empty-state-mark" aria-hidden="true">✦</div><div><h2>{activeDetails.label}</h2><p>{activeDetails.description}</p></div></section>{/if}
     </div>
   </main>
 </div>

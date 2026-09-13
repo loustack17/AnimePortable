@@ -36,6 +36,21 @@ jobs:
           npm test
           npm run build
           npm audit --audit-level=high
+      - name: Install Chromium for Home verification
+        working-directory: apps/desktop/frontend
+        run: node node_modules/playwright/cli.js install --with-deps chromium
+      - name: Verify Home browser interactions
+        working-directory: apps/desktop/frontend
+        timeout-minutes: 5
+        run: node tests/browser/home.mjs
+      - name: Verify Home controller for 20 rounds
+        working-directory: apps/desktop/frontend
+        timeout-minutes: 5
+        run: |
+          for cycle in {1..20}; do
+            echo "Home controller round ${cycle}/20"
+            node --test --test-name-pattern='controller' tests/home.test.mjs || exit 1
+          done
       - name: Verify Go formatting
         run: |
           files=$(git ls-files '*.go')
