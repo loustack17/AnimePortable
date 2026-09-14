@@ -476,7 +476,7 @@ func (service *Service) ensurePlayer(ctx context.Context, store core.Store) (*co
 	}
 	player, err := service.newPlayer(settings.MPVPath)
 	if err != nil {
-		return nil, ErrUnavailable
+		return nil, safeError(err)
 	}
 	service.mu.Lock()
 	defer service.mu.Unlock()

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"path/filepath"
 	"strings"
@@ -286,6 +287,45 @@ func TestPlayFailureCanRecoverAndRejectsMillisecondOverflow(t *testing.T) {
 	player.mu.Unlock()
 	if err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode"}); err != nil {
 		t.Fatalf("recovery error = %v", err)
+	}
+}
+
+func TestPlayPreservesSafePlayerLaunchErrors(t *testing.T) {
+	store := newFakeStore()
+	store.anime["anime"] = core.Anime{ID: "anime"}
+	ref := core.EpisodeRef{Anime: core.SourceRef{Provider: "anime1", ID: "show"}, ID: "episode"}
+	store.mappings["anime"] = []core.EpisodeMapping{{AnimeID: "anime", EpisodeID: "episode", Ref: ref}}
+	for _, test := range []struct {
+		name  string
+		cause error
+		want  error
+	}{
+		{name: "missing", cause: mpv.ErrNotFound, want: mpv.ErrNotFound},
+		{name: "invalid path", cause: mpv.ErrInvalidPath, want: mpv.ErrInvalidPath},
+		{name: "generic", cause: errors.New("player secret https://internal.invalid/path"), want: ErrUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := newWithDependencies(dependencies{
+				store:  store,
+				source: &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: "Anime"}},
+				newPlayer: func(string) (core.Player, error) {
+					return nil, fmt.Errorf("launch secret C:/private/mpv.exe: %w", test.cause)
+				},
+			})
+			t.Cleanup(func() { _ = service.ServiceShutdown() })
+			err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode"})
+			if err != test.want {
+				t.Fatalf("play error identity = %v, want %v", err, test.want)
+			}
+			if test.want == mpv.ErrNotFound || test.want == mpv.ErrInvalidPath {
+				if err.Error() != test.want.Error() {
+					t.Fatalf("play error message = %q, want %q", err.Error(), test.want.Error())
+				}
+			}
+			if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "private") || strings.Contains(err.Error(), "internal.invalid") {
+				t.Fatalf("play error leaked launch detail: %q", err)
+			}
+		})
 	}
 }
 

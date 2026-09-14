@@ -22,6 +22,16 @@ export type HomeState = {
 
 export const homeLimit = 6
 export const serviceErrorMessage = '桌面服務目前無法使用，請稍後重試。'
+const mpvMissingError = 'mpv: executable not found; install mpv or configure its path'
+const mpvInvalidPathError = 'mpv: configured executable path is invalid'
+const playGenericErrorMessage = '無法開始播放，請重試。'
+
+export function playErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : ''
+  if (message === mpvMissingError) return '找不到播放所需的播放器，請聯絡程式提供者協助安裝。'
+  if (message === mpvInvalidPathError) return '播放器設定無法使用，請聯絡程式提供者協助修正。'
+  return playGenericErrorMessage
+}
 
 const loadErrorMessages: Record<LoadName, string> = {
   library: '無法載入作品資料，請重試。',
@@ -213,14 +223,14 @@ export function createHomeController(binding: HomeBinding, onChange: (state: Hom
     let operation: CancellablePromise<void>
     try {
       operation = binding.Play(request)
-    } catch {
-      failPlay(id)
+    } catch (error) {
+      failPlay(id, error)
       return
     }
     pendingPlay = { id, cancel: () => operation.cancel() }
     operation.then(
       () => completePlay(id),
-      () => failPlay(id),
+      (error) => failPlay(id, error),
     )
   }
 
@@ -231,10 +241,10 @@ export function createHomeController(binding: HomeBinding, onChange: (state: Hom
     publish()
   }
 
-  function failPlay(id: number): void {
+  function failPlay(id: number, error?: unknown): void {
     if (disposed || (pendingPlay && pendingPlay.id !== id)) return
     pendingPlay = undefined
-    state = { ...state, playStatus: 'error', playMessage: '無法開始播放，請重試。' }
+    state = { ...state, playStatus: 'error', playMessage: playErrorMessage(error) }
     publish()
   }
 

@@ -261,7 +261,13 @@ func safeError(err error) error {
 	if errors.Is(err, ErrInvalidInput) {
 		return ErrInvalidInput
 	}
-	if errors.Is(err, mpv.ErrNotFound) || errors.Is(err, mpv.ErrInvalidPath) || errors.Is(err, mpv.ErrPlayerClosed) || errors.Is(err, mpv.ErrPlayerFailed) || errors.Is(err, mpv.ErrIPCClosed) {
+	if errors.Is(err, mpv.ErrNotFound) {
+		return mpv.ErrNotFound
+	}
+	if errors.Is(err, mpv.ErrInvalidPath) {
+		return mpv.ErrInvalidPath
+	}
+	if errors.Is(err, mpv.ErrPlayerClosed) || errors.Is(err, mpv.ErrPlayerFailed) || errors.Is(err, mpv.ErrIPCClosed) {
 		return ErrUnavailable
 	}
 	return ErrUnavailable

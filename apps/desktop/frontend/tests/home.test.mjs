@@ -158,3 +158,75 @@ test('controller converts synchronous binding failures to recoverable generic er
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+test('play maps safe player errors and preserves success', async () => {
+  const { module, directory } = await loadHomeModule()
+  try {
+    const cases = [
+      ['mpv: executable not found; install mpv or configure its path', '找不到播放所需的播放器，請聯絡程式提供者協助安裝。'],
+      ['mpv: configured executable path is invalid', '播放器設定無法使用，請聯絡程式提供者協助修正。'],
+      ['player secret C:/private/mpv.exe', '無法開始播放，請重試。'],
+    ]
+    for (const [errorMessage, expected] of cases) {
+      const updates = []
+      const binding = {
+        Library: () => fulfilled([]),
+        History: () => fulfilled([]),
+        Following: () => fulfilled([]),
+        Play: () => { throw new Error(errorMessage) },
+      }
+      const controller = module.createHomeController(binding, (state) => updates.push(state))
+      controller.play(history('anime', 'episode', '2026-09-12T10:00:00Z'))
+      assert.equal(updates.at(-1).playMessage, expected)
+      assert.ok(!updates.at(-1).playMessage.includes('private'))
+      controller.dispose()
+    }
+
+    const updates = []
+    const binding = {
+      Library: () => fulfilled([]),
+      History: () => fulfilled([]),
+      Following: () => fulfilled([]),
+      Play: () => fulfilled(undefined),
+    }
+    const controller = module.createHomeController(binding, (state) => updates.push(state))
+    controller.play(history('anime', 'episode', '2026-09-12T10:00:00Z'))
+    await settle()
+    assert.equal(updates.at(-1).playStatus, 'success')
+    assert.equal(updates.at(-1).playMessage, '播放已開始。')
+    controller.dispose()
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('play maps rejected player errors and keeps unknown values generic', async () => {
+  const { module, directory } = await loadHomeModule()
+  try {
+    const cases = [
+      [new Error('mpv: executable not found; install mpv or configure its path'), '找不到播放所需的播放器，請聯絡程式提供者協助安裝。'],
+      [new Error('mpv: configured executable path is invalid'), '播放器設定無法使用，請聯絡程式提供者協助修正。'],
+      [new Error('backend secret'), '無法開始播放，請重試。'],
+      ['mpv: executable not found; install mpv or configure its path', '無法開始播放，請重試。'],
+    ]
+    for (const [failure, expected] of cases) {
+      const updates = []
+      const rejected = deferred()
+      const binding = {
+        Library: () => fulfilled([]),
+        History: () => fulfilled([]),
+        Following: () => fulfilled([]),
+        Play: () => rejected.promise,
+      }
+      const controller = module.createHomeController(binding, (state) => updates.push(state))
+      controller.play(history('anime', 'episode', '2026-09-12T10:00:00Z'))
+      rejected.reject(failure)
+      await settle()
+      assert.equal(updates.at(-1).playMessage, expected)
+      assert.ok(!JSON.stringify(updates).includes('backend secret'))
+      controller.dispose()
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})

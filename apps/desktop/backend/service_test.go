@@ -5,12 +5,14 @@ package backend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"animeportable/adapters/metadata/cover"
+	"animeportable/adapters/player/mpv"
 	"animeportable/core"
 )
 
@@ -317,7 +319,15 @@ func TestValidationAndNormalization(t *testing.T) {
 	}
 }
 func TestSafeError(t *testing.T) {
-	for _, x := range []struct{ in, want error }{{context.Canceled, context.Canceled}, {core.ErrNotFound, core.ErrNotFound}, {errors.New("x"), ErrUnavailable}} {
+	for _, x := range []struct{ in, want error }{
+		{context.Canceled, context.Canceled},
+		{core.ErrNotFound, core.ErrNotFound},
+		{mpv.ErrNotFound, mpv.ErrNotFound},
+		{fmt.Errorf("secret path: %w", mpv.ErrNotFound), mpv.ErrNotFound},
+		{mpv.ErrInvalidPath, mpv.ErrInvalidPath},
+		{fmt.Errorf("secret path: %w", mpv.ErrInvalidPath), mpv.ErrInvalidPath},
+		{errors.New("x"), ErrUnavailable},
+	} {
 		if e := safeError(x.in); e != x.want {
 			t.Errorf("%v => %v", x.in, e)
 		}
