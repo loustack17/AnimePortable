@@ -149,7 +149,7 @@ func metadataHasCrossCheck(top metadataScoredCandidate, others []metadataScoredC
 
 func metadataHasConflict(top metadataScoredCandidate, others []metadataScoredCandidate) bool {
 	for _, other := range others {
-		if equivalentMetadataCandidates(top, other) {
+		if equivalentMetadataCandidates(top, other) && (!sameMetadataProvider(top, other) || top.candidate.Ref.ID == other.candidate.Ref.ID) {
 			continue
 		}
 		if other.score >= top.score-metadataAmbiguityGap {

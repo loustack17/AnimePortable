@@ -183,6 +183,19 @@ func TestMatchMetadataFailsClosedForConflictingCandidates(t *testing.T) {
 	}
 }
 
+func TestMatchMetadataFailsClosedForDistinctSameProviderIdentities(t *testing.T) {
+	result := MatchMetadata(MetadataMatchRequest{
+		Query: MetadataQuery{Title: "Anime"},
+		Candidates: []MetadataCandidate{
+			{Ref: MetadataRef{Provider: "anilist", ID: "2"}, Title: "Anime"},
+			{Ref: MetadataRef{Provider: "anilist", ID: "1"}, Title: "Anime"},
+		},
+	})
+	if result.Decision != MetadataMatchNoMetadata || result.Confidence != MetadataMatchConfidenceLow || result.Candidate != (MetadataCandidate{}) {
+		t.Fatalf("ambiguous identity accepted: %#v", result)
+	}
+}
+
 func TestMatchMetadataRejectsInvalidAndEmptyInputs(t *testing.T) {
 	tests := []MetadataMatchRequest{
 		{},
