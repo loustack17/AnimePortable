@@ -272,7 +272,7 @@ func TestLifecycle(t *testing.T) {
 	go func() { _, e := s.Catalog(context.Background()); done <- e }()
 	<-started
 	shutdown := make(chan error, 1)
-	go func() { shutdown <- s.ServiceShutdown() }()
+	go func() { shutdown <- s.Close() }()
 	select {
 	case <-shutdown:
 		t.Fatal("shutdown did not wait")
@@ -294,7 +294,7 @@ func TestLifecycle(t *testing.T) {
 	if _, _, e := s.begin(context.Background()); e != ErrClosed {
 		t.Fatalf("begin after shutdown: %v", e)
 	}
-	if e := s.ServiceShutdown(); e != firstShutdown {
+	if e := s.Close(); e != firstShutdown {
 		t.Fatalf("second shutdown error %v", e)
 	}
 }

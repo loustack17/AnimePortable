@@ -22,7 +22,6 @@ import (
 	"animeportable/adapters/source/anime1"
 	"animeportable/core"
 	metadata "animeportable/internal/metadata"
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 var (
@@ -81,7 +80,7 @@ func newWithDependencies(deps dependencies) *Service {
 	return service
 }
 
-func (service *Service) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+func (service *Service) Start(ctx context.Context) error {
 	if ctx == nil {
 		return ErrInvalidInput
 	}
@@ -149,7 +148,7 @@ func (service *Service) bindLifecycle(ctx context.Context) {
 	service.mu.Unlock()
 }
 
-func (service *Service) ServiceShutdown() error {
+func (service *Service) Close() error {
 	if service == nil {
 		return nil
 	}
@@ -472,6 +471,3 @@ func parseLanguage(value string) (core.Language, error) {
 func sortAnime(items []Anime) {
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 }
-
-var _ application.ServiceStartup = (*Service)(nil)
-var _ application.ServiceShutdown = (*Service)(nil)

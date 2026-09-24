@@ -18,7 +18,6 @@ import (
 	"animeportable/adapters/player/mpv"
 	"animeportable/core"
 	metadata "animeportable/internal/metadata"
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type persistentSource struct {
@@ -88,7 +87,7 @@ func TestCanonicalIdentityPersistsAcrossSQLiteRestartAndConcurrentIngest(t *test
 			t.Fatalf("concurrent identity result = %#v", items)
 		}
 	}
-	if err := service.ServiceShutdown(); err != nil {
+	if err := service.Close(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -97,7 +96,7 @@ func TestCanonicalIdentityPersistsAcrossSQLiteRestartAndConcurrentIngest(t *test
 		t.Fatal(err)
 	}
 	restarted := newWithDependencies(dependencies{store: reopened, source: &persistentSource{item: item}})
-	t.Cleanup(func() { _ = restarted.ServiceShutdown() })
+	t.Cleanup(func() { _ = restarted.Close() })
 	afterRestart, err := restarted.Catalog(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -236,7 +235,7 @@ func TestPlayReusesTrackedSessionAfterCallerCancellation(t *testing.T) {
 		source:    &persistentSource{item: core.SourceAnime{Ref: ref1.Anime, Title: "Anime"}},
 		newPlayer: func(string) (core.Player, error) { return player, nil },
 	})
-	t.Cleanup(func() { _ = service.ServiceShutdown() })
+	t.Cleanup(func() { _ = service.Close() })
 
 	requestCtx, cancel := context.WithCancel(context.Background())
 	if err := service.Play(requestCtx, PlayRequest{AnimeID: "anime", EpisodeID: "episode-1"}); err != nil {
@@ -274,7 +273,7 @@ func TestPlayFailureCanRecoverAndRejectsMillisecondOverflow(t *testing.T) {
 		source:    &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: "Anime"}},
 		newPlayer: func(string) (core.Player, error) { return player, nil },
 	})
-	t.Cleanup(func() { _ = service.ServiceShutdown() })
+	t.Cleanup(func() { _ = service.Close() })
 
 	if err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode", StartAt: math.MaxInt64}); err != ErrInvalidInput {
 		t.Fatalf("overflow error = %v, want ErrInvalidInput", err)
@@ -312,7 +311,7 @@ func TestPlayPreservesSafePlayerLaunchErrors(t *testing.T) {
 					return nil, fmt.Errorf("launch secret C:/private/mpv.exe: %w", test.cause)
 				},
 			})
-			t.Cleanup(func() { _ = service.ServiceShutdown() })
+			t.Cleanup(func() { _ = service.Close() })
 			err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode"})
 			if err != test.want {
 				t.Fatalf("play error identity = %v, want %v", err, test.want)
@@ -340,7 +339,7 @@ func TestConcurrentInitialPlayUsesOnePlayerStart(t *testing.T) {
 		source:    &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: "Anime"}},
 		newPlayer: func(string) (core.Player, error) { return player, nil },
 	})
-	t.Cleanup(func() { _ = service.ServiceShutdown() })
+	t.Cleanup(func() { _ = service.Close() })
 
 	const callers = 8
 	results := make(chan error, callers)
@@ -383,7 +382,7 @@ func TestTerminalPlaybackEventAllowsNextPlayOnTrackedSession(t *testing.T) {
 		source:    &persistentSource{item: core.SourceAnime{Ref: first.Anime, Title: "Anime"}},
 		newPlayer: func(string) (core.Player, error) { return player, nil },
 	})
-	t.Cleanup(func() { _ = service.ServiceShutdown() })
+	t.Cleanup(func() { _ = service.Close() })
 	if err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode-1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +416,7 @@ func TestTerminalPlaybackEventAllowsNextPlayOnTrackedSession(t *testing.T) {
 
 func TestCachedAnimeTextIsNormalizedAtBindingBoundary(t *testing.T) {
 	service, store, _ := testService()
-	t.Cleanup(func() { _ = service.ServiceShutdown() })
+	t.Cleanup(func() { _ = service.Close() })
 	store.anime["unsafe"] = core.Anime{
 		ID:          "unsafe",
 		Title:       "<b>Title</b>",
@@ -490,7 +489,7 @@ func TestEpisodesFallsBackToTheNextPersistedSourceRef(t *testing.T) {
 		second: second,
 	}
 	service := newWithDependencies(dependencies{store: store, source: source})
-	t.Cleanup(func() { _ = service.ServiceShutdown() })
+	t.Cleanup(func() { _ = service.Close() })
 	episodes, err := service.Episodes(context.Background(), "anime")
 	if err != nil {
 		t.Fatal(err)
@@ -511,13 +510,13 @@ func TestCanceledStartupDoesNotLeavePartiallyInitializedService(t *testing.T) {
 	service := New()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := service.ServiceStartup(ctx, application.ServiceOptions{}); !errors.Is(err, context.Canceled) {
+	if err := service.Start(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("startup error = %v, want context.Canceled", err)
 	}
 	if _, _, err := service.begin(context.Background()); err != ErrUnavailable {
 		t.Fatalf("begin after canceled startup = %v, want ErrUnavailable", err)
 	}
-	if err := service.ServiceShutdown(); err != nil {
+	if err := service.Close(); err != nil {
 		t.Fatalf("shutdown after canceled startup = %v", err)
 	}
 }
@@ -562,7 +561,7 @@ func TestAdmissionIsBoundedAndCancellationUnblocksShutdown(t *testing.T) {
 		t.Fatalf("pre-canceled admission error = %v, want cancellation", err)
 	}
 	shutdown := make(chan error, 1)
-	go func() { shutdown <- service.ServiceShutdown() }()
+	go func() { shutdown <- service.Close() }()
 	select {
 	case err := <-shutdown:
 		if err != nil {
@@ -631,7 +630,7 @@ func TestScheduleRejectsMalformedResponsesBeforePersisting(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			store := newFakeStore()
 			service := newWithDependencies(dependencies{store: store, source: &scheduleResponseSource{items: []core.SourceScheduleItem{test.item}}})
-			t.Cleanup(func() { _ = service.ServiceShutdown() })
+			t.Cleanup(func() { _ = service.Close() })
 			_, err := service.Schedule(context.Background(), from.Format(time.RFC3339Nano), to.Format(time.RFC3339Nano))
 			if err != ErrInvalidInput {
 				t.Fatalf("schedule error = %v, want ErrInvalidInput", err)
@@ -683,7 +682,7 @@ func TestShutdownClosesSessionBeforeDependenciesAndStore(t *testing.T) {
 	player.session.closeLog = &log
 	player.session.logMu = logMu
 	player.mu.Unlock()
-	if err := service.ServiceShutdown(); err != nil {
+	if err := service.Close(); err != nil {
 		t.Fatal(err)
 	}
 	logMu.Lock()
@@ -699,7 +698,7 @@ func TestConcurrentShutdownIsIdempotent(t *testing.T) {
 	const callers = 8
 	results := make(chan error, callers)
 	for range callers {
-		go func() { results <- service.ServiceShutdown() }()
+		go func() { results <- service.Close() }()
 	}
 	for range callers {
 		if err := <-results; err != nil {

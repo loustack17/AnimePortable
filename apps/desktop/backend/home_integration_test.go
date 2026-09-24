@@ -48,7 +48,7 @@ func TestHomeBindingsReadSQLiteAfterRestartWithoutSource(t *testing.T) {
 	}
 	uncallableSource := &struct{ core.AnimeSource }{}
 	service := newWithDependencies(dependencies{store: reopened, source: uncallableSource})
-	t.Cleanup(func() { _ = service.ServiceShutdown() })
+	t.Cleanup(func() { _ = service.Close() })
 	library, err := service.Library(ctx)
 	if err != nil || len(library) != 1 || library[0].ID != string(anime.ID) || library[0].Title != anime.Title {
 		t.Fatalf("cached library = %#v, error = %v", library, err)
@@ -109,7 +109,7 @@ func TestHomeHistoryAfterRestartInvokesExistingPlayback(t *testing.T) {
 		source:    &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: anime.Title}},
 		newPlayer: func(string) (core.Player, error) { return player, nil },
 	})
-	t.Cleanup(func() { _ = service.ServiceShutdown() })
+	t.Cleanup(func() { _ = service.Close() })
 	history, err := service.History(ctx)
 	if err != nil || len(history) != 1 {
 		t.Fatalf("history = %#v, error = %v", history, err)

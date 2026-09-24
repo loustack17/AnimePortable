@@ -91,7 +91,7 @@ func TestLiveMPVLoadsThreeMediaURLsOnOneProcess(t *testing.T) {
 
 	executable, err := Find("")
 	if err != nil {
-		t.Skipf("MPV unavailable: %v", err)
+		t.Fatalf("live MPV requested but executable unavailable: %v", err)
 	}
 
 	paths := liveMediaPaths()

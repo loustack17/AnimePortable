@@ -8,16 +8,9 @@ import (
 	"testing"
 
 	"animeportable/apps/desktop/backend"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-var (
-	_ application.ServiceStartup  = (*backend.Service)(nil)
-	_ application.ServiceShutdown = (*backend.Service)(nil)
-)
-
-func TestDesktopBindingSurface(t *testing.T) {
+func TestNativeServiceSurface(t *testing.T) {
 	allowed := map[string]bool{
 		"Catalog": false, "Search": false, "Library": false,
 		"Detail": false, "Episodes": false, "Following": false,
@@ -28,9 +21,19 @@ func TestDesktopBindingSurface(t *testing.T) {
 	serviceType := reflect.TypeOf((*backend.Service)(nil))
 	contextType := reflect.TypeFor[context.Context]()
 	errorType := reflect.TypeFor[error]()
+	actionCount := 0
 	for i := 0; i < serviceType.NumMethod(); i++ {
 		method := serviceType.Method(i)
-		if method.Name == "ServiceStartup" || method.Name == "ServiceShutdown" {
+		switch method.Name {
+		case "Start":
+			if method.Type.NumIn() != 2 || method.Type.In(1) != contextType || method.Type.NumOut() != 1 || method.Type.Out(0) != errorType {
+				t.Errorf("Start must accept a context and return error: %s", method.Type)
+			}
+			continue
+		case "Close":
+			if method.Type.NumIn() != 1 || method.Type.NumOut() != 1 || method.Type.Out(0) != errorType {
+				t.Errorf("Close must return error without arguments: %s", method.Type)
+			}
 			continue
 		}
 		if _, ok := allowed[method.Name]; !ok {
@@ -38,8 +41,9 @@ func TestDesktopBindingSurface(t *testing.T) {
 			continue
 		}
 		allowed[method.Name] = true
+		actionCount++
 		if method.Type.NumIn() < 2 || method.Type.In(1) != contextType {
-			t.Errorf("%s must accept Wails-injected request context first", method.Name)
+			t.Errorf("%s must accept a request context first", method.Name)
 			continue
 		}
 		for j := 2; j < method.Type.NumIn(); j++ {
@@ -51,6 +55,12 @@ func TestDesktopBindingSurface(t *testing.T) {
 				assertBindingDTO(t, method.Name, result)
 			}
 		}
+	}
+	if actionCount != len(allowed) {
+		t.Errorf("action count = %d, want %d", actionCount, len(allowed))
+	}
+	if serviceType.NumMethod() != len(allowed)+2 {
+		t.Errorf("desktop service method count = %d, want %d actions plus Start/Close", serviceType.NumMethod(), len(allowed))
 	}
 	for name, found := range allowed {
 		if !found {

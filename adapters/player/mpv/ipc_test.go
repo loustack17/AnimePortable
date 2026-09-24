@@ -787,7 +787,7 @@ func TestLiveIPC(t *testing.T) {
 	}
 	executable, err := Find("")
 	if err != nil {
-		t.Skipf("MPV unavailable: %v", err)
+		t.Fatalf("live MPV requested but executable unavailable: %v", err)
 	}
 	session, err := StartIPC(context.Background(), executable)
 	if err != nil {

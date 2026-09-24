@@ -3,37 +3,27 @@
 package main
 
 import (
-	"embed"
+	"context"
 	"log"
 
 	"animeportable/apps/desktop/backend"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
+	"animeportable/apps/desktop/native"
+	"fyne.io/fyne/v2/app"
 )
 
-//go:embed all:frontend/dist
-var assets embed.FS
-
 func main() {
-	app := application.New(application.Options{
-		Name:        "AnimePortable",
-		Description: "AnimePortable desktop application",
-		Services: []application.Service{
-			application.NewService(backend.New()),
-		},
-		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
-		},
-	})
-
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:  "AnimePortable",
-		Width:  1000,
-		Height: 618,
-		URL:    "/",
-	})
-
-	if err := app.Run(); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	service := backend.New()
+	if err := service.Start(ctx); err != nil {
+		cancel()
 		log.Fatal(err)
 	}
+	defer func() {
+		cancel()
+		if err := service.Close(); err != nil {
+			log.Print(err)
+		}
+	}()
+	application := app.New()
+	native.NewWindow(application, service).ShowAndRun()
 }
