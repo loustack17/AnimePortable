@@ -65,7 +65,9 @@ jobs:
           ' sh "$RUNNER_TEMP/extracted-linux/animeportable"
           test ! -e "$XDG_CONFIG_HOME/fyne"
           test ! -e "$XDG_CACHE_HOME/fyne"
+          test -d "$RUNNER_TEMP/extracted-linux/data/fyne-cache"
           test -d "$RUNNER_TEMP/extracted-linux/data/fyne-cache/fyne"
+          test -d "$RUNNER_TEMP/extracted-linux/data/fyne-config/fyne"
       - uses: actions/upload-artifact@v4
         with:
           name: animeportable-linux-amd64-portable
@@ -102,7 +104,9 @@ jobs:
           done
           test ! -e "$HOME/Library/Preferences/fyne"
           test ! -e "$HOME/Library/Caches/fyne"
+          test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Caches"
           test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Caches/fyne"
+          test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Preferences/fyne"
       - uses: actions/upload-artifact@v4
         with:
           name: animeportable-darwin-portable
@@ -178,7 +182,9 @@ jobs:
           }
           if (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'original-home\AppData\Roaming\fyne')) { throw 'Fyne wrote to the original user profile' }
           if (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'original-cache\fyne')) { throw 'Fyne wrote to the original cache' }
-          if (-not (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'extracted-windows\data\fyne-cache\fyne'))) { throw 'Fyne portable cache was not created' }
+          if (-not (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'extracted-windows\data\fyne-cache'))) { throw 'Fyne portable cache was not created' }
+          if (-not (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'extracted-windows\data\fyne-cache\fyne'))) { throw 'Fyne app cache was not created' }
+          if (-not (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'extracted-windows\data\fyne-home\AppData\Roaming\fyne'))) { throw 'Fyne portable settings were not created' }
       - name: Verify live Windows MPV IPC and playback
         shell: pwsh
         env:
