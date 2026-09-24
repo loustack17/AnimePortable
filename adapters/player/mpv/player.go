@@ -70,6 +70,15 @@ func NewPlayer(executable Executable) *Player {
 	return &Player{executable: executable, deps: defaultPlayerDeps()}
 }
 
+func NewPlayerWithEnvironment(executable Executable, environment []string) *Player {
+	originalEnvironment := cloneEnvironment(environment)
+	return newPlayer(executable, playerDeps{
+		startRaw: func(ctx context.Context, executable Executable) (rawPlaybackSession, error) {
+			return StartIPCWithEnvironment(ctx, executable, originalEnvironment)
+		},
+	})
+}
+
 func newPlayer(executable Executable, deps playerDeps) *Player {
 	deps = normalizePlayerDeps(deps)
 	return &Player{executable: executable, deps: deps}

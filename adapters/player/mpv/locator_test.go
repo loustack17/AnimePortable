@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +51,35 @@ func TestFindConfiguredPathDoesNotFallback(t *testing.T) {
 				t.Fatalf("error leaked configured path: %v", err)
 			}
 		})
+	}
+}
+
+func TestFindWithEnvironmentUsesOriginalUserProfile(t *testing.T) {
+	root := t.TempDir()
+	name := "mpv"
+	var env []string
+	var path string
+	switch runtime.GOOS {
+	case "windows":
+		name = "mpv.exe"
+		path = filepath.Join(root, "scoop", "apps", "mpv", "current", name)
+		env = []string{"USERPROFILE=" + root, "LOCALAPPDATA=" + filepath.Join(root, "portable", "data"), "PATH="}
+	case "darwin", "linux":
+		path = filepath.Join(root, ".local", "bin", name)
+		env = []string{"HOME=" + root, "PATH="}
+	default:
+		t.Skip("unsupported host platform")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("mpv"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	executable, err := FindWithEnvironment("", env)
+	if err != nil || executable.path != path {
+		t.Fatalf("executable = %q, error = %v, want %q", executable.path, err, path)
 	}
 }
 

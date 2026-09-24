@@ -16,6 +16,9 @@ func databasePath(raw string) (string, error) {
 		return "", ErrInvalidInput
 	}
 	path := filepath.Clean(raw)
+	if err := ValidatePortablePath(path); err != nil {
+		return "", ErrInvalidInput
+	}
 	info, err := os.Lstat(path)
 	if err == nil {
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {

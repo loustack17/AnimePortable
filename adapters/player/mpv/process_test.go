@@ -21,6 +21,10 @@ func TestMPVHelperProcess(t *testing.T) {
 	switch os.Getenv("ANIMEPORTABLE_MPV_HELPER_MODE") {
 	case "success":
 		return
+	case "environment":
+		if os.Getenv("ANIMEPORTABLE_MPV_EXPECTED") != "portable-test" || os.Getenv("ANIMEPORTABLE_MPV_PARENT_ONLY") != "" {
+			os.Exit(9)
+		}
 	case "failure":
 		os.Exit(7)
 	case "wait":
@@ -29,6 +33,25 @@ func TestMPVHelperProcess(t *testing.T) {
 		}
 	default:
 		os.Exit(8)
+	}
+}
+
+func TestStartWithEnvironmentPassesSnapshotToChild(t *testing.T) {
+	process, err := start(context.Background(), Executable{path: executableFixturePath()}, nil, launcherDeps{
+		environment: []string{
+			"ANIMEPORTABLE_MPV_HELPER=1",
+			"ANIMEPORTABLE_MPV_HELPER_MODE=environment",
+			"ANIMEPORTABLE_MPV_EXPECTED=portable-test",
+		},
+		command: func(string, ...string) *exec.Cmd {
+			return helperCommand("environment")
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := process.Wait(); err != nil {
+		t.Fatalf("child environment was not preserved: %v", err)
 	}
 }
 

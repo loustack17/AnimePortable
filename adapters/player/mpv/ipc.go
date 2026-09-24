@@ -764,6 +764,10 @@ func StartIPC(ctx context.Context, executable Executable) (*Session, error) {
 	return startIPC(ctx, executable, ipcStartDeps{})
 }
 
+func StartIPCWithEnvironment(ctx context.Context, executable Executable, environment []string) (*Session, error) {
+	return startIPC(ctx, executable, ipcStartDeps{launcher: launcherDeps{environment: cloneEnvironment(environment)}})
+}
+
 func startIPC(ctx context.Context, executable Executable, deps ipcStartDeps) (*Session, error) {
 	if ctx == nil {
 		return nil, ErrStart

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 
 	"animeportable/apps/desktop/backend"
 	"animeportable/apps/desktop/native"
@@ -13,11 +14,35 @@ import (
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	service := backend.New()
-	if err := service.Start(ctx); err != nil {
-		cancel()
-		log.Fatal(err)
+	executable, executableErr := os.Executable()
+	configDir, _ := os.UserConfigDir()
+	plan, planErr := backend.PlanPortable(executable, configDir)
+	if executableErr != nil {
+		planErr = executableErr
 	}
+	fyneDataDir := plan.DataDir
+	var temporaryDataDir string
+	defer func() {
+		if temporaryDataDir != "" {
+			_ = os.RemoveAll(temporaryDataDir)
+		}
+	}()
+	if planErr != nil {
+		temporaryDataDir, _ = os.MkdirTemp("", "animeportable-ui-*")
+		fyneDataDir = temporaryDataDir
+	}
+	originalEnvironment, restoreEnvironment, redirectErr := native.RedirectFyneEnvironment(fyneDataDir)
+	if redirectErr != nil && planErr == nil {
+		planErr = redirectErr
+		temporaryDataDir, _ = os.MkdirTemp("", "animeportable-ui-*")
+		originalEnvironment, restoreEnvironment, redirectErr = native.RedirectFyneEnvironment(temporaryDataDir)
+	}
+	if redirectErr != nil {
+		log.Print(redirectErr)
+		return
+	}
+	defer restoreEnvironment()
+	service := backend.NewAtWithPlayerEnvironment(plan.DatabasePath, originalEnvironment)
 	defer func() {
 		cancel()
 		if err := service.Close(); err != nil {
@@ -25,5 +50,5 @@ func main() {
 		}
 	}()
 	application := app.New()
-	native.NewWindow(application, service).ShowAndRun()
+	native.NewPortableWindow(application, plan, planErr, service, ctx, cancel).ShowAndRun()
 }

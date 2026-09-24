@@ -40,10 +40,11 @@ type Process struct {
 }
 
 type launcherDeps struct {
-	command func(string, ...string) *exec.Cmd
-	grace   time.Duration
-	stop    func(*os.Process) error
-	kill    func(*os.Process) error
+	command     func(string, ...string) *exec.Cmd
+	environment []string
+	grace       time.Duration
+	stop        func(*os.Process) error
+	kill        func(*os.Process) error
 }
 
 func Start(ctx context.Context, executable Executable) (*Process, error) {
@@ -70,7 +71,13 @@ func start(ctx context.Context, executable Executable, args []string, deps launc
 		deps.kill = forceStop
 	}
 	command := deps.command(executable.path, append([]string(nil), args...)...)
-	if command == nil || command.Start() != nil {
+	if command == nil {
+		return nil, ErrStart
+	}
+	if deps.environment != nil {
+		command.Env = cloneEnvironment(deps.environment)
+	}
+	if command.Start() != nil {
 		return nil, ErrStart
 	}
 	process := &Process{
@@ -86,6 +93,13 @@ func start(ctx context.Context, executable Executable, args []string, deps launc
 		return nil, err
 	}
 	return process, nil
+}
+
+func cloneEnvironment(environment []string) []string {
+	if environment == nil {
+		return nil
+	}
+	return append([]string(nil), environment...)
 }
 
 func (process *Process) PID() int {

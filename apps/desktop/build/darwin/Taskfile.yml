@@ -2,86 +2,23 @@
 
 version: '3'
 
-includes:
-  common: ../Taskfile.yml
-
 tasks:
   build:
-    summary: Creates a production build of the application
-    deps:
-      - task: common:go:mod:tidy
-      - task: common:build:frontend
-        vars:
-          BUILD_FLAGS:
-            ref: .BUILD_FLAGS
-          PRODUCTION:
-            ref: .PRODUCTION
-      - task: common:generate:icons
     cmds:
-      - go build {{.BUILD_FLAGS}} -o {{.OUTPUT}}
-    vars:
-      BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production -trimpath -buildvcs=false -ldflags="-w -s"{{else}}-buildvcs=false -gcflags=all="-l"{{end}}'
-      DEFAULT_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}'
-      OUTPUT: '{{ .OUTPUT | default .DEFAULT_OUTPUT }}'
+      - mkdir -p {{.BIN_DIR}}
+      - go build -tags production -trimpath -buildvcs=false -o {{.BIN_DIR}}/animeportable .
     env:
       GOOS: darwin
-      CGO_ENABLED: 1
-      GOARCH: '{{.ARCH | default ARCH}}'
-      CGO_CFLAGS: "-mmacosx-version-min=12.0"
-      CGO_LDFLAGS: "-mmacosx-version-min=12.0"
-      MACOSX_DEPLOYMENT_TARGET: "12.0"
-      PRODUCTION: '{{.PRODUCTION | default "false"}}'
-
-  build:universal:
-    summary: Builds darwin universal binary (arm64 + amd64)
-    deps:
-      - task: build
-        vars:
-          ARCH: amd64
-          OUTPUT: "{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
-      - task: build
-        vars:
-          ARCH: arm64
-          OUTPUT: "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
-    cmds:
-      - lipo -create -output "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
-      - rm "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
+      GOARCH: '{{.TARGET_ARCH}}'
+      CGO_ENABLED: '1'
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
 
   package:
-    summary: Packages a production build of the application into a `.app` bundle
     deps:
       - task: build
-        vars:
-          PRODUCTION: "true"
     cmds:
-      - task: create:app:bundle
-
-  package:universal:
-    summary: Packages darwin universal binary (arm64 + amd64)
-    deps:
-      - task: build:universal
-    cmds:
-      - task: create:app:bundle
-
-
-  create:app:bundle:
-    summary: Creates an `.app` bundle
-    cmds:
-      - mkdir -p {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/{MacOS,Resources}
-      - cp build/darwin/icons.icns {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources
-      - cp ../../LICENSE {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources
-      - cp ../../THIRD_PARTY_NOTICES.md {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources
-      - cp {{.BIN_DIR}}/{{.APP_NAME}} {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS
-      - cp build/darwin/Info.plist {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents
-      - codesign --force --deep --sign - {{.BIN_DIR}}/{{.APP_NAME}}.app
+      - go run ../../tools/portable-package --os darwin --arch {{.TARGET_ARCH}} --binary {{.BIN_DIR}}/animeportable --output {{.BIN_DIR}}/animeportable-darwin-{{.TARGET_ARCH}}.zip --license ../../LICENSE --notices ../../THIRD_PARTY_NOTICES.md --icon build/darwin/icons.icns --plist build/darwin/Info.plist
 
   run:
     cmds:
-      - mkdir -p {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/{MacOS,Resources}
-      - cp build/darwin/icons.icns {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources
-      - cp ../../LICENSE {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources
-      - cp ../../THIRD_PARTY_NOTICES.md {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources
-      - cp {{.BIN_DIR}}/{{.APP_NAME}} {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS
-      - cp build/darwin/Info.dev.plist {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Info.plist
-      - codesign --force --deep --sign - {{.BIN_DIR}}/{{.APP_NAME}}.dev.app
-      - '{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS/{{.APP_NAME}}'
+      - '{{.BIN_DIR}}/animeportable'

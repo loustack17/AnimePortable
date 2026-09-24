@@ -17,40 +17,10 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: 1.26.x
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24.x
-          cache: npm
-          cache-dependency-path: apps/desktop/frontend/package-lock.json
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y build-essential pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
-      - name: Install frontend dependencies
-        working-directory: apps/desktop/frontend
-        run: npm ci
-      - name: Verify frontend
-        working-directory: apps/desktop/frontend
-        run: |
-          npm run check
-          npm test
-          npm run build
-          npm audit --audit-level=high
-      - name: Install Chromium for Home verification
-        working-directory: apps/desktop/frontend
-        run: node node_modules/playwright/cli.js install --with-deps chromium
-      - name: Verify Home browser interactions
-        working-directory: apps/desktop/frontend
-        timeout-minutes: 5
-        run: node tests/browser/home.mjs
-      - name: Verify Home controller for 20 rounds
-        working-directory: apps/desktop/frontend
-        timeout-minutes: 5
-        run: |
-          for cycle in {1..20}; do
-            echo "Home controller round ${cycle}/20"
-            node --test --test-name-pattern='controller' tests/home.test.mjs || exit 1
-          done
+          sudo apt-get install --no-install-recommends -y build-essential pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev xvfb xdotool
       - name: Verify Go formatting
         run: |
           files=$(git ls-files '*.go')
@@ -60,6 +30,8 @@ jobs:
         run: go mod verify
       - name: Test Go
         run: go test ./...
+      - name: Repeat native Home keyboard and cancellation checks
+        run: go test -count=20 -run '^TestShellKeyboardMovesVisibleFocusAndCancelsHomeLoads$' ./apps/desktop/native
       - name: Test Anime1 adapter acceptance
         run: go test ./adapters/source/anime1 -run '^TestAnime1AdapterAcceptance'
       - name: Test Go with race detector
@@ -68,11 +40,74 @@ jobs:
         run: go vet ./...
       - name: Check Go vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
-      - name: Build desktop shell
-        working-directory: apps/desktop
-        run: go build -o bin/animeportable .
+      - name: Build and package native Linux desktop
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-linux" "$RUNNER_TEMP/extracted-linux"
+          go build -tags production -trimpath -buildvcs=false -o "$RUNNER_TEMP/native-linux/animeportable" ./apps/desktop
+          go run ./tools/portable-package --os linux --arch amd64 --binary "$RUNNER_TEMP/native-linux/animeportable" --output "$RUNNER_TEMP/animeportable-linux-amd64.tar.gz" --license LICENSE --notices THIRD_PARTY_NOTICES.md
+          tar -xzf "$RUNNER_TEMP/animeportable-linux-amd64.tar.gz" -C "$RUNNER_TEMP/extracted-linux"
+          test -x "$RUNNER_TEMP/extracted-linux/animeportable"
+      - name: Smoke test extracted Linux desktop under Xvfb
+        timeout-minutes: 3
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/original-config
+          XDG_CACHE_HOME: ${{ runner.temp }}/original-cache
+        run: |
+          xvfb-run -a sh -c '
+            "$1" & app_pid=$!
+            trap "kill $app_pid 2>/dev/null || true" EXIT
+            for attempt in $(seq 1 30); do
+              if xdotool search --onlyvisible --name AnimePortable >/dev/null 2>&1; then exit 0; fi
+              if ! kill -0 "$app_pid" 2>/dev/null; then exit 1; fi
+              sleep 1
+            done
+            exit 1
+          ' sh "$RUNNER_TEMP/extracted-linux/animeportable"
+          test ! -e "$XDG_CONFIG_HOME/fyne"
+          test ! -e "$XDG_CACHE_HOME/fyne"
+          test -d "$RUNNER_TEMP/extracted-linux/data/fyne-cache/fyne"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: animeportable-linux-amd64-portable
+          path: ${{ runner.temp }}/animeportable-linux-amd64.tar.gz
+          if-no-files-found: error
       - name: Verify clean worktree
         run: test -z "$(git status --porcelain)"
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.26.x
+      - name: Test native macOS desktop and portable paths
+        run: go test -count=1 ./apps/desktop/... ./adapters/persistence/sqlite ./tools/portable-package
+      - name: Build and package native macOS desktop
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-macos" "$RUNNER_TEMP/extracted-macos"
+          go build -tags production -trimpath -buildvcs=false -o "$RUNNER_TEMP/native-macos/animeportable" ./apps/desktop
+          go run ./tools/portable-package --os darwin --arch "$(go env GOARCH)" --binary "$RUNNER_TEMP/native-macos/animeportable" --output "$RUNNER_TEMP/animeportable-darwin-$(go env GOARCH).zip" --license LICENSE --notices THIRD_PARTY_NOTICES.md --icon apps/desktop/build/darwin/icons.icns --plist apps/desktop/build/darwin/Info.plist
+          unzip -q "$RUNNER_TEMP/animeportable-darwin-$(go env GOARCH).zip" -d "$RUNNER_TEMP/extracted-macos"
+          test -x "$RUNNER_TEMP/extracted-macos/AnimePortable.app/Contents/MacOS/animeportable"
+          file "$RUNNER_TEMP/extracted-macos/AnimePortable.app/Contents/MacOS/animeportable"
+      - name: Smoke test extracted macOS desktop
+        timeout-minutes: 3
+        run: |
+          executable="$RUNNER_TEMP/extracted-macos/AnimePortable.app/Contents/MacOS/animeportable"
+          "$executable" & app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 10); do
+            kill -0 "$app_pid" 2>/dev/null || exit 1
+            sleep 1
+          done
+          test ! -e "$HOME/Library/Preferences/fyne"
+          test ! -e "$HOME/Library/Caches/fyne"
+          test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Caches/fyne"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: animeportable-darwin-portable
+          path: ${{ runner.temp }}/animeportable-darwin-*.zip
+          if-no-files-found: error
   windows:
     runs-on: windows-latest
     steps:
@@ -103,8 +138,54 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go build -tags production -o "$env:RUNNER_TEMP\animeportable.exe" ./apps/desktop
           exit $LASTEXITCODE
+      - name: Package and inspect extracted Windows desktop
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'animeportable-windows-amd64.zip'
+          go run ./tools/portable-package --os windows --arch amd64 --binary "$env:RUNNER_TEMP\animeportable.exe" --output $archive --license LICENSE --notices THIRD_PARTY_NOTICES.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $extract = Join-Path $env:RUNNER_TEMP 'extracted-windows'
+          Expand-Archive -LiteralPath $archive -DestinationPath $extract
+          $names = @(Get-ChildItem -LiteralPath $extract -File | ForEach-Object Name | Sort-Object)
+          if (($names -join ',') -ne 'animeportable.exe,LICENSE,THIRD_PARTY_NOTICES.md') { throw "Unexpected portable files: $($names -join ',')" }
+          if ((Get-ChildItem -LiteralPath $extract -Recurse -File).Count -ne 3) { throw 'Unexpected nested portable files' }
+      - name: Smoke test extracted Windows desktop
+        shell: pwsh
+        run: |
+          $executable = Join-Path $env:RUNNER_TEMP 'extracted-windows\animeportable.exe'
+          $priorUserProfile = $env:USERPROFILE
+          $priorAppData = $env:APPDATA
+          $priorLocalAppData = $env:LOCALAPPDATA
+          $env:USERPROFILE = Join-Path $env:RUNNER_TEMP 'original-home'
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'original-config'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'original-cache'
+          try {
+            $process = Start-Process -FilePath $executable -WorkingDirectory (Join-Path $env:RUNNER_TEMP 'extracted-windows') -WindowStyle Hidden -PassThru
+            Start-Sleep -Seconds 10
+            $process.Refresh()
+            if ($process.HasExited) { throw "Extracted desktop exited during startup with code $($process.ExitCode)" }
+            $expectedPath = (Resolve-Path -LiteralPath $executable).Path
+            if ($process.Path -ne $expectedPath) { throw 'Unexpected desktop executable path' }
+          } finally {
+            if ($process) {
+              $process.Refresh()
+              if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+              $process.Dispose()
+            }
+            $env:USERPROFILE = $priorUserProfile
+            $env:APPDATA = $priorAppData
+            $env:LOCALAPPDATA = $priorLocalAppData
+          }
+          if (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'original-home\AppData\Roaming\fyne')) { throw 'Fyne wrote to the original user profile' }
+          if (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'original-cache\fyne')) { throw 'Fyne wrote to the original cache' }
+          if (-not (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'extracted-windows\data\fyne-cache\fyne'))) { throw 'Fyne portable cache was not created' }
       - name: Verify live Windows MPV IPC and playback
         shell: pwsh
         env:
           ANIMEPORTABLE_MPV_LIVE: '1'
         run: go test -count=1 -run '^(TestLiveIPC|TestLiveMPVLoadsThreeMediaURLsOnOneProcess)$' -timeout 90s ./adapters/player/mpv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: animeportable-windows-amd64-portable
+          path: ${{ runner.temp }}/animeportable-windows-amd64.zip
+          if-no-files-found: error

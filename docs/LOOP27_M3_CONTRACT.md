@@ -1,0 +1,18 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
+# Loop 27 — portable state and complete Wails removal
+
+Status: IN_PROGRESS. Loops 24–26 passed; Loop 26 exact-SHA CI `35974229139` and owner-visible Windows Home-to-MPV check passed. Preserve all pre-existing dirty files and historical Loop 23/RA evidence.
+
+| Field | Contract |
+| --- | --- |
+| Scope | Resolve data from executable folder on Windows/Linux and from the parent of `.app` on macOS; use `<root>/data/animeportable.db`; offer an explicit one-time copy of the old config profile before first portable open; keep user-installed MPV external; build extracted-folder artifacts for all three OSes; remove active and packaged Wails/Svelte/NSIS/WebView paths and obsolete tooling/dependencies. |
+| Success | Fresh folder, repeat launch, upgrade in place and moving the whole folder retain local state without writing to OS profile; existing legacy data is never silently imported, changed or deleted; import captures committed WAL state, validates integrity/schema, installs atomically without overwriting an existing target and handles concurrent attempts; read-only, linked, corrupt, interrupted and non-ASCII paths fail safely; external MPV discovery/config remains valid; artifacts contain native Fyne app and no WebView/installer/frontend payload. |
+| Deterministic checks | Focused portable-path/import concurrency/security tests, backend startup/UI choice tests, existing full Go regression/race/vet, module and vulnerability checks, portable build/extract/source/dependency scans. Keep M2 Windows live MPV and native tests. Add Linux/macOS runner build and launch smoke where capable; never call cross-build a native runtime PASS. |
+| Human/platform gates | Owner sees first-run choice and old-data copy result on Windows without internal IDs/files; extracted artifacts run on Windows, Linux and macOS without installer or privileged registration. Native keyboard/mouse and runtime library limits are checked per OS; remaining M4 integrated interaction/resource gates stay open. |
+| Reviews | Fresh code-quality, security/persistence, platform/package and workflow verifier/security reviews; `.github/workflows/**` change stays inside the previously approved scope and receives independent review before push. |
+| Exclusions | No Search/detail/etc. feature screens (Loops 29–37), no long-idle resource test without fresh owner consent, no main push/PR/release. |
+
+M0's detailed portable state and import contract in `docs/LOOP24_M0_CONTRACT.md` is normative. The import is an opt-in copy, not a move. Its source is `os.UserConfigDir()/AnimePortable/animeportable.db`; the source and its WAL/SHM are never mutated. A consistent SQLite snapshot is staged under the portable data directory and validated before an exclusive no-clobber install. A mere existence check followed by normal rename is insufficient. The default first-run action creates a new empty portable profile. The UI must not ask the owner for IDs, database edits, paths or command-line operations.
+
+Fyne v2.8.1 itself creates cache/config directories in the OS profile and exposes no supported path override. This conflicts with the portable state contract. On 2026-09-24 the owner authorized process-local environment redirection for Fyne to `<root>/data`, provided external MPV discovery and its child process retain the original user environment and all three OS paths are verified. The redirect must not change machine or persistent user settings. A fatal startup error may use a removed-on-exit temporary UI cache solely to display the error; it may not create an alternate profile or open data there. Linux/macOS CI process liveness is not a substitute for visible native operation and owner/platform gates.

@@ -5,11 +5,10 @@ version: '3'
 vars:
   APP_NAME: animeportable
   BIN_DIR: bin
-  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
-  GOOS: '{{.GOOS | default OS}}'
+  TARGET_OS: '{{.TARGET_OS | default .OS}}'
+  TARGET_ARCH: '{{.TARGET_ARCH | default .ARCH}}'
 
 includes:
-  common: ./build/Taskfile.yml
   windows: ./build/windows/Taskfile.yml
   darwin: ./build/darwin/Taskfile.yml
   linux: ./build/linux/Taskfile.yml
@@ -17,13 +16,12 @@ includes:
 tasks:
   build:
     cmds:
-      - task: '{{.GOOS}}:build'
+      - task: '{{.TARGET_OS}}:build'
+
   package:
     cmds:
-      - task: '{{.GOOS}}:package'
+      - task: '{{.TARGET_OS}}:package'
+
   run:
     cmds:
-      - task: '{{.GOOS}}:run'
-  dev:
-    cmds:
-      - go tool wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+      - task: '{{.TARGET_OS}}:run'

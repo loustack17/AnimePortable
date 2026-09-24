@@ -2,12 +2,17 @@
 
 version: '3'
 
+includes:
+  desktop: ./apps/desktop/Taskfile.yml
+
 tasks:
   build:
-    dir: apps/desktop
     cmds:
-      - go tool wails3 build
+      - task: desktop:build
   dev:
     dir: apps/desktop
     cmds:
-      - go tool wails3 dev -config ./build/config.yml -port 9245
+      - go run .
+  portable:
+    cmds:
+      - task: desktop:package

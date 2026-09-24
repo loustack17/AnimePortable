@@ -9,7 +9,6 @@ import (
 	"errors"
 	"math"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -57,14 +56,32 @@ type Service struct {
 	cover           *cover.Loader
 	closeDeps       func() error
 	newPlayer       func(string) (core.Player, error)
+	databasePath    string
 	app             *core.App
 	player          core.Player
 	session         core.PlaybackSession
 }
 
 func New() *Service {
+	return NewAt("")
+}
+
+func NewAt(databasePath string) *Service {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	return &Service{operationSlots: make(chan struct{}, 16), shutdownDone: make(chan struct{}), lifecycleCtx: lifecycleCtx, lifecycleCancel: lifecycleCancel, newPlayer: newMPVPlayer}
+	return &Service{operationSlots: make(chan struct{}, 16), shutdownDone: make(chan struct{}), lifecycleCtx: lifecycleCtx, lifecycleCancel: lifecycleCancel, newPlayer: newMPVPlayer, databasePath: databasePath}
+}
+
+func NewAtWithPlayerEnvironment(databasePath string, environment []string) *Service {
+	service := NewAt(databasePath)
+	original := append([]string(nil), environment...)
+	service.newPlayer = func(path string) (core.Player, error) {
+		executable, err := mpv.FindWithEnvironment(path, original)
+		if err != nil {
+			return nil, err
+		}
+		return mpv.NewPlayerWithEnvironment(executable, original), nil
+	}
+	return service
 }
 
 func newWithDependencies(deps dependencies) *Service {
@@ -108,7 +125,7 @@ func (service *Service) Start(ctx context.Context) error {
 	startupCtx, startupCancel := context.WithCancel(ctx)
 	stopLifecycle := context.AfterFunc(service.lifecycleCtx, startupCancel)
 	service.mu.Unlock()
-	deps, err := openProduction(startupCtx)
+	deps, err := openProduction(startupCtx, service.databasePath)
 	stopLifecycle()
 	startupCancel()
 	if err != nil {
@@ -280,12 +297,18 @@ func newMPVPlayer(path string) (core.Player, error) {
 	return mpv.NewPlayer(executable), nil
 }
 
-func openProduction(ctx context.Context) (dependencies, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil || configDir == "" {
-		return dependencies{}, ErrUnavailable
+func openProduction(ctx context.Context, databasePath string) (dependencies, error) {
+	if databasePath == "" {
+		executable, err := os.Executable()
+		if err != nil {
+			return dependencies{}, ErrUnavailable
+		}
+		plan, err := PlanPortable(executable, "")
+		if err != nil {
+			return dependencies{}, err
+		}
+		databasePath = plan.DatabasePath
 	}
-	databasePath := filepath.Join(configDir, "AnimePortable", "animeportable.db")
 	store, err := sqlite.Open(ctx, databasePath)
 	if err != nil {
 		return dependencies{}, err

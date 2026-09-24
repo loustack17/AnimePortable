@@ -82,6 +82,12 @@ func scrollKey(scroll *container.Scroll, key fyne.KeyName) bool {
 
 func NewWindow(application fyne.App, service HomeService) fyne.Window {
 	window := application.NewWindow("AnimePortable")
+	closeHome := ConfigureWindow(window, service)
+	window.SetOnClosed(closeHome)
+	return window
+}
+
+func ConfigureWindow(window fyne.Window, service HomeService) func() {
 	window.Resize(fyne.NewSize(1000, 618))
 	window.SetPadded(false)
 	canvas := window.Canvas()
@@ -142,11 +148,10 @@ func NewWindow(application fyne.App, service HomeService) fyne.Window {
 		container.NewBorder(container.NewPadded(control), nil, nil, nil, content),
 	))
 	show(0)
-	window.SetOnClosed(func() {
+	canvas.Focus(navigation[0])
+	return func() {
 		if home != nil {
 			home.close()
 		}
-	})
-	canvas.Focus(navigation[0])
-	return window
+	}
 }

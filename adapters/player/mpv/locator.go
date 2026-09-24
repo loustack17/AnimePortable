@@ -46,6 +46,57 @@ func Find(configured string) (Executable, error) {
 	return newLocator(locatorDeps{}).find(configured)
 }
 
+func FindWithEnvironment(configured string, environment []string) (Executable, error) {
+	getenv := environmentLookup(runtime.GOOS, environment)
+	return newLocator(locatorDeps{
+		getenv:   getenv,
+		lookPath: environmentLookPath(runtime.GOOS, getenv("PATH")),
+	}).find(configured)
+}
+
+func environmentLookup(goos string, environment []string) func(string) string {
+	values := make(map[string]string, len(environment))
+	for _, entry := range environment {
+		key, value, found := strings.Cut(entry, "=")
+		if !found || key == "" {
+			continue
+		}
+		if goos == "windows" {
+			key = strings.ToUpper(key)
+		}
+		values[key] = value
+	}
+	return func(name string) string {
+		if goos == "windows" {
+			name = strings.ToUpper(name)
+		}
+		return values[name]
+	}
+}
+
+func environmentLookPath(goos, path string) func(string) (string, error) {
+	return func(name string) (string, error) {
+		for _, directory := range filepath.SplitList(path) {
+			if !isAbsolute(goos, directory) {
+				continue
+			}
+			candidate := filepath.Join(directory, name)
+			if goos == "windows" {
+				candidate = joinWindows(directory, name)
+			}
+			info, err := os.Stat(candidate)
+			if err != nil || !info.Mode().IsRegular() {
+				continue
+			}
+			if goos != "windows" && info.Mode()&0111 == 0 {
+				continue
+			}
+			return candidate, nil
+		}
+		return "", os.ErrNotExist
+	}
+}
+
 func newLocator(deps locatorDeps) locator {
 	if deps.goos == "" {
 		deps.goos = runtime.GOOS
@@ -132,6 +183,9 @@ func (locator locator) commonPaths() []string {
 	switch locator.deps.goos {
 	case "linux":
 		candidates = []string{"/usr/bin/mpv", "/usr/local/bin/mpv", "/snap/bin/mpv"}
+		if root := locator.deps.getenv("HOME"); root != "" {
+			candidates = append(candidates, filepath.Join(root, ".local", "bin", "mpv"), filepath.Join(root, "bin", "mpv"))
+		}
 	case "darwin":
 		candidates = []string{
 			"/Applications/mpv.app/Contents/MacOS/mpv",
@@ -139,8 +193,11 @@ func (locator locator) commonPaths() []string {
 			"/usr/local/bin/mpv",
 			"/opt/local/bin/mpv",
 		}
+		if root := locator.deps.getenv("HOME"); root != "" {
+			candidates = append(candidates, filepath.Join(root, ".local", "bin", "mpv"), filepath.Join(root, "bin", "mpv"))
+		}
 	case "windows":
-		candidates = make([]string, 0, 3)
+		candidates = make([]string, 0, 5)
 		for _, root := range []string{locator.deps.getenv("ProgramFiles"), locator.deps.getenv("ProgramFiles(x86)")} {
 			if root != "" {
 				candidates = append(candidates, joinWindows(root, "mpv", "mpv.exe"))
@@ -148,6 +205,12 @@ func (locator locator) commonPaths() []string {
 		}
 		if root := locator.deps.getenv("LOCALAPPDATA"); root != "" {
 			candidates = append(candidates, joinWindows(root, "Programs", "mpv", "mpv.exe"))
+		}
+		if root := locator.deps.getenv("USERPROFILE"); root != "" {
+			candidates = append(candidates,
+				joinWindows(root, "scoop", "apps", "mpv", "current", "mpv.exe"),
+				joinWindows(root, "scoop", "shims", "mpv.exe"),
+			)
 		}
 	}
 	return uniquePaths(locator.deps.goos, candidates)
