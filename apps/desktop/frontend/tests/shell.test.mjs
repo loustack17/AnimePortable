@@ -9,6 +9,24 @@ import { compile } from 'svelte/compiler'
 import { render } from 'svelte/server'
 import { transpileModule, ModuleKind, ScriptTarget } from 'typescript'
 
+test('bundled HTML declares a restrictive content security policy', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
+  const policy = html.match(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/i)?.[1]
+  assert.ok(policy, 'bundled HTML must declare CSP before loading scripts')
+  const directives = new Map(policy.split(';').map(part => part.trim().split(/\s+/, 2)))
+  for (const [name, value] of [
+    ['default-src', "'none'"],
+    ['script-src', "'self'"],
+    ['style-src', "'self'"],
+    ['connect-src', "'self'"],
+    ['object-src', "'none'"],
+    ['frame-src', "'none'"],
+    ['base-uri', "'none'"],
+    ['form-action', "'none'"],
+  ]) assert.equal(directives.get(name), value, name)
+  assert.doesNotMatch(policy, /unsafe-inline|unsafe-eval|https?:/)
+})
+
 test('shell renders six accessible destinations without a backend', async () => {
   const source = await readFile(new URL('../src/App.svelte', import.meta.url), 'utf8')
   const homeSource = await readFile(new URL('../src/HomeView.svelte', import.meta.url), 'utf8')

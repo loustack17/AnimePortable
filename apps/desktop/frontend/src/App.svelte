@@ -32,6 +32,18 @@
     mainElement?.focus()
   }
 
+  function moveNavigationFocus(event: KeyboardEvent) {
+    const direction = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1
+      : event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 0
+    if (!direction) return
+    const current = event.currentTarget as HTMLButtonElement
+    const buttons = Array.from(current.parentElement?.querySelectorAll('button') ?? [])
+    const index = buttons.indexOf(current)
+    if (index < 0) return
+    event.preventDefault()
+    buttons[(index + direction + buttons.length) % buttons.length].focus()
+  }
+
   const activeDetails = $derived(sections.find((section) => section.id === activeSection) ?? sections[0])
 </script>
 
@@ -56,6 +68,7 @@
             type="button"
             aria-current={activeSection === section.id ? 'page' : undefined}
             onclick={() => activeSection = section.id}
+            onkeydown={moveNavigationFocus}
           >
             <span class="nav-icon" aria-hidden="true">{section.icon}</span>
             <span>{section.label}</span>
