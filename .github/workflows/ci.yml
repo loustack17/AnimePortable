@@ -93,8 +93,8 @@ jobs:
           Expand-Archive -LiteralPath $archive -DestinationPath $directory
           $executables = @(Get-ChildItem -LiteralPath $directory -Recurse -File -Filter mpv.exe)
           if ($executables.Count -ne 1) { throw 'Expected one MPV executable' }
-          & $executables[0].FullName --version
-          if ($LASTEXITCODE -ne 0) { throw 'MPV executable failed to start' }
+          $process = Start-Process -FilePath $executables[0].FullName -ArgumentList '--version' -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'MPV executable failed to start' }
           Add-Content -LiteralPath $env:GITHUB_PATH -Value $executables[0].DirectoryName
       - name: Verify native desktop and service
         shell: pwsh
