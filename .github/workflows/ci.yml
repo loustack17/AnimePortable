@@ -83,7 +83,9 @@ jobs:
         with:
           go-version: 1.26.x
       - name: Test native macOS desktop and portable paths
-        run: go test -count=1 ./apps/desktop/... ./adapters/persistence/sqlite ./tools/portable-package
+        run: |
+          export TMPDIR="$(cd "$TMPDIR" && pwd -P)"
+          go test -count=1 ./apps/desktop/... ./adapters/persistence/sqlite ./tools/portable-package
       - name: Build and package native macOS desktop
         run: |
           mkdir -p "$RUNNER_TEMP/native-macos" "$RUNNER_TEMP/extracted-macos"

@@ -26,6 +26,13 @@ func PlanPortable(executablePath, userConfigDir string) (PortablePlan, error) {
 	return planPortable(runtime.GOOS, executablePath, userConfigDir)
 }
 
+func ValidatePortableStatePath(path string) error {
+	if err := sqlite.ValidatePortablePath(path); err != nil {
+		return ErrUnavailable
+	}
+	return nil
+}
+
 func planPortable(goos, executablePath, userConfigDir string) (PortablePlan, error) {
 	if strings.TrimSpace(executablePath) == "" || !filepath.IsAbs(executablePath) {
 		return PortablePlan{}, ErrInvalidInput

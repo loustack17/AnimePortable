@@ -49,6 +49,6 @@ func main() {
 			log.Print(err)
 		}
 	}()
-	application := app.New()
+	application := app.NewWithID(native.ApplicationID)
 	native.NewPortableWindow(application, plan, planErr, service, ctx, cancel).ShowAndRun()
 }

@@ -7,9 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+
+	"animeportable/apps/desktop/backend"
 )
 
 var ErrPortableEnvironment = errors.New("portable UI environment unavailable")
+
+const ApplicationID = "com.animeportable.desktop"
 
 type environmentValue struct {
 	value   string
@@ -20,7 +25,13 @@ func RedirectFyneEnvironment(dataDir string) ([]string, func(), error) {
 	if !filepath.IsAbs(dataDir) {
 		return nil, nil, ErrPortableEnvironment
 	}
+	if err := validateFyneStatePaths(runtime.GOOS, dataDir); err != nil {
+		return nil, nil, ErrPortableEnvironment
+	}
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return nil, nil, ErrPortableEnvironment
+	}
+	if err := validateFyneStatePaths(runtime.GOOS, dataDir); err != nil {
 		return nil, nil, ErrPortableEnvironment
 	}
 	paths := fyneEnvironmentPaths(runtime.GOOS, dataDir)
@@ -48,7 +59,58 @@ func RedirectFyneEnvironment(dataDir string) ([]string, func(), error) {
 			return nil, nil, ErrPortableEnvironment
 		}
 	}
+	cacheDir, err := os.UserCacheDir()
+	if err != nil || !insidePortableData(dataDir, cacheDir) || backend.ValidatePortableStatePath(cacheDir) != nil {
+		restore()
+		return nil, nil, ErrPortableEnvironment
+	}
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		restore()
+		return nil, nil, ErrPortableEnvironment
+	}
+	if err := validateFyneStatePaths(runtime.GOOS, dataDir); err != nil {
+		restore()
+		return nil, nil, ErrPortableEnvironment
+	}
 	return original, restore, nil
+}
+
+func validateFyneStatePaths(goos, dataDir string) error {
+	for _, path := range fyneStatePaths(goos, dataDir) {
+		if err := backend.ValidatePortableStatePath(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func fyneStatePaths(goos, dataDir string) []string {
+	switch goos {
+	case "windows":
+		return []string{
+			filepath.Join(dataDir, "fyne-home", "AppData", "Roaming", "fyne", ApplicationID),
+			filepath.Join(dataDir, "fyne-cache", "fyne", ApplicationID),
+		}
+	case "darwin":
+		return []string{
+			filepath.Join(dataDir, "fyne-home", "Library", "Preferences", "fyne", ApplicationID),
+			filepath.Join(dataDir, "fyne-home", "Library", "Caches", "fyne", ApplicationID),
+			filepath.Join(dataDir, "fyne-home", "Library", "Application Support"),
+		}
+	case "linux":
+		return []string{
+			filepath.Join(dataDir, "fyne-config", "fyne", ApplicationID),
+			filepath.Join(dataDir, "fyne-cache", "fyne", ApplicationID),
+			filepath.Join(dataDir, "fyne-data"),
+		}
+	default:
+		return nil
+	}
+}
+
+func insidePortableData(dataDir, path string) bool {
+	relative, err := filepath.Rel(dataDir, path)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
 }
 
 func fyneEnvironmentPaths(goos, dataDir string) map[string]string {

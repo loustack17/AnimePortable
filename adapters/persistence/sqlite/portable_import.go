@@ -161,7 +161,7 @@ func rejectSymlinkAncestors(path string) error {
 		if err != nil {
 			return err
 		}
-		if info.Mode()&os.ModeSymlink != 0 {
+		if info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
 			return ErrInvalidInput
 		}
 	}
@@ -183,15 +183,15 @@ func readOnlySQLiteDSN(path string) string {
 }
 
 func backupReadOnly(ctx context.Context, source, stage string) error {
-	if _, err := os.Lstat(source + "-shm"); errors.Is(err, os.ErrNotExist) {
-		if _, walErr := os.Lstat(source + "-wal"); walErr == nil {
-			return backupWalWithoutSourceShm(ctx, source, stage)
-		}
+	if _, err := os.Lstat(source + "-wal"); err == nil {
+		return backupWalFromPrivateCopy(ctx, source, stage)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	return backupOnline(ctx, source, stage, true)
 }
 
-func backupWalWithoutSourceShm(ctx context.Context, source, stage string) error {
+func backupWalFromPrivateCopy(ctx context.Context, source, stage string) error {
 	stageDir, err := os.MkdirTemp(filepath.Dir(stage), ".animeportable-source-*")
 	if err != nil {
 		return err
@@ -209,9 +209,6 @@ func backupWalWithoutSourceShm(ctx context.Context, source, stage string) error 
 	}
 	after, err := sourceFileHashes(source)
 	if err != nil || before != after {
-		return ErrImportInvalidSource
-	}
-	if _, err := os.Lstat(source + "-shm"); !errors.Is(err, os.ErrNotExist) {
 		return ErrImportInvalidSource
 	}
 	return backupOnline(ctx, clone, stage, false)
