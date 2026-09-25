@@ -91,7 +91,10 @@ func TestNewAtStartsAtRequestedPortableDatabasePath(t *testing.T) {
 
 func TestPlanPortableSuppressesImportWhenTargetExists(t *testing.T) {
 	root := t.TempDir()
-	executable := filepath.Join(root, "animeportable")
+	executable := portableTestExecutable(root)
+	if err := os.MkdirAll(filepath.Dir(executable), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(executable, []byte("app"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +124,10 @@ func TestPlanPortableSuppressesImportWhenTargetExists(t *testing.T) {
 
 func TestPlanPortableMissingLegacyProfileDoesNotOfferImport(t *testing.T) {
 	root := t.TempDir()
-	executable := filepath.Join(root, "animeportable")
+	executable := portableTestExecutable(root)
+	if err := os.MkdirAll(filepath.Dir(executable), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(executable, []byte("app"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +145,7 @@ func TestPlanPortableMissingLegacyProfileDoesNotOfferImport(t *testing.T) {
 
 func TestPlanPortableUsesExecutablePathNotWorkingDirectory(t *testing.T) {
 	root := t.TempDir()
-	executable := filepath.Join(root, "Anime Portable ü", "animeportable")
+	executable := portableTestExecutable(filepath.Join(root, "Anime Portable ü"))
 	if err := os.MkdirAll(filepath.Dir(executable), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -171,6 +177,13 @@ func TestPlanPortableUsesExecutablePathNotWorkingDirectory(t *testing.T) {
 	if got != want {
 		t.Fatalf("plan depends on working directory: before=%#v after=%#v", want, got)
 	}
+}
+
+func portableTestExecutable(root string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(root, "AnimePortable.app", "Contents", "MacOS", "animeportable")
+	}
+	return filepath.Join(root, "animeportable")
 }
 
 func TestPlanPortableRejectsSymlinkedAncestor(t *testing.T) {
