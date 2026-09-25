@@ -94,6 +94,11 @@ jobs:
           unzip -q "$RUNNER_TEMP/animeportable-darwin-$(go env GOARCH).zip" -d "$RUNNER_TEMP/extracted-macos"
           test -x "$RUNNER_TEMP/extracted-macos/AnimePortable.app/Contents/MacOS/animeportable"
           file "$RUNNER_TEMP/extracted-macos/AnimePortable.app/Contents/MacOS/animeportable"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: animeportable-darwin-portable
+          path: ${{ runner.temp }}/animeportable-darwin-*.zip
+          if-no-files-found: error
       - name: Smoke test extracted macOS desktop
         timeout-minutes: 3
         run: |
@@ -109,11 +114,6 @@ jobs:
           test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Caches"
           test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Caches/fyne"
           test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Preferences/fyne"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: animeportable-darwin-portable
-          path: ${{ runner.temp }}/animeportable-darwin-*.zip
-          if-no-files-found: error
   windows:
     runs-on: windows-latest
     steps:
