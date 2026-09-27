@@ -11,12 +11,31 @@ on:
 
 jobs:
   windows:
-    runs-on: windows-2022
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: 1.26.x
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884
+        id: msys2
+        with:
+          msystem: MINGW64
+          release: false
+          update: true
+          install: mingw-w64-x86_64-gcc
+      - name: Select MSVCRT C toolchain
+        shell: pwsh
+        env:
+          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          $gcc = Join-Path $env:MSYS2_ROOT 'mingw64\bin\gcc.exe'
+          $gxx = Join-Path $env:MSYS2_ROOT 'mingw64\bin\g++.exe'
+          if (-not (Test-Path -LiteralPath $gcc) -or -not (Test-Path -LiteralPath $gxx)) { throw 'MSVCRT C toolchain missing' }
+          & $gcc -dumpmachine
+          & $gcc -v
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "CC=$gcc"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "CXX=$gxx"
       - name: Verify Go formatting
         shell: pwsh
         run: |
