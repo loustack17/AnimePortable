@@ -10,8 +10,8 @@ updated_at_utc: "2026-09-26"
 status: WINDOWS_FLTK_CLEANUP_IN_PROGRESS
 repository:
   branch: codex/fyne-migration-verification-20260924
-  observed_head: 93fa5c4
-  working_tree: "Large pre-existing dirty state; preserve unrelated files and prototypes. Current cleanup is uncommitted. No reset/clean."
+  observed_head: f6e2391
+  working_tree: "Windows FLTK snapshot committed/pushed; preserve unrelated untracked probes. CI corrective diff pending. No reset/clean."
 active_loop:
   number: 28
   state: "Windows FLTK replacement in progress; no Loop 28 PASS, main merge or Loop 29."
@@ -31,6 +31,7 @@ current_changes:
   - "Removed Fyne apps/desktop/native, non-Windows entry/build recipes, Fyne/Wails resource probes, external adapters/player/mpv, backend player_error, and root Fyne deps. Windows-only CI retains full Go/race/vet/vuln/build/dependency checks."
   - "Removed MPVPath from active core/backend settings and player factory. SQLite legacy mpv_path column remains for old databases; current settings ignore and preserve it. Added regression test."
   - "Windows ZIP tool now accepts only Windows amd64 and requires hash-pinned libmpv plus license file; no distributable ZIP/CI artifact while exact license unresolved."
+  - "First exact CI 36281457807 at f6e2391 failed Test Go: runner MinGW GCC 15 could not link go-fltk prebuilt libraries (_setjmp); mpvwin loader tests rejected valid temp DLL as invalid library. Testing windows-2022 toolchain and canonical path from locked file handle."
 verification:
   passed:
     - "Final go test -count=1 ./..., go test -race -count=1 ./..., go vet ./..., go mod verify, Windows FLTK production build and git diff --check passed."
@@ -43,7 +44,7 @@ verification:
     - "Matched OneAnime resource comparison; new 15-minute idle authorization; exact libmpv build/codec license notices; clean-host Vulkan dependency."
     - "Candidate DLL remains outside repo in TEMP; SHA256 e466e34e425cb3b4546b18ad6dd66ad020dcb389bb3cd8fe9c843e8d6d8ee743. Test-only."
 next_actions:
-  - "Stage/commit only Windows FLTK product/tests/CI/canonical docs on current branch, preserve unrelated dirty probes, push for exact CI, then integrate reviewed snapshot to main if green."
+  - "Review and verify CI corrections, commit/push current branch, require exact green Windows CI before main integration."
   - "Review exact libmpv build provenance/notices and clean-host DLL dependencies; do not distribute current test-only DLL."
   - "Keep CI Windows only; do not publish/package until license and clean-host runtime gates close."
   - "Do not claim Loop 28 PASS or release until Windows native, resource, package and exact-state isolated verification pass."

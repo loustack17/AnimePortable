@@ -68,10 +68,6 @@ func validateLibraryFile(path, expectedSHA256 string) (string, *os.File, error) 
 		return "", nil, ErrInvalidLibrary
 	}
 	path = filepath.Clean(path)
-	resolved, err := filepath.EvalSymlinks(path)
-	if err != nil || !sameWindowsPath(path, resolved) {
-		return "", nil, ErrInvalidLibrary
-	}
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 		return "", nil, ErrInvalidLibrary
@@ -94,13 +90,18 @@ func validateLibraryFile(path, expectedSHA256 string) (string, *os.File, error) 
 		return "", nil, ErrInvalidLibrary
 	}
 	file := os.NewFile(uintptr(handle), path)
+	resolved, err := finalLibraryPath(handle)
+	if err != nil {
+		_ = file.Close()
+		return "", nil, ErrInvalidLibrary
+	}
 	hash := sha256.New()
 	_, copyErr := io.Copy(hash, file)
 	if copyErr != nil || !strings.EqualFold(hex.EncodeToString(hash.Sum(nil)), expectedSHA256) {
 		_ = file.Close()
 		return "", nil, ErrLibraryHash
 	}
-	return path, file, nil
+	return resolved, file, nil
 }
 
 func validSHA256(value string) bool {
@@ -111,10 +112,19 @@ func validSHA256(value string) bool {
 	return err == nil
 }
 
-func sameWindowsPath(first, second string) bool {
-	first, err1 := filepath.Abs(first)
-	second, err2 := filepath.Abs(second)
-	return err1 == nil && err2 == nil && strings.EqualFold(filepath.Clean(first), filepath.Clean(second))
+func finalLibraryPath(handle windows.Handle) (string, error) {
+	buffer := make([]uint16, 512)
+	for len(buffer) <= 32768 {
+		length, err := windows.GetFinalPathNameByHandle(handle, &buffer[0], uint32(len(buffer)), 0)
+		if err != nil || length == 0 {
+			return "", ErrInvalidLibrary
+		}
+		if int(length) < len(buffer) {
+			return windows.UTF16ToString(buffer[:length]), nil
+		}
+		buffer = make([]uint16, length+1)
+	}
+	return "", ErrInvalidLibrary
 }
 
 func openLibrary(path, expectedSHA256 string, loader moduleLoader) (*Library, error) {
