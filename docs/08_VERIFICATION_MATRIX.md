@@ -108,7 +108,7 @@ Critical security criteria cannot be counted as MVP PASS using only a human exce
 
 `PRIV-001..012` are `Y`.
 
-Use static/dynamic assertions for persistence, logs, argv, frontend DTOs, and privilege requirements. Where possible, test formatted error variants and failure paths, not only success paths.
+Use static/dynamic assertions for persistence, logs, argv, UI action data, and privilege requirements. Where possible, test formatted error variants and failure paths, not only success paths.
 
 ## 10. Local proxy and IPC criteria
 
@@ -140,10 +140,11 @@ No monotonic-growth claim may be PASS based only on visual inspection of one run
 | PERF-004..005 | Y | concurrency/lazy-loading bounds tested or directly inspectable |
 | PERF-006 | Y | idle resource observation under defined environment; threshold/environment recorded |
 | PERF-007 | A | write-frequency/checkpoint tests or instrumentation |
+| PERF-008 | YH | owner-approved reference host/content and matched repeatable FLTK/libmpv versus OneAnime idle and playback samples; all runs and private resident/commit, CPU, GPU, startup and cleanup recorded; owner resolves a miss before PASS |
 
 ## 13. Cross-platform criteria
 
-`PLATFORM-001..007` require `Y`, with actual platform evidence where the criterion names a platform.
+`PLATFORM-001..009` require `Y`, with actual platform evidence where the criterion names a platform. The current Windows phase closes Windows-specific criteria only; Linux and macOS criteria are deferred to their later platform phases and remain required for all-platform `COMPLETE`. For `PLATFORM-008`, inspect final source/build dependencies and release contents, then observe loaded UI libraries/surfaces and the running process tree on each platform as it enters acceptance. An in-process OS WebView is a failure even without a packaged browser or helper process; Windows-only checks cannot prove Linux or macOS. For `PLATFORM-009`, exercise fresh, upgrade, read-only and non-ASCII/spaced portable folders plus explicit old-profile import without deleting the source.
 
 Cross-compilation is evidence for buildability but is not a substitute for runtime IPC/keyboard validation on the named platform when runtime behavior is the criterion.
 
@@ -151,7 +152,7 @@ If the platform is unavailable, use `BLOCKED`, not PASS.
 
 ## 14. CI and release criteria
 
-`CI-001..009` are `Y`.
+`CI-001..010` are `Y`. CI-004..006 apply to the final FLTK Windows adapter. For `CI-010`, extract and launch the Windows ZIP without an installer or privileged registration; verify the bundled libmpv runtime and its notices. Linux/macOS artifact checks remain deferred to their later phases.
 
 Required status checks must pass on the final commit/artifact. Manual bypass must be explicit and is not equivalent to the underlying technical check passing.
 
@@ -289,7 +290,7 @@ Rules:
 
 ## 20. Current migration point: Loop 23
 
-Loop 23 is the first loop that must complete under Protocol v2.3.
+Loop 23 is the first loop that must complete under Protocol v2.4.1.
 
 If implementation is already in progress:
 
@@ -341,3 +342,46 @@ The expected hierarchy is:
 4. broader canonical docs/repository exploration only on trigger
 
 This prevents repeated whole-repository rediscovery while keeping source-of-truth retrieval available when the task changes.
+
+
+## 22. Retrospective baseline verification
+
+`RETRO-001..015` are blocking process-integrity criteria for the one-time RA-01..RA-06 audit.
+
+| Criteria | Verifier | Minimum PASS evidence |
+| --- | --- | --- |
+| RETRO-001 | A/Y | Loop 23 final status is PASS and Loop 24 has not started before audit activation |
+| RETRO-002..006 | Y | batch contract/status shows current-state verification, mapped scope, and no blanket replay |
+| RETRO-007 | A/Y | targeted failure-path/adversarial tests or documented risk review for applicable high-risk surfaces |
+| RETRO-008 | A/Y | agent/thread/worktree evidence shows read-heavy delegation preference and isolated/disjoint writers when used |
+| RETRO-009 | A/Y | every confirmed defect has stable RA finding record with criterion/evidence/status |
+| RETRO-010 | Y | diff is traceable to confirmed MUST_FIX findings; no speculative broad cleanup |
+| RETRO-011 | A/Y | focused reproducer + affected regression + final integrated reviewer evidence for each repair |
+| RETRO-012 | Y | fresh-context read-only general review; specialized security review when triggered |
+| RETRO-013 | A/Y | durable status/handoff updated after each completed batch and before stop |
+| RETRO-014 | Y | each LEGACY_VERIFIED batch has all mapped applicable criteria resolved; historical process claims are not fabricated |
+| RETRO-015 | A/YH | RA-01..06 LEGACY_VERIFIED, zero open MUST_FIX, final regression/reviews complete, required human gate PASS, final HEAD recorded |
+
+Historical `LOOP-*` / `STATE-*` criteria that describe pre-v2.4 execution mechanics are not reconstructed. Mark them `NOT_APPLICABLE_PRE_V2_4` where the historical fact cannot be established. The current retrospective audit execution itself must satisfy current `LOOP-*` / `STATE-*` controls.
+
+
+## 23. Execution-environment and verifier-fallback criteria
+
+`ENV-001..008` are blocking whenever execution-environment substitution or a sandbox capability failure occurs.
+
+| Criteria | Verifier | Minimum PASS evidence |
+| --- | --- | --- |
+| ENV-001 | A/Y | failure record shows whether the repository verifier actually started; sandbox/bootstrap/capability failure is separated from product/test failure |
+| ENV-002 | A/Y | one stable fingerprint + at most one targeted confirmation; no repeated equivalent shell/path/agent retries after classification |
+| ENV-003 | A/Y | execution evidence shows no Full Access/danger bypass was used to obtain acceptance |
+| ENV-004 | A/Y | required blocked check is executed in GitHub-hosted CI or another human-approved isolated CI environment |
+| ENV-005 | Y | any unsandboxed host run is explicitly marked diagnostic/non-authoritative and is not the sole PASS evidence |
+| ENV-006 | A/Y | CI run is tied to exact commit/state; verifier semantics/repetition/assertions preserved; dependency lock/pin evidence recorded where applicable |
+| ENV-007 | YH | workflow/action diff has prior human-approved scope, independent verifier/security review, least-privilege permissions, and separate remote authorization |
+| ENV-008 | YH where criterion is human/platform-specific | CI substitution is used only for criteria the runner can prove; native Windows/MPV/human checks remain unresolved until their required verifier runs |
+
+For GitHub-hosted evidence, record workflow/run/job/check ID, commit SHA, runner label, and conclusion. Repository read access is enough to inspect workflow history/logs; workflow rerun/control or configuration mutation is a separate permission boundary.
+
+A local sandbox `spawn EPERM` or process-bootstrap failure does not become a product failure merely because it repeats. If the same verifier fails on a capable approved runner, classify that runner failure under the normal implementation/test/resource/security taxonomy.
+
+See `docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md`.

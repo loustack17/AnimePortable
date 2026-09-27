@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"animeportable/adapters/metadata/cover"
-	"animeportable/adapters/player/mpv"
+	"animeportable/adapters/player/libmpv"
 	"animeportable/core"
 )
 
@@ -322,10 +322,10 @@ func TestSafeError(t *testing.T) {
 	for _, x := range []struct{ in, want error }{
 		{context.Canceled, context.Canceled},
 		{core.ErrNotFound, core.ErrNotFound},
-		{mpv.ErrNotFound, mpv.ErrNotFound},
-		{fmt.Errorf("secret path: %w", mpv.ErrNotFound), mpv.ErrNotFound},
-		{mpv.ErrInvalidPath, mpv.ErrInvalidPath},
-		{fmt.Errorf("secret path: %w", mpv.ErrInvalidPath), mpv.ErrInvalidPath},
+		{libmpv.ErrPlayerClosed, ErrUnavailable},
+		{fmt.Errorf("secret path: %w", libmpv.ErrPlayerClosed), ErrUnavailable},
+		{libmpv.ErrPlayerFailed, ErrUnavailable},
+		{fmt.Errorf("secret path: %w", libmpv.ErrPlayerFailed), ErrUnavailable},
 		{errors.New("x"), ErrUnavailable},
 	} {
 		if e := safeError(x.in); e != x.want {
@@ -411,7 +411,7 @@ func TestFollowFollowingHistorySettingsSchedule(t *testing.T) {
 		t.Error("following called source")
 	}
 	src.mu.Unlock()
-	settings := Settings{Appearance: "dark", MPVPath: "x", AutoplayNext: "enabled", ResumePlayback: "disabled", Language: "zh-TW"}
+	settings := Settings{Appearance: "dark", AutoplayNext: "enabled", ResumePlayback: "disabled", Language: "zh-TW"}
 	if e = s.SaveSettings(context.Background(), settings); e != nil {
 		t.Fatal(e)
 	}
@@ -434,7 +434,7 @@ func TestFollowFollowingHistorySettingsSchedule(t *testing.T) {
 func TestPlayAndCoverValidation(t *testing.T) {
 	s, st, _ := testService()
 	calls := 0
-	s.newPlayer = func(string) (core.Player, error) { calls++; return nil, errors.New("mpv") }
+	s.newPlayer = func() (core.Player, error) { calls++; return nil, errors.New("mpv") }
 	for _, in := range []PlayRequest{{EpisodeID: "e"}, {AnimeID: "a", StartAt: -1}, {AnimeID: "a", EpisodeID: "e"}} {
 		if e := s.Play(context.Background(), in); e == nil {
 			t.Error("invalid play accepted")

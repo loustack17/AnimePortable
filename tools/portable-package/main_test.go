@@ -3,9 +3,9 @@
 package main
 
 import (
-	"archive/tar"
 	"archive/zip"
-	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,92 +13,64 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"animeportable/internal/runtimepin"
 )
+
+func TestCLIPackageRequiresEmbeddedRuntimePin(t *testing.T) {
+	if err := validatePinnedRuntime(request{OS: "windows", Arch: "amd64"}); err == nil {
+		t.Fatal("Windows package accepted without libmpv runtime")
+	}
+	if err := validatePinnedRuntime(request{OS: "windows", Arch: "amd64", LibMPV: "libmpv-2.dll", LibMPVSHA256: strings.Repeat("0", 64)}); err == nil {
+		t.Fatal("different runtime digest accepted")
+	}
+	if err := validatePinnedRuntime(request{OS: "windows", Arch: "amd64", LibMPV: "libmpv-2.dll", LibMPVSHA256: strings.ToUpper(runtimepin.LibMPVSHA256)}); err != nil {
+		t.Fatalf("matching runtime digest rejected: %v", err)
+	}
+	if err := validatePinnedRuntime(request{OS: "windows", Arch: "arm64", LibMPV: "libmpv-2.dll", LibMPVSHA256: runtimepin.LibMPVSHA256}); err == nil {
+		t.Fatal("amd64 runtime accepted for another architecture")
+	}
+	if err := validatePinnedRuntime(request{}); err != nil {
+		t.Fatalf("package without libmpv rejected: %v", err)
+	}
+}
 
 func TestPortableArchivesContainOnlyExtractedAppPayload(t *testing.T) {
 	root := t.TempDir()
 	binary := writeFile(t, root, "animeportable.exe", "native executable")
 	license := writeFile(t, root, "LICENSE", "license")
 	notices := writeFile(t, root, "THIRD_PARTY_NOTICES.md", "notices")
-	icon := writeFile(t, root, "icons.icns", "icon")
-	plist := writeFile(t, root, "Info.plist", "plist")
-
-	cases := []struct {
-		name    string
-		os      string
-		output  string
-		want    []string
-		archive func(string) ([]string, map[string]string, error)
-	}{
-		{
-			name:    "windows root extraction",
-			os:      "windows",
-			output:  filepath.Join(root, "windows.zip"),
-			want:    []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe"},
-			archive: readZip,
-		},
-		{
-			name:    "linux root extraction",
-			os:      "linux",
-			output:  filepath.Join(root, "linux.tar.gz"),
-			want:    []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable"},
-			archive: readTarGzip,
-		},
-		{
-			name:   "mac app and sibling data root",
-			os:     "darwin",
-			output: filepath.Join(root, "mac.zip"),
-			want: []string{
-				"AnimePortable.app/Contents/Info.plist",
-				"AnimePortable.app/Contents/MacOS/animeportable",
-				"AnimePortable.app/Contents/Resources/LICENSE",
-				"AnimePortable.app/Contents/Resources/THIRD_PARTY_NOTICES.md",
-				"AnimePortable.app/Contents/Resources/icons.icns",
-			},
-			archive: readZip,
-		},
+	dll := writeFile(t, root, "libmpv-2.dll", "runtime")
+	dllLicense := writeFile(t, root, "libmpv-license", "runtime license")
+	digest := sha256.Sum256([]byte("runtime"))
+	req := request{
+		OS: "windows", Arch: "amd64", Binary: binary, Output: filepath.Join(root, "windows.zip"), License: license, Notices: notices,
+		LibMPV: dll, LibMPVSHA256: hex.EncodeToString(digest[:]), LibMPVLicense: dllLicense,
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := request{OS: tc.os, Arch: "amd64", Binary: binary, Output: tc.output, License: license, Notices: notices}
-			if tc.os == "darwin" {
-				req.Icon = icon
-				req.InfoPlist = plist
+	if err := packageArtifact(req); err != nil {
+		t.Fatal(err)
+	}
+	entries, contents, err := readZip(req.Output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(entries)
+	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv.txt"}
+	if !reflect.DeepEqual(entries, want) {
+		t.Fatalf("entries = %v, want %v", entries, want)
+	}
+	for _, entry := range entries {
+		for _, forbidden := range []string{"webview", "nsis", "installer", "frontend", "node_modules"} {
+			if strings.Contains(strings.ToLower(entry), forbidden) {
+				t.Fatalf("unexpected %s payload %q", forbidden, entry)
 			}
-			if err := packageArtifact(req); err != nil {
-				t.Fatal(err)
-			}
-			entries, contents, err := tc.archive(tc.output)
-			if err != nil {
-				t.Fatal(err)
-			}
-			sort.Strings(entries)
-			want := append([]string(nil), tc.want...)
-			sort.Strings(want)
-			if !reflect.DeepEqual(entries, want) {
-				t.Fatalf("entries = %v, want %v", entries, want)
-			}
-			for _, forbidden := range []string{"mpv", "webview", "nsis", "installer", "frontend", "node_modules"} {
-				for _, entry := range entries {
-					if strings.Contains(strings.ToLower(entry), forbidden) {
-						t.Fatalf("unexpected %s payload %q", forbidden, entry)
-					}
-				}
-			}
-			if strings.Contains(tc.os, "darwin") {
-				if !strings.HasPrefix(entries[0], "AnimePortable.app/") {
-					t.Fatalf("macOS app is not at extraction root: %v", entries)
-				}
-				for _, entry := range entries {
-					if strings.Contains(entry, "/data/") || strings.HasPrefix(entry, "data/") {
-						t.Fatalf("mutable portable data bundled inside archive: %s", entry)
-					}
-				}
-			}
-			if contents[tc.want[0]] == "" {
-				t.Fatalf("archive content missing for %s", tc.want[0])
-			}
-		})
+		}
+		if strings.HasPrefix(entry, "data/") {
+			t.Fatalf("mutable portable data bundled inside archive: %s", entry)
+		}
+	}
+	if contents["animeportable.exe"] == "" || contents["libmpv-2.dll"] == "" {
+		t.Fatal("archive payload missing")
 	}
 }
 
@@ -127,7 +99,10 @@ func TestPortablePackageRejectsSymlinkInputsAndNeverOverwrites(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	output := filepath.Join(root, "package.zip")
-	req := request{OS: "windows", Arch: "amd64", Binary: binary, Output: output, License: link, Notices: notices}
+	dll := writeFile(t, root, "libmpv-2.dll", "runtime")
+	dllLicense := writeFile(t, root, "libmpv-license", "runtime license")
+	digest := sha256.Sum256([]byte("runtime"))
+	req := request{OS: "windows", Arch: "amd64", Binary: binary, Output: output, License: link, Notices: notices, LibMPV: dll, LibMPVSHA256: hex.EncodeToString(digest[:]), LibMPVLicense: dllLicense}
 	if err := packageArtifact(req); err == nil {
 		t.Fatal("packageArtifact accepted symlink input")
 	}
@@ -153,7 +128,7 @@ func TestPortablePackageRejectsSymlinkInputsAndNeverOverwrites(t *testing.T) {
 	}
 }
 
-func TestPackageRequiresPortableFormatsAndMacBundleAssets(t *testing.T) {
+func TestPackageRequiresWindowsZipAndRejectsPausedPlatforms(t *testing.T) {
 	root := t.TempDir()
 	binary := writeFile(t, root, "binary", "binary")
 	license := writeFile(t, root, "license", "license")
@@ -162,10 +137,60 @@ func TestPackageRequiresPortableFormatsAndMacBundleAssets(t *testing.T) {
 	if err := packageArtifact(base); err == nil {
 		t.Fatal("windows installer format accepted")
 	}
-	base.OS = "darwin"
-	base.Output = filepath.Join(root, "mac.zip")
-	if err := packageArtifact(base); err == nil {
-		t.Fatal("macOS package without bundle icon and plist accepted")
+	for _, target := range []string{"darwin", "linux"} {
+		base.OS = target
+		base.Output = filepath.Join(root, target+".zip")
+		if err := packageArtifact(base); err == nil {
+			t.Fatalf("paused %s platform accepted", target)
+		}
+	}
+}
+
+func TestWindowsPackagePinsBundledLibMPVAndIncludesLicense(t *testing.T) {
+	root := t.TempDir()
+	binary := writeFile(t, root, "binary", "application")
+	license := writeFile(t, root, "license", "application license")
+	notices := writeFile(t, root, "notices", "third-party notices")
+	dll := writeFile(t, root, "libmpv-2.dll", "libmpv runtime")
+	dllLicense := writeFile(t, root, "libmpv-license", "libmpv license")
+	digest := sha256.Sum256([]byte("libmpv runtime"))
+	req := request{
+		OS: "windows", Arch: "amd64", Binary: binary, Output: filepath.Join(root, "portable.zip"),
+		License: license, Notices: notices, LibMPV: dll, LibMPVSHA256: hex.EncodeToString(digest[:]), LibMPVLicense: dllLicense,
+	}
+	if err := packageArtifact(req); err != nil {
+		t.Fatal(err)
+	}
+	entries, contents, err := readZip(req.Output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(entries)
+	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv.txt"}
+	if !reflect.DeepEqual(entries, want) {
+		t.Fatalf("entries = %v, want %v", entries, want)
+	}
+	if contents["libmpv-2.dll"] != "libmpv runtime" || contents["licenses/libmpv.txt"] != "libmpv license" {
+		t.Fatal("bundled runtime or license changed")
+	}
+	req.Output = filepath.Join(root, "bad.zip")
+	req.LibMPVSHA256 = strings.Repeat("0", 64)
+	if err := packageArtifact(req); err == nil {
+		t.Fatal("incorrect runtime digest accepted")
+	}
+	if _, err := os.Stat(req.Output); !os.IsNotExist(err) {
+		t.Fatalf("failed package left archive: %v", err)
+	}
+	req.LibMPVSHA256 = hex.EncodeToString(digest[:])
+	req.LibMPVLicense = ""
+	if err := packageArtifact(req); err == nil {
+		t.Fatal("runtime without license accepted")
+	}
+	req.LibMPVLicense = dllLicense
+	req.OS = "linux"
+	req.Output = filepath.Join(root, "bad.tar.gz")
+	if err := packageArtifact(req); err == nil {
+		t.Fatal("Windows runtime accepted in Linux package")
 	}
 }
 
@@ -201,38 +226,6 @@ func readZip(archive string) ([]string, map[string]string, error) {
 			return nil, nil, closeErr
 		}
 		contents[file.Name] = string(data)
-	}
-	return entries, contents, nil
-}
-
-func readTarGzip(archive string) ([]string, map[string]string, error) {
-	file, err := os.Open(archive)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer file.Close()
-	gzipReader, err := gzip.NewReader(file)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer gzipReader.Close()
-	tarReader := tar.NewReader(gzipReader)
-	entries := []string{}
-	contents := map[string]string{}
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, nil, err
-		}
-		entries = append(entries, header.Name)
-		data, err := io.ReadAll(tarReader)
-		if err != nil {
-			return nil, nil, err
-		}
-		contents[header.Name] = string(data)
 	}
 	return entries, contents, nil
 }

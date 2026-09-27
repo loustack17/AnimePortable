@@ -2,6 +2,8 @@
 
 # Security and Privacy Requirements
 
+The current Windows desktop UI is FLTK with in-process libmpv under ADR-020/023. Fyne, Wails, Svelte and external MPV sections below document historical boundaries; active native actions must preserve the same trust, secret and playback-lifecycle protections. Linux/macOS implementation is paused.
+
 ## 1. Security model
 
 Treat all remote data as untrusted, including data from services we normally trust.
@@ -9,7 +11,7 @@ Treat all remote data as untrusted, including data from services we normally tru
 Trust boundaries:
 
 1. Internet -> Go backend
-2. Go backend -> frontend
+2. Go backend -> desktop UI
 3. Go backend -> local playback proxy
 4. local playback proxy -> MPV
 5. MPV IPC -> Go backend
@@ -19,11 +21,11 @@ The Go backend is the security broker.
 
 Hard rules:
 
-- Internet never directly talks to Svelte.
+- Internet never directly talks to the desktop UI.
 - Remote Anime1 media URLs never directly reach MPV.
-- Frontend never receives playback credentials.
-- Frontend never sends arbitrary MPV commands.
-- Frontend never supplies arbitrary network URLs for playback.
+- Desktop UI never receives playback credentials.
+- Desktop UI never sends arbitrary MPV commands.
+- Desktop UI never supplies arbitrary network URLs for playback.
 
 ## 2. Privacy baseline
 
@@ -66,7 +68,7 @@ Rules:
 
 - memory-only unless absolutely required
 - never SQLite
-- never frontend
+- never desktop UI
 - never logs
 - never crash reports
 - never command-line arguments when avoidable
@@ -113,7 +115,7 @@ Requirements:
 - short-lived endpoint
 - cleanup on session end
 
-Frontend never receives the IPC endpoint.
+The desktop UI never receives the IPC endpoint.
 
 ## 6. External network client
 
@@ -234,13 +236,13 @@ Ignore:
 - arbitrary anchors
 - JavaScript redirects
 
-Raw HTML must not be passed to the frontend.
+Raw HTML must not be passed to the desktop UI.
 
 ## 13. Metadata text policy
 
 AniList/Bangumi display fields are remote input.
 
-Frontend must not render them using raw HTML injection.
+The desktop UI must display them as bounded plain text, not raw HTML.
 
 Preferred MVP behavior:
 
@@ -322,9 +324,9 @@ Low confidence:
 
 This is both correctness and integrity protection.
 
-## 18. Frontend restrictions
+## 18. Desktop UI restrictions
 
-Frontend must not:
+The Fyne UI must not:
 
 - `fetch()` arbitrary Internet resources directly
 - receive playback cookies/tokens
@@ -332,9 +334,9 @@ Frontend must not:
 - send arbitrary MPV commands
 - send arbitrary playback URLs
 - render raw remote HTML
-- navigate WebView to external content
+- open unvalidated external content
 
-Frontend may invoke typed actions such as:
+The UI may invoke typed Go actions such as:
 
 - `PlayEpisode(id)`
 - `Search(query)`
@@ -350,12 +352,12 @@ If added later:
 - never auto-open
 - show/validate destination
 - open via OS default browser
-- never navigate the application WebView to remote pages
+- never load remote pages inside the application UI
 - consider allowlist/confirmation policy
 
-## 20. WebView security
+## 20. Transitional WebView security and final removal
 
-Bundle application JS/CSS locally.
+While Wails/Svelte is present, bundle application JS/CSS locally.
 
 Use a restrictive Content Security Policy.
 
@@ -365,7 +367,7 @@ Do not enable:
 - arbitrary iframes
 - inline/eval-like execution unless framework tooling absolutely requires a narrowly-scoped exception
 
-The WebView is an application UI, not a browser.
+The transitional WebView is an application UI, not a browser. The Fyne release must have no WebView/HTML runtime at all. Remove this CSP-only verifier only after WebView removal is proved and equivalent native input, text/image handling, external-link, secret and action-boundary checks pass. Fyne must not expose provider/network clients, raw MPV IPC, playback credentials or persistence handles to widgets.
 
 ## 21. Logging
 
@@ -463,8 +465,8 @@ CI should include:
 - `go vet`
 - `go test`
 - `govulncheck`
-- frontend lint/typecheck
-- frontend dependency audit
+- native UI static/compile checks; transitional frontend lint/typecheck while Wails remains
+- native dependency audit; transitional frontend dependency audit while Wails remains
 - locked dependency files
 - dependency update automation where appropriate
 
@@ -478,7 +480,7 @@ The implementation is not accepted unless all of the following hold:
 - no account requirement
 - no persistent playback credentials
 - no secrets in logs
-- no secrets in frontend
+- no secrets in desktop UI
 - no secrets in MPV argv where avoidable
 - loopback-only proxy
 - random short-lived proxy sessions
@@ -491,8 +493,8 @@ The implementation is not accepted unless all of the following hold:
 - no raw remote HTML
 - no remote JavaScript execution
 - image limits
-- typed frontend commands
-- no arbitrary frontend URL playback
+- typed desktop UI actions
+- no arbitrary UI URL playback
 - no elevated privilege
 - deterministic cleanup
 - bounded caches

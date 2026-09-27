@@ -2,6 +2,8 @@
 
 # Architecture
 
+Windows uses FLTK calling typed Go application actions and in-process libmpv through the core player port (ADR-020/023). Wails/Svelte/Fyne and external MPV references below document historical design; their active product source and dependencies have been removed. Linux/macOS implementation is paused. Windows resource, portable-release and native-operation gates remain open.
+
 ## 1. Architecture style
 
 Use a **minimal Ports & Adapters architecture**.
@@ -275,11 +277,11 @@ Metadata display content crosses one shared backend policy before it can be cach
 - cover URLs remain backend-only inputs to a fixed-origin loader
 - cover bytes are exposed as typed validated content, not as an arbitrary frontend fetch capability
 
-The cover loader performs work only when called and keeps no memory cache. The Wails binding layer must map this seam to a safe DTO without exposing raw provider payloads or a general-purpose URL loader.
+The cover loader performs work only when called and keeps no memory cache. The Fyne UI adapter must preserve the safe typed result without exposing raw provider payloads or a general-purpose URL loader. The current Wails binding is transitional.
 
 ## 12. UI boundary
 
-Svelte/Wails must not know about:
+The Fyne UI must not know about:
 
 - Anime1 implementation details
 - MPV IPC details
@@ -296,13 +298,13 @@ UI talks to application-level typed actions such as:
 - read schedule
 - read history
 
-Do not expose raw MPV commands or arbitrary URLs to the frontend.
+Do not expose raw MPV commands or arbitrary URLs to the UI.
 
-## 13. Wails isolation
+## 13. Desktop toolkit isolation
 
-Wails-specific code must remain in the desktop app adapter.
+Fyne-specific code stays in the desktop app adapter. During migration, Wails-specific code also stays there and is removed before release.
 
-Core packages must compile and test without Wails.
+Core packages must compile and test without Fyne or Wails.
 
 ## 14. CLI architecture test
 
@@ -314,7 +316,7 @@ Maintain a small non-product CLI or test harness that can reuse:
 - SQLite adapter
 - MPV adapter
 
-Purpose: prove the core is not coupled to Wails.
+Purpose: prove the core is not coupled to the desktop toolkit.
 
 The CLI does not need polished UX.
 
@@ -349,7 +351,7 @@ anime-client/
 ├── apps/
 │   ├── desktop/
 │   │   ├── backend/
-│   │   ├── frontend/
+│   │   ├── nativeui/
 │   │   └── main.go
 │   └── cli/
 │
@@ -373,13 +375,14 @@ Do not optimize away useful boundaries out of fear of interface-dispatch overhea
 Real performance risks are:
 
 - network latency
-- WebView
+- UI rendering and decoded cover lifetime
 - cover image decoding
 - unbounded memory cache
 - bad SQLite access patterns
 - excessive background work
 - MPV
 - excessive allocations inside hot loops
+- retained offscreen Fyne objects or graphics resources
 
 ## 17. Lightweight architecture rule
 
@@ -439,7 +442,7 @@ Apply the principles as follows:
 - **Open/Closed (OCP):** expected external replacement happens through the existing ports/adapters and explicit policies. Prefer adding an adapter or strategy at a real seam over growing provider-specific conditionals in core.
 - **Liskov Substitution (LSP):** every implementation of `AnimeSource`, `MetadataProvider`, `Player`/`PlaybackSession`, and `Store` must honor the same documented contract, cancellation, error, lifecycle, and security semantics. Passing only the happy path is insufficient.
 - **Interface Segregation (ISP):** ports stay cohesive and no broader than the consumers require. Do not create one interface per helper or force consumers to depend on methods they do not use.
-- **Dependency Inversion (DIP):** core policy depends on core-owned abstractions; concrete Wails, source, metadata, player, persistence, network, and platform details remain outward.
+- **Dependency Inversion (DIP):** core policy depends on core-owned abstractions; concrete Fyne, source, metadata, player, persistence, network, and platform details remain outward. Wails remains outward only during migration.
 
 Code-quality rules:
 
@@ -474,7 +477,7 @@ If a feature causes one file/type/package to accumulate multiple independent res
 
 MVP is not accepted unless:
 
-- core imports no Wails
+- core imports no Fyne or Wails
 - core imports no Anime1 implementation
 - core imports no MPV implementation
 - core imports no SQLite driver

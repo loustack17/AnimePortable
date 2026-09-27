@@ -17,7 +17,6 @@ import (
 	"animeportable/adapters/metadata/cover"
 	"animeportable/adapters/network/securehttp"
 	"animeportable/adapters/persistence/sqlite"
-	"animeportable/adapters/player/mpv"
 	"animeportable/adapters/source/anime1"
 	"animeportable/core"
 	metadata "animeportable/internal/metadata"
@@ -33,7 +32,7 @@ type dependencies struct {
 	store     core.Store
 	source    core.AnimeSource
 	cover     *cover.Loader
-	newPlayer func(string) (core.Player, error)
+	newPlayer func() (core.Player, error)
 	close     func() error
 }
 
@@ -55,7 +54,7 @@ type Service struct {
 	source          core.AnimeSource
 	cover           *cover.Loader
 	closeDeps       func() error
-	newPlayer       func(string) (core.Player, error)
+	newPlayer       func() (core.Player, error)
 	databasePath    string
 	app             *core.App
 	player          core.Player
@@ -68,18 +67,13 @@ func New() *Service {
 
 func NewAt(databasePath string) *Service {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	return &Service{operationSlots: make(chan struct{}, 16), shutdownDone: make(chan struct{}), lifecycleCtx: lifecycleCtx, lifecycleCancel: lifecycleCancel, newPlayer: newMPVPlayer, databasePath: databasePath}
+	return &Service{operationSlots: make(chan struct{}, 16), shutdownDone: make(chan struct{}), lifecycleCtx: lifecycleCtx, lifecycleCancel: lifecycleCancel, newPlayer: func() (core.Player, error) { return nil, ErrUnavailable }, databasePath: databasePath}
 }
 
-func NewAtWithPlayerEnvironment(databasePath string, environment []string) *Service {
+func NewAtWithPlayerFactory(databasePath string, factory func() (core.Player, error)) *Service {
 	service := NewAt(databasePath)
-	original := append([]string(nil), environment...)
-	service.newPlayer = func(path string) (core.Player, error) {
-		executable, err := mpv.FindWithEnvironment(path, original)
-		if err != nil {
-			return nil, err
-		}
-		return mpv.NewPlayerWithEnvironment(executable, original), nil
+	if factory != nil {
+		service.newPlayer = factory
 	}
 	return service
 }
@@ -277,24 +271,7 @@ func safeError(err error) error {
 	if errors.Is(err, ErrInvalidInput) {
 		return ErrInvalidInput
 	}
-	if errors.Is(err, mpv.ErrNotFound) {
-		return mpv.ErrNotFound
-	}
-	if errors.Is(err, mpv.ErrInvalidPath) {
-		return mpv.ErrInvalidPath
-	}
-	if errors.Is(err, mpv.ErrPlayerClosed) || errors.Is(err, mpv.ErrPlayerFailed) || errors.Is(err, mpv.ErrIPCClosed) {
-		return ErrUnavailable
-	}
 	return ErrUnavailable
-}
-
-func newMPVPlayer(path string) (core.Player, error) {
-	executable, err := mpv.Find(path)
-	if err != nil {
-		return nil, err
-	}
-	return mpv.NewPlayer(executable), nil
 }
 
 func openProduction(ctx context.Context, databasePath string) (dependencies, error) {
@@ -325,10 +302,9 @@ func openProduction(ctx context.Context, databasePath string) (dependencies, err
 		return dependencies{}, err
 	}
 	return dependencies{
-		store:     store,
-		source:    anime1.New(client),
-		cover:     loader,
-		newPlayer: newMPVPlayer,
+		store:  store,
+		source: anime1.New(client),
+		cover:  loader,
 		close: func() error {
 			client.CloseIdleConnections()
 			return nil
@@ -418,7 +394,7 @@ func validMillis(value int64) bool {
 }
 
 func settingValues(settings core.Settings) Settings {
-	return Settings{Appearance: appearanceName(settings.Appearance), MPVPath: settings.MPVPath, AutoplayNext: toggleName(settings.AutoplayNext), ResumePlayback: toggleName(settings.ResumePlayback), Language: languageName(settings.Language)}
+	return Settings{Appearance: appearanceName(settings.Appearance), AutoplayNext: toggleName(settings.AutoplayNext), ResumePlayback: toggleName(settings.ResumePlayback), Language: languageName(settings.Language)}
 }
 
 func appearanceName(value core.Appearance) string {

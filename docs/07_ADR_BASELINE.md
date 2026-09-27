@@ -34,6 +34,8 @@ The project does not need Rust-level embedded multimedia/FFI complexity because 
 
 ## ADR-002 — Wails v3 + Svelte/TypeScript
 
+Status: Superseded by ADR-020 in `docs/14_ADR_NO_WEBVIEW.md`. The decision below describes the transitional implementation, not an acceptable final UI.
+
 ### Decision
 
 Use Wails v3 for desktop shell and Svelte/TypeScript for UI.

@@ -1,0 +1,28 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
+# Loop 26 — native desktop actions and data
+
+Status: M2 PASS. M1 passed its deterministic, independent and Windows owner-visible gates. Preserve the existing worktree and historical Loop 23/RA results.
+
+| Field | Contract |
+| --- | --- |
+| Scope | Put the 15 delivered typed desktop actions and lifecycle behind framework-neutral Go methods; retain current Home/navigation, cached Library/History/Following preview, safe Play feedback, cancellation and stale-result behavior. Search/detail/schedule/following/history/settings feature screens remain for Loops 29–37. |
+| Success | The production Go action/lifecycle surface has no Wails API or WebView dependency; native UI consumes only narrow typed service methods and never provider, SQL or player adapter details; all 15 actions retain DTO/error/cancellation/security contracts; offline Home and missing/invalid MPV paths are actionable; real MPV launch/IPC/cleanup is verified on native Windows or explicitly recorded as an unresolved gate. |
+| Deterministic checks | Existing backend/core/adapter/frontend transition tests remain intact; native action surface and Home tests; full Go tests, focused race, vet, production build, dependency/source scan, scoped diff check. No test weakening. |
+| Independent review | Fresh-context code-quality and security/lifecycle review after the final M2 change. |
+| Human gate | Native Windows Home/playback error and real MPV behavior where available; no long-idle comparison. |
+| Exclusions | Portable data/import, complete frontend/toolchain removal, release artifacts and long-idle resources belong to M3/M4. The narrow CI verifier edit was separately approved for M2. |
+
+The previous local sandbox live MPV IPC timeout remains a classified capability limitation, not a code PASS. Hosted native Windows verification and a visible owner check closed the M2 playback gate. No third-party source was cloned into the repository.
+
+## Current evidence and gate
+
+The Fyne entry now uses `backend.Service.Start/Close` directly. Production desktop Go source has no Wails import or lifecycle method; the service still exposes exactly 15 typed actions, checked by reflection against DTO fields and request contexts. Existing SQLite, identity, cancellation, security, player-session, shutdown-order and Home tests were retained with the neutral lifecycle names. Home refresh now restores focus to the matching Play action when async data replaces its widget, with a tested content-control fallback when the action disappears. The other five UI destinations remain intentionally deferred.
+
+Final-state sandbox checks with repository-local `GOCACHE` passed: `go test -count=1 ./...`, focused backend/native `go test -race -count=1`, `go vet ./...`, production desktop build, `go mod verify`, scoped `git diff --check`, plus transitional frontend `npm test` (8/8) and `npm run check` (zero diagnostics). Independent read-only code review and its focused follow-up found no M2 code MUST_FIX. The unscoped diff whitespace warning in `docs/09_CODEX_EXECUTION_PROFILE.md` predates M2.
+
+With `ANIMEPORTABLE_MPV_LIVE=1`, local sandbox `TestLiveIPC` failed after about five seconds with `mpv: IPC unavailable`. The same command passed in an unsandboxed Windows host diagnostic in 0.157 seconds; under `docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md` that diagnostic is non-authoritative. Do not rerun the same sandbox fingerprint without new evidence.
+
+The owner explicitly approved the scoped `.github/workflows/ci.yml` edit and temporary branch commit/push for isolated CI. Independent verifier and security reviewers approved the workflow after a false-green path was closed: requesting live tests now fails if MPV is missing. Only migration code, tests, Go dependencies and the workflow were committed on `codex/fyne-migration-verification-20260924`; pre-existing uncommitted planning/probe work was not staged. Hosted run `35972471668` at `e807db5` found a verifier-script error: GUI `mpv.exe --version` ran, but PowerShell did not provide `$LASTEXITCODE`; independently reviewed `Start-Process -Wait -PassThru` repair followed at `3560aa3`. Run `35973028002` proved native Windows IPC and three-media playback but failed Linux `govulncheck`: reachable TIFF flaws in `golang.org/x/image v0.41.0`. The smallest reviewed repair upgraded to `v0.43.0`, which the Go advisories mark fixed. Host diagnostic scan found zero reachable vulnerabilities; final authority is hosted run `35974229139` at exact SHA `4deabe684df5424f81ae0eb6097a120717318b9d`: **SUCCESS**, Windows job `107550779995` and Linux job `107550779582` both successful. Windows includes the pinned external MPV 0.41.0 hash/start preflight, native desktop build and service tests, and enabled `TestLiveIPC` plus `TestLiveMPVLoadsThreeMediaURLsOnOneProcess`; Linux includes existing frontend/browser, full Go/race/vet, vulnerability scan, build and clean-worktree checks.
+
+For the owner-visible M2 check, the maintainer prepared a real source membership-verified profile inside `.slim/m2-acceptance-base` and built a Fyne release executable with SHA-256 `be28d0ea24dfa3aa3ef66b582c13506fe6d7ce33f2d84ff0d7d38d63129b32dc`. The owner reported **全部通過**: populated Home Play, external MPV opened and played, closing MPV left AnimePortable mouse/keyboard operation and focus intact. The test window was closed normally afterward; its tool exited 0 and no test app or new MPV process remained. A pre-existing unrelated MPV process was left untouched. No long-idle resource run was performed. M2 PASS permits Loop 27 M3 to start with its own contract.

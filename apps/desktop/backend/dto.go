@@ -52,7 +52,6 @@ type History struct {
 
 type Settings struct {
 	Appearance     string `json:"appearance"`
-	MPVPath        string `json:"mpvPath"`
 	AutoplayNext   string `json:"autoplayNext"`
 	ResumePlayback string `json:"resumePlayback"`
 	Language       string `json:"language"`

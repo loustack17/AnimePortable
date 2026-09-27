@@ -16,7 +16,7 @@ func TestNativeServiceSurface(t *testing.T) {
 		"Detail": false, "Episodes": false, "Following": false,
 		"Follow": false, "Unfollow": false, "Schedule": false,
 		"History": false, "RemoveHistory": false, "Settings": false,
-		"SaveSettings": false, "Play": false, "GetCover": false,
+		"SaveSettings": false, "Play": false, "StopPlayback": false, "GetCover": false,
 	}
 	serviceType := reflect.TypeOf((*backend.Service)(nil))
 	contextType := reflect.TypeFor[context.Context]()

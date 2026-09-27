@@ -10,13 +10,13 @@ A loop is not complete because an implementation agent says it is complete. A lo
 
 ## 1. Protocol version and migration
 
-This is Loop Engineering Protocol v2.3 (Codex-targeted, durable-state).
+This is Loop Engineering Protocol v2.4.1 (Codex-targeted, durable-state + isolated-verifier fallback).
 
 It is mandatory beginning with **Loop 23**.
 
 Loops 01-22 were executed under the original runbook and MUST NOT be reimplemented solely because this protocol was introduced.
 
-Historical loops are grandfathered for implementation but subject to retrospective evidence audit:
+Historical Loops 01–22 remain valid historical implementation. Their one-time v2.4.1 retrospective baseline audit completed after Loop 23 PASS and before Loop 24; `docs/RETRO_AUDIT_STATUS.md` records `RETRO_BASELINE_PASS`. The audit used this historical migration rule:
 
 1. identify the acceptance criteria the historical loop claimed to satisfy
 2. locate existing test, CI, live-smoke, review, and runtime evidence
@@ -26,7 +26,7 @@ Historical loops are grandfathered for implementation but subject to retrospecti
 
 Absence of v2-format evidence is not itself proof that old code is wrong.
 
-If Loop 23 already contains work performed before this protocol was adopted, treat the current repository state as the migration baseline. All existing Loop 23 changes remain in scope and MUST pass the v2 final gates before Loop 23 can be marked complete.
+Loop 23 already passed the v2 final gates. Loops 24–27 used the historical Fyne migration contract; Loop 28 Windows completion now follows ADR-023 and the Windows-only owner direction. This does not reopen earlier results.
 
 ## 2. Session bootstrap and source reading
 
@@ -67,12 +67,13 @@ Canonical sources are:
 - `docs/08_VERIFICATION_MATRIX.md`
 - `docs/09_CODEX_EXECUTION_PROFILE.md`
 - `docs/10_DURABLE_AGENT_STATE.md`
+- `docs/11_RETROSPECTIVE_BASELINE_AUDIT.md` when retrospective work is active or imminent
 - active ADRs
 - `docs/IMPLEMENTATION_STATUS.md` / retained evidence as needed
 
 The root `AGENTS.md` is the short operational entry point. `docs/AGENT_HANDOFF.md` is a recovery cache/index only and never overrides canonical sources or current verifier/Git truth.
 
-OpenCode Go is not a required or validated execution path for Protocol v2.3.
+OpenCode Go is not a required or validated execution path for Protocol v2.4.1.
 
 ## 3. Roles and separation of duties
 
@@ -276,19 +277,23 @@ CI observation is not permission to modify CI configuration or rerun/cancel/dele
 
 ### 6.4 GitHub remote mutation boundary
 
-Remote GitHub writes are restricted to the connected repository and should use a feature branch/PR workflow.
+Remote writes require explicit authorization and are limited to the connected repository.
 
-Autonomously allowed when the loop contract grants `branch_pr_write`:
+When authorized, target `main` by default. Use a branch/PR only when:
 
-- create/update the loop's working branch
-- push commits for the current loop
-- create/update the current pull request
+- repository protection requires it
+- the human requests it
+- the change is high-risk, incompatible, or needs isolation
+
+Allowed only within the approved scope:
+
+- commit/push the current verified change
+- create/update the required branch/PR when a branch condition above applies
 - add implementation/evidence comments relevant to that PR
 
 Forbidden without an explicit human gate:
 
-- direct push/force-push to the default/protected branch
-- force-push over unrelated remote history
+- force-push to `main` or unrelated remote history
 - create/delete releases or tags
 - merge the final PR
 - rerun, cancel, delete, enable, or disable Actions workflows
@@ -348,6 +353,57 @@ On detection:
 3. do not retry the same action with broader permissions
 4. mark the loop `NEEDS_HUMAN`
 5. resume only after the boundary is restored and the human explicitly approves any required exception
+
+
+### 6.8 Sandbox health, capability failures, and retry circuit breaker
+
+The local sandbox is the default execution environment, but a sandbox implementation can fail independently of the repository.
+
+Use:
+
+- `SANDBOX_INFRA_FAILURE` when the sandbox cannot initialize or cannot start a minimal process
+- `SANDBOX_CAPABILITY_LIMITATION` when ordinary sandbox commands work but a required verifier capability is blocked
+- `SANDBOX_CHILD_PROCESS_LIMITATION` as an accepted specific label for a child-process `spawn`/`fork` limitation
+
+For a stable sandbox/runtime fingerprint:
+
+1. capture the exact command, error, sandbox mode, and environment
+2. run at most one minimal targeted health/reproduction check when it provides new evidence
+3. after the same causal fingerprint is confirmed, stop equivalent retries across shells, paths, agents, or tool wrappers
+4. do not modify production code for a failure that has not reached the repository verifier
+5. do not switch to Full Access / `danger-full-access`
+6. checkpoint the status/handoff and select an approved verifier environment when available
+
+A retry is valid only after a material change such as a Codex/runtime version change, sandbox configuration change approved by the human, or new diagnostic evidence.
+
+### 6.9 Approved isolated verifier fallback
+
+A deterministic criterion may be verified outside the local Codex sandbox only through an **approved isolated verifier environment**.
+
+Approved environments, in preference order:
+
+1. the capable local Codex sandbox
+2. a GitHub-hosted Actions runner for the connected repository
+3. another isolated CI environment explicitly approved by the human
+
+An unsandboxed command on the user's normal host is **diagnostic only** and cannot by itself satisfy a required deterministic criterion.
+
+A CI fallback is authoritative only when:
+
+- it verifies the exact relevant commit/branch state
+- it preserves the original verifier/criterion semantics
+- repository-managed dependencies are reproducible and pinned/locked where practical
+- no assertion, test, threshold, fixture, trigger, repetition count, or failure behavior is weakened
+- workflow token permissions remain least-privilege
+- no new secret/credential/trust boundary is added merely to make the check run
+- the run ID/job/check/result and commit SHA are recorded
+- the runner OS can actually prove the criterion
+
+Platform equivalence matters. A Linux Chromium/controller verifier may prove platform-neutral browser behavior; it does not prove native Windows desktop UX, Windows-only process behavior, MPV integration, or a human visual/interaction criterion.
+
+`.github/workflows/**` and `.github/actions/**` are protected security/verifier surfaces. Any local edit requires an explicit human-approved scope before mutation plus independent verifier/security review. Permission to edit locally does not authorize commit, push, PR, workflow rerun/control, secret/settings changes, or other remote mutation.
+
+See `docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md` for the canonical fallback policy.
 
 ## 7. Protected verification boundary
 
@@ -424,7 +480,9 @@ Use one of:
 - `RESOURCE_FAILURE` - leak, cleanup, race, lifecycle, or bound fails
 - `TEST_FAILURE` - deterministic functional test fails
 - `FLAKY_OR_NONDETERMINISTIC` - same unchanged state produces inconsistent result
-- `ENVIRONMENT_BLOCKED` - missing OS/runtime/tool/hardware prevents required verification
+- `ENVIRONMENT_BLOCKED` - no approved capable environment/tool/hardware is available for required verification
+- `SANDBOX_INFRA_FAILURE` - the sandbox cannot initialize/start the requested execution boundary; the repository verifier did not actually run
+- `SANDBOX_CAPABILITY_LIMITATION` - the sandbox runs generally but blocks a capability required by the verifier; `SANDBOX_CHILD_PROCESS_LIMITATION` is an accepted specific label for child-process spawn/fork cases
 - `UPSTREAM_BLOCKED` - external service prevents a required live check
 - `SPEC_AMBIGUITY` - requirement is not precise enough to decide correct behavior
 - `SPEC_OR_TEST_CONFLICT` - test/evaluator conflicts with the documented contract
@@ -666,11 +724,13 @@ Human review is required before PASS when any of these apply:
 7. a required gate remains flaky, ambiguous, or blocked and an exception is requested
 8. non-convergence or budget stop requires a decision about the next approach
 9. any request to expand persistent filesystem, GitHub-repository, credential, privilege, or network boundaries beyond the loop contract
-10. final MVP/release acceptance
+10. any edit to `.github/workflows/**` / `.github/actions/**` unless the exact local edit scope was already explicitly approved by the human
+11. any proposal to treat an unsandboxed host diagnostic as authoritative verification evidence
+12. final MVP/release acceptance
 
 ### Human review packet
 
-Do not ask the human to infer what happened from the repository.
+Human checks must require only visible app actions/observations. Do not require internal IDs, DB/AppData edits, fixture internals, adapters, IPC, or repository internals.
 
 Present:
 
@@ -739,6 +799,7 @@ Before PASS:
 7. complete required human gates
 8. verify no required criterion is `FAIL`, `BLOCKED`, `NEEDS_HUMAN`, or `NOT_RUN`
 9. update status/evidence only after verification
+10. commit the verified logical change before unrelated work; push only if authorized, and wait for green CI when CI is required for closeout
 
 Any source/config change after final verification invalidates affected evidence and requires re-verification.
 
@@ -849,7 +910,7 @@ The agent must not:
 
 ## 29. Required loop sequence
 
-Use this order unless an accepted ADR changes it:
+Historical Loops 01–23 and RA-01–06 are completed and retain their original meaning. ADR-020/021 change the forward sequence. Phase numbers 23–36 in `docs/04_MVP_IMPLEMENTATION_PLAN.md` map to Loops 29–42 after migration PASS.
 
 1. Repository/contracts
 2. Core models/ports
@@ -871,23 +932,30 @@ Use this order unless an accepted ADR changes it:
 18. Bangumi
 19. Metadata matching
 20. Metadata content security
-21. Wails binding layer
-22. Svelte shell
-23. Home
-24. Search
-25. Anime detail
-26. Schedule UI
-27. Following UI
-28. History UI
-29. Keyboard navigation
-30. Cache-first refresh
-31. Autoplay next
-32. Settings
-33. Security hardening
-34. Resource-leak testing
-35. Cross-platform validation
-36. CI/release
-37. Full acceptance
+21. Historical Wails binding layer
+22. Historical Svelte shell
+23. Historical Home and protocol completion
+24. Fyne migration M0: contract, parity inventory and resource reference
+25. Fyne migration M1: lifecycle and shell/Home
+26. Fyne migration M2: desktop actions and data
+27. Fyne migration M3: portable packaging and full Wails/Svelte/NSIS removal
+28. Fyne migration M4: integrated resource/platform/release gate
+29. Fyne Search
+30. Fyne Anime detail
+31. Fyne Schedule UI
+32. Fyne Following UI
+33. Fyne History UI
+34. Fyne keyboard navigation across completed flows
+35. Fyne cache-first refresh
+36. Autoplay next with Fyne control
+37. Fyne Settings
+38. Native security hardening
+39. Native resource-leak testing
+40. Fyne cross-platform validation
+41. Portable CI/release
+42. Full acceptance
+
+The migration exit contract and RA-boundary mapping are in `docs/16_FYNE_MIGRATION_PLAN.md`. Later dedicated loops recheck their area after migration rather than allowing M2/M4 to omit it.
 
 ## 30. Loop output and evidence format
 
@@ -1010,6 +1078,8 @@ This project-specific protocol is informed by, but not mechanically copied from:
 - METR evaluation-integrity research: capable agents may reward-hack by exploiting scorer/test infrastructure, so protected and independent verification boundaries are necessary.
   - https://metr.org/research/
 - OpenAI Codex safety/configuration guidance: sandbox and approvals form separate controls; workspace-write constrains mutation; network access and GitHub/tool access should be explicitly scoped; Codex App supports worktrees for parallel agents; `AGENTS.md` is the repository instruction mechanism.
+- GitHub-hosted runner guidance: standard hosted jobs execute on GitHub-managed runner infrastructure; repository read access is sufficient to inspect workflow run history/logs, and fine-grained workflow-run API access supports `Actions: read`.
+- Current `openai/codex` issue reports document Windows sandbox child-process `spawn EPERM` cases. These reports are operational evidence for capability-failure handling, not normative permission to weaken the sandbox.
   - https://openai.com/index/running-codex-safely/
   - https://openai.com/index/building-codex-windows-sandbox/
   - https://openai.com/index/introducing-the-codex-app/
@@ -1042,3 +1112,27 @@ Workers/subagents do not concurrently edit the global handoff. They return struc
 On every new root session, reconcile the handoff with current Git/test/CI truth before mutation. If they disagree, current repository/verifier evidence wins and the handoff must be refreshed.
 
 A loop cannot reach `PASS` if required durable-state evidence is stale, over cap, contradictory, or missing at a session/loop handoff boundary.
+
+
+## 34. Retrospective baseline gate after Loop 23
+
+Loop 23 is the protocol migration loop.
+
+After Loop 23 reaches `PASS`:
+
+1. update `docs/IMPLEMENTATION_STATUS.md`
+2. checkpoint `docs/AGENT_HANDOFF.md`
+3. do not start Loop 24
+4. initialize/continue `docs/RETRO_AUDIT_STATUS.md`
+5. execute RA-01 through RA-06 from `docs/11_RETROSPECTIVE_BASELINE_AUDIT.md`
+6. repair only confirmed `MUST_FIX` findings
+7. establish `RETRO_BASELINE_PASS`
+8. then checkpoint Loop 24 as the Fyne migration start under ADR-020/021 and `docs/16_FYNE_MIGRATION_PLAN.md`
+
+The audit itself follows the same verification-integrity, sandbox, failure-diagnosis, code-quality, independent-review, human-gate, and stop-loss requirements as normal v2.4.1 execution.
+
+Historical process-only requirements that cannot be reconstructed are not retroactive implementation failures. Current audit actions must comply with v2.4.1.
+
+`LEGACY_VERIFIED` is an audit result, not a normal loop exit state. It certifies current implementation behavior/quality for the historical batch under present evidence.
+
+If Codex usage/context limits interrupt the audit, checkpoint both `docs/RETRO_AUDIT_STATUS.md` and `docs/AGENT_HANDOFF.md` and continue in a fresh session. Do not restart completed batches.

@@ -83,7 +83,7 @@ A criterion cannot pass if the implementation agent obtained green status by wea
 ## A. Architecture
 
 ### ARCH-001
-Core imports no Wails packages.
+Core imports no Fyne or Wails packages.
 
 ### ARCH-002
 Core imports no Anime1 implementation package.
@@ -172,7 +172,7 @@ User can manually configure MPV path if auto-detection fails.
 Missing MPV produces a clear actionable error.
 
 ### PLAY-004
-App starts MPV playback without exposing Anime1 credentials in frontend.
+App starts MPV playback without exposing Anime1 credentials to the UI.
 
 ### PLAY-005
 Remote playback credentials are not passed in normal MPV argv.
@@ -272,7 +272,7 @@ Metadata remains usable from cache when provider is unavailable.
 ## F. External network security
 
 ### SEC-001
-Frontend performs no arbitrary direct Internet fetches.
+The UI performs no arbitrary direct Internet fetches.
 
 ### SEC-002
 Remote requests use HTTPS only except app-owned loopback HTTP.
@@ -317,7 +317,7 @@ Remote Anime1 HTML is parsed, never executed/rendered raw.
 Remote descriptions are sanitized/plain text.
 
 ### SEC-016
-Raw remote HTML is never sent to Svelte.
+Raw remote HTML is never sent to the Fyne UI; the historical Svelte boundary remains protected until removal.
 
 ### SEC-017
 Remote image byte size is bounded.
@@ -360,7 +360,7 @@ Temporary stream tokens are never stored in SQLite.
 Proxy session tokens are never stored persistently.
 
 ### PRIV-010
-Secrets are not returned to frontend.
+Secrets are not returned to the UI.
 
 ### PRIV-011
 Logs redact cookies/tokens/authenticated URL data.
@@ -407,10 +407,10 @@ Unix IPC lives in a user-private location with restricted permissions where prac
 Windows named pipe is scoped to current user where practical.
 
 ### IPC-004
-Frontend never receives raw IPC endpoint.
+The UI never receives a raw IPC endpoint.
 
 ### IPC-005
-Frontend cannot submit raw MPV commands.
+The UI cannot submit raw MPV commands.
 
 ### IPC-006
 IPC reader terminates after session close.
@@ -472,10 +472,13 @@ Metadata refresh concurrency is bounded.
 Cover images are lazy-loaded or otherwise bounded.
 
 ### PERF-006
-Application is near-idle while MPV is playing and no refresh work is active.
+Application background tasks remain near-idle while in-process libmpv plays and no refresh work is active.
 
 ### PERF-007
 No high-frequency SQLite writes for playback progress.
+
+### PERF-008
+On an owner-approved Windows reference host with representative local data and matched content/states, the FLTK/libmpv whole product must use less resource than OneAnime in comparable idle, wake, playback and cleanup states under ADR-023. Record every run, private working set and commit, CPU, GPU and responsiveness; a trimmed working-set minimum alone is not PASS. A long-idle rerun requires renewed owner consent. A miss after bounded causal optimization requires an explicit owner decision.
 
 ---
 
@@ -491,16 +494,22 @@ Linux build succeeds on defined supported environment.
 macOS build succeeds.
 
 ### PLATFORM-004
-Windows named-pipe MPV IPC is validated.
+Windows in-process libmpv playback, episode switching, stop and cleanup are validated.
 
 ### PLATFORM-005
-Unix-socket MPV IPC is validated on Linux.
+Linux native player lifecycle is validated when that platform phase begins.
 
 ### PLATFORM-006
-Unix-socket MPV IPC is validated on macOS.
+macOS native player lifecycle is validated when that platform phase begins.
 
 ### PLATFORM-007
 Keyboard workflow is validated on each supported platform.
+
+### PLATFORM-008
+The final desktop UI on Windows, Linux, and macOS uses no WebView, browser-backed widget, or HTML runtime. Final source/build dependencies, packaged artifacts, and platform runtime UI libraries show no Wails/WebView integration; process-tree checks show no browser helper. This criterion applies to the migration/final release, not the already audited transitional Wails baseline.
+
+### PLATFORM-009
+App-owned settings, SQLite data and cache use the extracted portable folder by default on all supported platforms. A fresh folder, in-place upgrade, read-only folder, non-ASCII/spaced path, and optional import from the old user-config profile have defined, tested behavior. Existing data is never silently moved or deleted.
 
 ---
 
@@ -516,13 +525,13 @@ Keyboard workflow is validated on each supported platform.
 `govulncheck` is run in CI.
 
 ### CI-004
-Frontend lint passes.
+The final Windows FLTK UI source and dependency checks pass.
 
 ### CI-005
-Frontend typecheck passes.
+The final Windows FLTK UI compile and vet checks pass.
 
 ### CI-006
-Frontend build passes.
+The final native desktop UI build passes; historical frontend build remains required while Svelte is shipped as a transitional artifact.
 
 ### CI-007
 Dependency lockfiles are committed.
@@ -533,7 +542,14 @@ Dependency lockfiles are committed.
 ### CI-009
 Platform release artifacts can be produced.
 
+### CI-010
+Each desktop release artifact runs from an extracted folder without an installer, privileged installation, or OS-wide registration. The Windows ZIP must include a verified, licensed libmpv runtime.
+
 ---
+
+# Windows phase gate
+
+The owner selected Windows-only development and acceptance first. Windows Loop 28 closes against FLTK and in-process libmpv, portable state/import, no WebView, keyboard/mouse, security, regression and matched-resource criteria in ADR-023. Windows Loop 28 PASS permits Loop 29 feature work on Windows. `WINDOWS_COMPLETE` requires all applicable Windows feature and final-release criteria. Linux development follows Windows stability; macOS follows Linux stability. Criteria explicitly naming Linux or macOS remain deferred and cannot be marked PASS from Windows evidence. The all-platform `COMPLETE` gate below remains unchanged.
 
 # MVP final gate
 
@@ -542,13 +558,18 @@ MVP status may be marked `COMPLETE` only when:
 - every applicable critical product criterion is `PASS`
 - no required criterion is `FAIL`, `BLOCKED`, `NEEDS_HUMAN`, or `NOT_RUN`
 - all security and architecture criteria are `PASS`
-- same-session MPV switching is `PASS` with PID evidence
+- same-session in-process libmpv switching is `PASS` with lifecycle evidence
 - keyboard-only workflow is `PASS` with required human verification
 - resource stress criteria are `PASS` with repeated-cycle evidence
+- the matched whole-product resource objective in ADR-023 is met; a miss remains `NEEDS_HUMAN` unless the owner explicitly changes the contract
 - all three desktop platforms have the required build/runtime evidence defined by the verification matrix
+- final desktop artifacts satisfy the no-WebView and portable-run criteria in ADR-020
+- app-owned state and old-profile import satisfy PLATFORM-009
 - required CI/release criteria are `PASS` on the final state
 - applicable `LOOP-001..025` integrity criteria are `PASS`
 - all applicable `QUAL-001..012` code-quality criteria are `PASS`
+- all applicable `STATE-001..010` durable-state criteria are `PASS`
+- the one-time historical baseline has reached `RETRO_BASELINE_PASS`, and applicable `RETRO-001..015` criteria are `PASS`
 - the final human MVP/release gate returns `HUMAN_PASS`
 - no critical criterion is covered only by an exception or manual bypass
 
@@ -640,7 +661,7 @@ Any detected write/access outside the allowed local repo, sandbox-ephemeral stat
 
 ### LOOP-021 — Codex execution profile
 
-Protocol v2.3 implementation uses Codex App or Codex CLI under the documented sandbox/approval profile. Full Access/danger-full-access is not used on the host to bypass blocked work.
+Protocol v2.4.1 implementation uses Codex App or Codex CLI under the documented sandbox/approval profile. Full Access/danger-full-access is not used on the host to bypass blocked work.
 
 ### LOOP-022 — AGENTS instruction integrity
 
@@ -672,7 +693,7 @@ Changed files, types, packages, and major functions have coherent responsibiliti
 
 ### QUAL-003 — Dependency direction
 
-Core/application policy does not gain concrete Wails, provider, MPV, SQLite, network, or platform dependencies.
+Core/application policy does not gain concrete Fyne, Wails, provider, MPV, SQLite, network, or platform dependencies.
 
 ### QUAL-004 — Interface quality
 
@@ -740,3 +761,86 @@ Long-lived architectural/security/product decisions are captured in ADR/source-o
 
 ### STATE-010 — Resume after instruction changes is safe
 When `AGENTS.md`/protocol materially changes after a Codex session began, continuation uses a fresh/reconciled session rather than assuming an old resumed session has current instructions.
+
+
+
+## Q. Execution environment and verifier fallback
+
+### ENV-001 — Sandbox failures are distinguished from repository failures
+
+A verifier that did not start because the sandbox failed or lacked a required capability is not recorded as `TEST_FAILURE`/implementation failure without capable-environment evidence.
+
+### ENV-002 — Stable sandbox failure circuit breaker
+
+After a stable sandbox/runtime failure fingerprint is confirmed by at most one targeted health/reproduction check, equivalent retries stop until material environment evidence changes.
+
+### ENV-003 — No privilege bypass for acceptance
+
+Full Access, `danger-full-access`, sandbox-bypass flags, or equivalent host privilege expansion are not used to obtain required acceptance evidence.
+
+### ENV-004 — Approved isolated verifier fallback
+
+When the local sandbox cannot execute a deterministic verifier, authoritative fallback evidence comes only from a GitHub-hosted runner or another human-approved isolated CI environment capable of reproducing the criterion.
+
+### ENV-005 — Host diagnostics are non-authoritative
+
+Unsandboxed host execution may be used to diagnose a sandbox/runtime limitation but cannot by itself satisfy a required deterministic acceptance criterion.
+
+### ENV-006 — Fallback CI preserves verifier meaning
+
+Fallback CI verifies the relevant final commit/state without weakening assertions, thresholds, fixtures, failure behavior, required repetitions, or other acceptance semantics; dependencies are reproducible and pinned/locked where practical.
+
+### ENV-007 — Workflow security and authorization
+
+Changes to `.github/workflows/**` / `.github/actions/**` occur only within an explicitly human-approved local scope, receive independent verifier/security review, use least-privilege workflow permissions, and do not imply separate authorization for commit/push/PR/settings/secrets/workflow-control actions.
+
+### ENV-008 — Platform-specific evidence is not substituted
+
+Cross-platform or Linux-hosted CI is not used to claim PASS for criteria that explicitly require native Windows behavior, MPV/native-process integration, or human UX/visual/interaction judgment.
+
+## R. Retrospective baseline audit integrity
+
+### RETRO-001
+The retrospective audit starts only after Loop 23 is PASS and blocks normal progression to Loop 24 until baseline completion or explicit human exception.
+
+### RETRO-002
+Historical Loops 01–22 are verified against current implementation/current contracts without blanket implementation replay.
+
+### RETRO-003
+Each RA batch maps relevant current acceptance criteria to current code/tests/evidence before mutation.
+
+### RETRO-004
+Missing legacy evidence is classified as missing verification; it does not by itself trigger code rewrite or FAIL.
+
+### RETRO-005
+Historical process-only v2.4 requirements that cannot be reconstructed are marked `NOT_APPLICABLE_PRE_V2_4`, not retroactive failures.
+
+### RETRO-006
+Audit scope is risk-bounded by RA-01..RA-06 and does not load/review unrelated future-loop work.
+
+### RETRO-007
+High-risk batches receive targeted failure-path/adversarial verification beyond existing happy-path evidence where applicable.
+
+### RETRO-008
+Parallel audit agents are used primarily for read-heavy exploration/review; concurrent writers require explicit disjoint write sets and isolation.
+
+### RETRO-009
+Every confirmed defect receives a stable RA finding ID, criterion/evidence mapping, severity, and lifecycle status.
+
+### RETRO-010
+Code mutation occurs only for confirmed `MUST_FIX` findings; speculative cleanup/refactoring is not part of retrospective repair.
+
+### RETRO-011
+Each repair is root-cause driven and receives focused verification, affected regression verification, and required independent review on the integrated final state.
+
+### RETRO-012
+Fresh-context read-only review covers correctness/test gaps and architecture/code quality; security-sensitive batches receive security review when triggered.
+
+### RETRO-013
+`docs/RETRO_AUDIT_STATUS.md` and `docs/AGENT_HANDOFF.md` are checkpointed after each batch and before budget/context/usage stop.
+
+### RETRO-014
+`LEGACY_VERIFIED` is used only when the current implementation for that historical batch passes all mapped applicable criteria; it does not claim historical process compliance.
+
+### RETRO-015
+`RETRO_BASELINE_PASS` requires RA-01..RA-06 `LEGACY_VERIFIED`, zero open `MUST_FIX`, required full regression/reviews/human gates PASS, and final verified HEAD recorded.

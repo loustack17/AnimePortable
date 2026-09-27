@@ -81,7 +81,7 @@ func TestPlaybackAndSettingsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("history = %#v, %v, want %#v", got, err, wantHistory)
 	}
 	settings := core.Settings{
-		Appearance: core.AppearanceDark, MPVPath: "C:/播放器/mpv.exe", AutoplayNext: core.ToggleDisabled,
+		Appearance: core.AppearanceDark, AutoplayNext: core.ToggleDisabled,
 		ResumePlayback: core.ToggleEnabled, Language: core.LanguageEnglish,
 	}
 	if err := store.SaveSettings(ctx, settings); err != nil {
@@ -166,15 +166,11 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 			}
 		})
 	}
-	invalidUTF8 := string([]byte{0xff})
-	tooLongPath := strings.Repeat("x", maxMPVPathBytes+1)
 	for name, settings := range map[string]core.Settings{
 		"appearance enum": {Appearance: core.AppearanceDark + 1},
 		"autoplay enum":   {AutoplayNext: core.ToggleEnabled + 1},
 		"resume enum":     {ResumePlayback: core.ToggleEnabled + 1},
 		"language enum":   {Language: core.LanguageEnglish + 1},
-		"invalid utf-8":   {MPVPath: invalidUTF8},
-		"path bounds":     {MPVPath: tooLongPath},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := store.SaveSettings(ctx, settings); !errors.Is(err, ErrInvalidInput) {
@@ -199,6 +195,28 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	}
 	if got, err := store.History(cancelled); err == nil || got == nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled history = %#v, %v", got, err)
+	}
+}
+
+func TestLegacyPlayerPathDoesNotAffectCurrentSettings(t *testing.T) {
+	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
+	defer store.Close()
+	ctx := context.Background()
+	legacyPath := "C:/private/old-mpv.exe"
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO settings(id, appearance, mpv_path, autoplay_next, resume_playback, language)
+		VALUES (1, 3, ?, 2, 1, 1)`, legacyPath); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := store.Settings(ctx)
+	if err != nil || settings.Appearance != core.AppearanceDark || settings.Language != core.LanguageTraditionalChinese {
+		t.Fatalf("legacy settings = %#v, %v", settings, err)
+	}
+	if err := store.SaveSettings(ctx, settings); err != nil {
+		t.Fatal(err)
+	}
+	var retainedPath string
+	if err := store.db.QueryRowContext(ctx, `SELECT mpv_path FROM settings WHERE id = 1`).Scan(&retainedPath); err != nil || retainedPath != legacyPath {
+		t.Fatalf("legacy path changed during settings save: %q, %v", retainedPath, err)
 	}
 }
 

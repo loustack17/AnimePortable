@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"animeportable/adapters/persistence/sqlite"
-	"animeportable/adapters/player/mpv"
+	"animeportable/adapters/player/libmpv"
 	"animeportable/core"
 	metadata "animeportable/internal/metadata"
 )
@@ -233,7 +233,7 @@ func TestPlayReusesTrackedSessionAfterCallerCancellation(t *testing.T) {
 	service := newWithDependencies(dependencies{
 		store:     store,
 		source:    &persistentSource{item: core.SourceAnime{Ref: ref1.Anime, Title: "Anime"}},
-		newPlayer: func(string) (core.Player, error) { return player, nil },
+		newPlayer: func() (core.Player, error) { return player, nil },
 	})
 	t.Cleanup(func() { _ = service.Close() })
 
@@ -262,6 +262,48 @@ func TestPlayReusesTrackedSessionAfterCallerCancellation(t *testing.T) {
 	}
 }
 
+func TestStopPlaybackClosesTrackedSessionAndAllowsReplay(t *testing.T) {
+	store := newFakeStore()
+	store.anime["anime"] = core.Anime{ID: "anime", Title: "Anime"}
+	ref := core.EpisodeRef{Anime: core.SourceRef{Provider: "anime1", ID: "show"}, ID: "episode"}
+	store.mappings["anime"] = []core.EpisodeMapping{{AnimeID: "anime", EpisodeID: "episode", Ref: ref}}
+	player := &playbackTestPlayer{}
+	service := newWithDependencies(dependencies{
+		store:     store,
+		source:    &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: "Anime"}},
+		newPlayer: func() (core.Player, error) { return player, nil },
+	})
+	t.Cleanup(func() { _ = service.Close() })
+	request := PlayRequest{AnimeID: "anime", EpisodeID: "episode"}
+	if err := service.Play(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	first := player.session
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := service.StopPlayback(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled stop = %v", err)
+	}
+	if first.isClosed() {
+		t.Fatal("canceled stop closed the active session")
+	}
+	if err := service.StopPlayback(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !first.isClosed() {
+		t.Fatal("stop left the tracked session open")
+	}
+	if err := service.StopPlayback(context.Background()); err != nil {
+		t.Fatalf("repeated stop = %v", err)
+	}
+	if err := service.Play(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	if got := player.startCount(); got != 2 {
+		t.Fatalf("player starts after replay = %d, want 2", got)
+	}
+}
+
 func TestPlayFailureCanRecoverAndRejectsMillisecondOverflow(t *testing.T) {
 	store := newFakeStore()
 	store.anime["anime"] = core.Anime{ID: "anime"}
@@ -271,7 +313,7 @@ func TestPlayFailureCanRecoverAndRejectsMillisecondOverflow(t *testing.T) {
 	service := newWithDependencies(dependencies{
 		store:     store,
 		source:    &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: "Anime"}},
-		newPlayer: func(string) (core.Player, error) { return player, nil },
+		newPlayer: func() (core.Player, error) { return player, nil },
 	})
 	t.Cleanup(func() { _ = service.Close() })
 
@@ -299,16 +341,16 @@ func TestPlayPreservesSafePlayerLaunchErrors(t *testing.T) {
 		cause error
 		want  error
 	}{
-		{name: "missing", cause: mpv.ErrNotFound, want: mpv.ErrNotFound},
-		{name: "invalid path", cause: mpv.ErrInvalidPath, want: mpv.ErrInvalidPath},
+		{name: "closed", cause: libmpv.ErrPlayerClosed, want: ErrUnavailable},
+		{name: "failed", cause: libmpv.ErrPlayerFailed, want: ErrUnavailable},
 		{name: "generic", cause: errors.New("player secret https://internal.invalid/path"), want: ErrUnavailable},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			service := newWithDependencies(dependencies{
 				store:  store,
 				source: &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: "Anime"}},
-				newPlayer: func(string) (core.Player, error) {
-					return nil, fmt.Errorf("launch secret C:/private/mpv.exe: %w", test.cause)
+				newPlayer: func() (core.Player, error) {
+					return nil, fmt.Errorf("load secret C:/private/mpv.dll: %w", test.cause)
 				},
 			})
 			t.Cleanup(func() { _ = service.Close() })
@@ -316,10 +358,8 @@ func TestPlayPreservesSafePlayerLaunchErrors(t *testing.T) {
 			if err != test.want {
 				t.Fatalf("play error identity = %v, want %v", err, test.want)
 			}
-			if test.want == mpv.ErrNotFound || test.want == mpv.ErrInvalidPath {
-				if err.Error() != test.want.Error() {
-					t.Fatalf("play error message = %q, want %q", err.Error(), test.want.Error())
-				}
+			if err.Error() != test.want.Error() {
+				t.Fatalf("play error message = %q, want %q", err.Error(), test.want.Error())
 			}
 			if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "private") || strings.Contains(err.Error(), "internal.invalid") {
 				t.Fatalf("play error leaked launch detail: %q", err)
@@ -337,7 +377,7 @@ func TestConcurrentInitialPlayUsesOnePlayerStart(t *testing.T) {
 	service := newWithDependencies(dependencies{
 		store:     store,
 		source:    &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: "Anime"}},
-		newPlayer: func(string) (core.Player, error) { return player, nil },
+		newPlayer: func() (core.Player, error) { return player, nil },
 	})
 	t.Cleanup(func() { _ = service.Close() })
 
@@ -368,49 +408,59 @@ func TestConcurrentInitialPlayUsesOnePlayerStart(t *testing.T) {
 }
 
 func TestTerminalPlaybackEventAllowsNextPlayOnTrackedSession(t *testing.T) {
-	store := newFakeStore()
-	store.anime["anime"] = core.Anime{ID: "anime"}
-	first := core.EpisodeRef{Anime: core.SourceRef{Provider: "anime1", ID: "show"}, ID: "episode-1"}
-	second := core.EpisodeRef{Anime: first.Anime, ID: "episode-2"}
-	store.mappings["anime"] = []core.EpisodeMapping{
-		{AnimeID: "anime", EpisodeID: "episode-1", Ref: first},
-		{AnimeID: "anime", EpisodeID: "episode-2", Ref: second},
-	}
-	player := &playbackTestPlayer{}
-	service := newWithDependencies(dependencies{
-		store:     store,
-		source:    &persistentSource{item: core.SourceAnime{Ref: first.Anime, Title: "Anime"}},
-		newPlayer: func(string) (core.Player, error) { return player, nil },
-	})
-	t.Cleanup(func() { _ = service.Close() })
-	if err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode-1"}); err != nil {
-		t.Fatal(err)
-	}
-	player.mu.Lock()
-	session := player.session
-	player.mu.Unlock()
-	if session == nil {
-		t.Fatal("player did not retain session")
-	}
-	session.emit(core.PlaybackEvent{AnimeID: "anime", EpisodeID: "episode-1", Kind: core.PlaybackEventStopped, Position: time.Second, Duration: time.Minute})
-	session.setLoadError(mpv.ErrPlayerClosed)
-	if err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode-2"}); err != nil {
-		t.Fatalf("play after stopped event = %v", err)
-	}
-	if starts := player.startCount(); starts != 2 {
-		t.Fatalf("player starts after terminal event = %d, want recovery start", starts)
-	}
-	if loads := session.loadCount(); loads != 1 {
-		t.Fatalf("loads after terminal event = %d, want one", loads)
-	}
-	if !session.isClosed() {
-		t.Fatal("failed old session was not closed before recovery")
-	}
-	player.mu.Lock()
-	recovered := player.session
-	player.mu.Unlock()
-	if recovered == nil || recovered == session || recovered.isClosed() {
-		t.Fatal("recovery did not create a live replacement session")
+	for _, failure := range []struct {
+		name string
+		err  error
+	}{
+		{name: "embedded libmpv closed", err: libmpv.ErrPlayerClosed},
+		{name: "embedded libmpv failed", err: libmpv.ErrPlayerFailed},
+	} {
+		t.Run(failure.name, func(t *testing.T) {
+			store := newFakeStore()
+			store.anime["anime"] = core.Anime{ID: "anime"}
+			first := core.EpisodeRef{Anime: core.SourceRef{Provider: "anime1", ID: "show"}, ID: "episode-1"}
+			second := core.EpisodeRef{Anime: first.Anime, ID: "episode-2"}
+			store.mappings["anime"] = []core.EpisodeMapping{
+				{AnimeID: "anime", EpisodeID: "episode-1", Ref: first},
+				{AnimeID: "anime", EpisodeID: "episode-2", Ref: second},
+			}
+			player := &playbackTestPlayer{}
+			service := newWithDependencies(dependencies{
+				store:     store,
+				source:    &persistentSource{item: core.SourceAnime{Ref: first.Anime, Title: "Anime"}},
+				newPlayer: func() (core.Player, error) { return player, nil },
+			})
+			t.Cleanup(func() { _ = service.Close() })
+			if err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode-1"}); err != nil {
+				t.Fatal(err)
+			}
+			player.mu.Lock()
+			session := player.session
+			player.mu.Unlock()
+			if session == nil {
+				t.Fatal("player did not retain session")
+			}
+			session.emit(core.PlaybackEvent{AnimeID: "anime", EpisodeID: "episode-1", Kind: core.PlaybackEventStopped, Position: time.Second, Duration: time.Minute})
+			session.setLoadError(failure.err)
+			if err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode-2"}); err != nil {
+				t.Fatalf("play after stopped event = %v", err)
+			}
+			if starts := player.startCount(); starts != 2 {
+				t.Fatalf("player starts after terminal event = %d, want recovery start", starts)
+			}
+			if loads := session.loadCount(); loads != 1 {
+				t.Fatalf("loads after terminal event = %d, want one", loads)
+			}
+			if !session.isClosed() {
+				t.Fatal("failed old session was not closed before recovery")
+			}
+			player.mu.Lock()
+			recovered := player.session
+			player.mu.Unlock()
+			if recovered == nil || recovered == session || recovered.isClosed() {
+				t.Fatal("recovery did not create a live replacement session")
+			}
+		})
 	}
 }
 
@@ -667,7 +717,7 @@ func TestShutdownClosesSessionBeforeDependenciesAndStore(t *testing.T) {
 	service := newWithDependencies(dependencies{
 		store:     store,
 		source:    &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: "Anime"}},
-		newPlayer: func(string) (core.Player, error) { return player, nil },
+		newPlayer: func() (core.Player, error) { return player, nil },
 		close: func() error {
 			logMu.Lock()
 			log = append(log, "dependencies")

@@ -190,3 +190,23 @@ When sources conflict, use:
 6. old chat/session summaries
 
 The handoff accelerates recovery; it never overrides the project contract.
+
+
+## 12. Retrospective-audit durable state
+
+During the one-time v2.4.1 retrospective audit:
+
+- `docs/RETRO_AUDIT_STATUS.md` owns RA batch/finding state
+- `docs/AGENT_HANDOFF.md` owns only the compact current recovery pointer
+- do not copy the full finding table into the handoff
+- checkpoint both files after each completed RA batch and before any intentional/usage/context stop
+- on fresh-session recovery, reconcile Git + both state files and continue the recorded batch; do not rediscover completed batches unless evidence conflict is found
+
+The handoff may point to:
+
+```yaml
+active_mode: RETRO_AUDIT
+active_batch: RA-03
+next_action: "Run the focused resource-lifecycle reproducer for RA-03-F002."
+retro_status: "docs/RETRO_AUDIT_STATUS.md"
+```

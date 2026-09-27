@@ -16,7 +16,7 @@ tasks:
     deps:
       - task: build
     cmds:
-      - go run ../../tools/portable-package --os windows --arch {{.TARGET_ARCH}} --binary {{.BIN_DIR}}/animeportable.exe --output {{.BIN_DIR}}/animeportable-windows-{{.TARGET_ARCH}}.zip --license ../../LICENSE --notices ../../THIRD_PARTY_NOTICES.md
+      - powershell -NoProfile -File build/windows/package.ps1 -Arch {{.TARGET_ARCH}} -Binary {{.BIN_DIR}}/animeportable.exe -Output {{.BIN_DIR}}/animeportable-windows-{{.TARGET_ARCH}}.zip
 
   run:
     cmds:

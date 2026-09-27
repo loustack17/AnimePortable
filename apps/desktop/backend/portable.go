@@ -34,6 +34,9 @@ func ValidatePortableStatePath(path string) error {
 }
 
 func planPortable(goos, executablePath, userConfigDir string) (PortablePlan, error) {
+	if goos != "windows" {
+		return PortablePlan{}, ErrInvalidInput
+	}
 	if strings.TrimSpace(executablePath) == "" || !filepath.IsAbs(executablePath) {
 		return PortablePlan{}, ErrInvalidInput
 	}
@@ -43,15 +46,6 @@ func planPortable(goos, executablePath, userConfigDir string) (PortablePlan, err
 		return PortablePlan{}, ErrUnavailable
 	}
 	root := filepath.Dir(executablePath)
-	if goos == "darwin" {
-		macOSDir := filepath.Dir(executablePath)
-		contents := filepath.Dir(macOSDir)
-		bundle := filepath.Dir(contents)
-		if filepath.Base(macOSDir) != "MacOS" || filepath.Base(contents) != "Contents" || filepath.Base(bundle) != "AnimePortable.app" {
-			return PortablePlan{}, ErrInvalidInput
-		}
-		root = filepath.Dir(bundle)
-	}
 	dataDir := filepath.Join(root, "data")
 	databasePath := filepath.Join(dataDir, "animeportable.db")
 	if err := sqlite.ValidatePortablePath(databasePath); err != nil {

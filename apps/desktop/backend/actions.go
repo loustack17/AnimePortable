@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"animeportable/adapters/player/mpv"
+	"animeportable/adapters/player/libmpv"
 	"animeportable/core"
 )
 
@@ -373,14 +373,11 @@ func (service *Service) SaveSettings(ctx context.Context, input Settings) error 
 	if err != nil {
 		return err
 	}
-	if len(input.MPVPath) > 8192 {
-		return ErrInvalidInput
-	}
 	_, store, _, err := service.appSnapshot()
 	if err != nil {
 		return err
 	}
-	return safeError(store.SaveSettings(operationCtx, core.Settings{Appearance: appearance, MPVPath: input.MPVPath, AutoplayNext: autoplay, ResumePlayback: resume, Language: language}))
+	return safeError(store.SaveSettings(operationCtx, core.Settings{Appearance: appearance, AutoplayNext: autoplay, ResumePlayback: resume, Language: language}))
 }
 
 func (service *Service) Play(ctx context.Context, input PlayRequest) error {
@@ -462,6 +459,24 @@ func (service *Service) Play(ctx context.Context, input PlayRequest) error {
 	return nil
 }
 
+func (service *Service) StopPlayback(ctx context.Context) error {
+	_, done, err := service.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer done()
+	service.playMu.Lock()
+	defer service.playMu.Unlock()
+	service.mu.Lock()
+	session := service.session
+	service.session = nil
+	service.mu.Unlock()
+	if session == nil {
+		return nil
+	}
+	return safeError(session.Close())
+}
+
 func (service *Service) ensurePlayer(ctx context.Context, store core.Store) (*core.App, error) {
 	service.mu.Lock()
 	if service.player != nil && service.app != nil {
@@ -470,11 +485,7 @@ func (service *Service) ensurePlayer(ctx context.Context, store core.Store) (*co
 		return app, nil
 	}
 	service.mu.Unlock()
-	settings, err := store.Settings(ctx)
-	if err != nil {
-		return nil, safeError(err)
-	}
-	player, err := service.newPlayer(settings.MPVPath)
+	player, err := service.newPlayer()
 	if err != nil {
 		return nil, safeError(err)
 	}
@@ -491,7 +502,7 @@ func (service *Service) ensurePlayer(ctx context.Context, store core.Store) (*co
 }
 
 func terminalPlaybackError(err error) bool {
-	return errors.Is(err, mpv.ErrPlayerClosed) || errors.Is(err, mpv.ErrPlayerFailed) || errors.Is(err, mpv.ErrIPCClosed)
+	return errors.Is(err, libmpv.ErrPlayerClosed) || errors.Is(err, libmpv.ErrPlayerFailed)
 }
 
 func (service *Service) GetCover(ctx context.Context, animeID string) (Cover, error) {

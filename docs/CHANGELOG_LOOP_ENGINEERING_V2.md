@@ -1,3 +1,22 @@
+## v2.4.1 — Isolated verifier fallback and Windows sandbox circuit breaker (2026-09-12)
+
+Validated against current OpenAI/Codex documentation, GitHub Actions documentation, current `openai/codex` Windows sandbox issues, and corroborating community reports.
+
+Changes:
+
+- added `docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md`
+- separated sandbox infrastructure/capability limitations from repository `TEST_FAILURE`
+- added a stable-fingerprint circuit breaker so agents do not waste usage repeatedly changing shells/paths for the same sandbox failure
+- allowed GitHub-hosted Actions as authoritative deterministic verification when the local Codex sandbox cannot execute the verifier and the CI environment can preserve the criterion
+- kept unsandboxed host execution diagnostic-only
+- kept Full Access / `danger-full-access` prohibited as an acceptance fallback
+- protected `.github/workflows/**` / `.github/actions/**` behind explicit human-approved local scope plus independent verifier/security review
+- added `ENV-001..008` acceptance criteria and matrix coverage
+- clarified that Linux/browser CI cannot replace native Windows/MPV/human UX acceptance
+- updated retrospective audit behavior so sandbox limitations do not automatically create code findings
+
+Primary basis includes OpenAI's sandbox/approval guidance, OpenAI's Windows sandbox design, GitHub-hosted runner and workflow-permission documentation, and upstream Windows `spawn EPERM` reports #21470/#35070/#37272/#37415.
+
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 
 # Loop Engineering v2 Change Summary
@@ -127,7 +146,7 @@ Changes:
 - required isolated worktrees/disjoint write sets for parallel code-changing agents
 - added execution harness/model/multi-agent fields to loop/status evidence
 - corrected stop-loss subsection numbering under section 12
-## v2.3 — Durable agent state / bounded session handoff
+## v2.4 — Durable agent state / bounded session handoff
 
 Added repository-resident recovery memory for Codex App/CLI without turning context into an unbounded transcript.
 

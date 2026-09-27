@@ -8,6 +8,8 @@ Do not reorder major phases without a new ADR.
 
 The plan intentionally proves the highest-risk assumptions before spending time on UI polish.
 
+Phases 0–22 and the Fyne M0–M3 migration record historical delivery. ADR-023 and `docs/19_ADR_FLTK_WINDOWS_DESKTOP.md` supersede the UI/player choices below for current Windows work. Loop 28 now gates the FLTK/libmpv Windows replacement; Loops 29–42 resume only after Windows acceptance and use FLTK. Linux/macOS implementation is deferred. Historical phase descriptions remain evidence, not instructions to rebuild Wails or Fyne.
+
 ## Global implementation-quality requirements
 
 Every phase that changes production code must preserve the architecture in `docs/02_ARCHITECTURE.md` and satisfy the code-quality criteria in `docs/06_ACCEPTANCE_CRITERIA.md`. Functional success alone is not phase completion.
@@ -647,7 +649,7 @@ Works from cached SQLite data without network.
 
 ---
 
-## Phase 23 — Search UI
+## Phase 23 — Fyne Search UI
 
 ### Requirements
 
@@ -661,7 +663,7 @@ Works from cached SQLite data without network.
 
 ---
 
-## Phase 24 — Anime Detail and Episode UI
+## Phase 24 — Fyne Anime Detail and Episode UI
 
 ### Show
 
@@ -683,7 +685,7 @@ Works from cached SQLite data without network.
 
 ---
 
-## Phase 25 — Schedule UI
+## Phase 25 — Fyne Schedule UI
 
 ### Preferred representation
 
@@ -697,7 +699,7 @@ Chronological readable list grouped by day.
 
 ---
 
-## Phase 26 — Following UI
+## Phase 26 — Fyne Following UI
 
 ### Show
 
@@ -710,7 +712,7 @@ No notifications in MVP.
 
 ---
 
-## Phase 27 — History / Continue Watching UI
+## Phase 27 — Fyne History / Continue Watching UI
 
 ### Show
 
@@ -724,7 +726,7 @@ Support remove from history.
 
 ---
 
-## Phase 28 — Keyboard-First Navigation
+## Phase 28 — Fyne Keyboard-First Navigation
 
 ### Goal
 
@@ -747,7 +749,7 @@ Complete core workflow with zero mouse input:
 
 ---
 
-## Phase 29 — Cache-First Startup and Refresh
+## Phase 29 — Fyne Cache-First Startup and Refresh
 
 ### Goal
 
@@ -791,7 +793,7 @@ Normal end-file.
 
 ---
 
-## Phase 31 — Settings
+## Phase 31 — Fyne Settings
 
 Keep minimal:
 
@@ -825,13 +827,13 @@ Audit every trust boundary.
 
 Verify:
 
-- frontend network isolation
+- native UI network isolation
 - SSRF
 - redirects
 - TLS
 - secrets
 - logging
-- WebView CSP
+- removal of the former WebView/CSP execution path and equivalent native untrusted-input validation
 - proxy isolation
 - IPC isolation
 - metadata sanitization
@@ -870,7 +872,7 @@ No feature work in this phase.
 
 ### Windows
 
-- WebView2
+- Fyne runtime and no-WebView process/library proof
 - MPV detection
 - named pipe IPC
 - keyboard
@@ -904,9 +906,8 @@ CI:
 - Go tests
 - Go vet
 - govulncheck
-- frontend lint
-- frontend typecheck
-- frontend build
+- Fyne UI tests and static checks
+- native UI build
 - platform build jobs
 
 MVP release target:
@@ -933,4 +934,7 @@ All categories must pass:
 - privacy
 - resource lifecycle
 - cross-platform build
+- portable extracted-folder operation without installer
+- no Wails/Svelte/WebView release dependency
+- defined resource envelope with whole-process-tree playback evidence
 - code quality / maintainability / file structure

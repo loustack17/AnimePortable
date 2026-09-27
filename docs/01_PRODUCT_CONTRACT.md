@@ -14,9 +14,9 @@ Build a lightweight desktop anime client whose primary job is to make it fast an
 - start playback
 - resume progress later
 
-Playback itself is delegated to MPV.
+Playback uses in-process libmpv on Windows under ADR-023.
 
-The application should disappear conceptually once playback starts. It must not put its own UI over the video.
+Playback uses a minimal immersive control overlay on the video under ADR-023.
 
 ## 2. Product philosophy
 
@@ -31,13 +31,12 @@ The user should feel that the application is a clean library and controller, not
 ### Lightweight
 
 - Avoid Electron.
-- Use the OS WebView through Wails.
+- Use FLTK for the current Windows desktop; do not use a WebView or browser-backed UI (ADR-020/023).
 - Avoid unnecessary background polling.
 - Avoid large in-memory caches.
 - Avoid unnecessary runtime dependencies.
-- Do not embed a video engine in the application.
-- Do not bundle MPV in the MVP.
-- Keep frontend dependencies minimal.
+- Load an adjacent hash-pinned libmpv only when playback starts; distribution needs exact-build license review.
+- Keep native UI dependencies minimal.
 
 ### Fast
 

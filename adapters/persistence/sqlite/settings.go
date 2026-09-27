@@ -9,11 +9,8 @@ import (
 	"animeportable/core"
 )
 
-const maxMPVPathBytes = 8192
-
 func validSettings(settings core.Settings) bool {
 	return settings.Appearance <= core.AppearanceDark &&
-		validText(settings.MPVPath, maxMPVPathBytes) &&
 		settings.AutoplayNext <= core.ToggleEnabled &&
 		settings.ResumePlayback <= core.ToggleEnabled &&
 		settings.Language <= core.LanguageEnglish
@@ -26,14 +23,13 @@ func (store *Store) SaveSettings(ctx context.Context, settings core.Settings) er
 	return store.withDB(ctx, func(db *sql.DB) error {
 		_, err := db.ExecContext(ctx, `INSERT INTO settings (
 			id, appearance, mpv_path, autoplay_next, resume_playback, language
-		) VALUES (1, ?, ?, ?, ?, ?)
+		) VALUES (1, ?, '', ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			appearance = excluded.appearance,
-			mpv_path = excluded.mpv_path,
 			autoplay_next = excluded.autoplay_next,
 			resume_playback = excluded.resume_playback,
 			language = excluded.language`,
-			settings.Appearance, settings.MPVPath, settings.AutoplayNext, settings.ResumePlayback, settings.Language)
+			settings.Appearance, settings.AutoplayNext, settings.ResumePlayback, settings.Language)
 		return err
 	})
 }
@@ -42,9 +38,9 @@ func (store *Store) Settings(ctx context.Context) (core.Settings, error) {
 	settings := core.DefaultSettings()
 	err := store.withDB(ctx, func(db *sql.DB) error {
 		var appearance, autoplayNext, resumePlayback, language int
-		err := db.QueryRowContext(ctx, `SELECT appearance, mpv_path, autoplay_next, resume_playback, language
+		err := db.QueryRowContext(ctx, `SELECT appearance, autoplay_next, resume_playback, language
 			FROM settings WHERE id = 1`).Scan(
-			&appearance, &settings.MPVPath, &autoplayNext, &resumePlayback, &language,
+			&appearance, &autoplayNext, &resumePlayback, &language,
 		)
 		if err == sql.ErrNoRows {
 			return nil

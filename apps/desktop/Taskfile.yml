@@ -5,23 +5,20 @@ version: '3'
 vars:
   APP_NAME: animeportable
   BIN_DIR: bin
-  TARGET_OS: '{{.TARGET_OS | default .OS}}'
   TARGET_ARCH: '{{.TARGET_ARCH | default .ARCH}}'
 
 includes:
   windows: ./build/windows/Taskfile.yml
-  darwin: ./build/darwin/Taskfile.yml
-  linux: ./build/linux/Taskfile.yml
 
 tasks:
   build:
     cmds:
-      - task: '{{.TARGET_OS}}:build'
+      - task: windows:build
 
   package:
     cmds:
-      - task: '{{.TARGET_OS}}:package'
+      - task: windows:package
 
   run:
     cmds:
-      - task: '{{.TARGET_OS}}:run'
+      - task: windows:run

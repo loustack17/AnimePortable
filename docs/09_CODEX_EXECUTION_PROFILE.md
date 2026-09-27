@@ -2,7 +2,7 @@
 
 # Codex App / Codex CLI Execution Profile
 
-This project intentionally targets **OpenAI Codex App and Codex CLI** as the supported implementation harness for Loop Engineering Protocol v2.3.
+This project intentionally targets **OpenAI Codex App and Codex CLI** as the supported implementation harness for Loop Engineering Protocol v2.4.1.
 
 OpenCode Go is not required by this protocol. If it is reintroduced later, do not assume behavioral equivalence: its sandbox, instruction loading, multi-agent isolation, approvals, tool permissions, and evidence semantics must be reviewed separately before it may participate in a passing loop.
 
@@ -109,7 +109,7 @@ The agent may read for the connected repository:
 - failure logs
 - diagnostic artifacts required by the loop
 
-Remote write is limited to the current feature branch/PR when authorized. Default-branch direct push, force push of unrelated history, workflow administration, reruns/cancellation, releases/tags, secrets, variables, environments, branch protection, repository settings, webhooks, deploy keys, and organization administration remain human-gated.
+Remote write requires authorization. Target `main` by default; use a branch/PR only when repository protection requires it, the human requests it, or the change is high-risk/incompatible. Force push, workflow administration, reruns/cancellation, releases/tags, secrets, variables, environments, branch protection, repository settings, webhooks, deploy keys, and organization administration remain human-gated.
 
 ## 5. Codex multi-agent policy
 
@@ -192,7 +192,7 @@ Codex versions evolve. When an upgrade removes/deprecates a configuration key or
 
 ## 8. OpenCode Go status
 
-Protocol v2.3 does not require OpenCode Go and no acceptance evidence may depend exclusively on it.
+Protocol v2.4.1 does not require OpenCode Go and no acceptance evidence may depend exclusively on it.
 
 If the user stops using OpenCode Go, no engineering-plan change is required.
 
@@ -266,3 +266,84 @@ Token discipline:
 - root aggregates worker findings into the single bounded global handoff
 
 See `docs/10_DURABLE_AGENT_STATE.md` for the authoritative project policy.
+
+
+## 11. v2.4.1 verified Codex operating notes
+
+Current Codex documentation confirms:
+
+- the `AGENTS.md` instruction chain is built once per run/session; protocol/instruction changes should therefore start a fresh session rather than assuming an old resumed session has refreshed instructions
+- project instruction discovery walks from Git/project root to the current working directory; the default combined instruction cap is 32 KiB
+- current Codex releases enable subagent workflows; subagents can be requested by prompt or applicable `AGENTS.md`
+- subagent workflows consume more tokens than comparable single-agent work
+- OpenAI recommends starting parallel delegation with read-heavy exploration/tests/triage/summarization and being more careful with parallel write-heavy workflows
+- subagents inherit the parent turn's current permission/sandbox mode unless a custom agent narrows it
+- project-scoped custom agents are supported under `.codex/agents/`; this repository provides read-only retrospective reviewers without hard-coding a model
+- the Codex App worktree feature supports parallel branches/checkouts, but a Git worktree is not a security sandbox
+- Codex CLI `/status` reports active model, approval policy, writable roots, and current token usage; inspect it before a long run when practical
+- `workspace-write` controls where commands may write; it does not guarantee that unrelated host files are unreadable. Use an external container/VM/dedicated environment when confidentiality/read isolation is required
+- GitHub workflow history/logs can be read with repository read access; workflow-run API access can use repository `Actions: read`, and `gh run view --log-failed` can retrieve failed-step logs
+
+Project policy therefore distinguishes:
+1. **write containment** — built-in Codex workspace sandbox
+2. **read/confidentiality isolation** — external isolation when required
+3. **parallel source isolation** — Git worktrees
+4. **remote authorization** — repository-scoped GitHub credentials/permissions
+
+These are separate controls and must not be described as interchangeable.
+
+Operational warning:
+
+Open Codex GitHub issues in 2026 document real compaction/resume and permission-profile regressions. They are secondary evidence, not specification, but justify the project's durable handoff and effective-runtime verification. If actual runtime `/status`/permission behavior conflicts with expected config, fail safe and ask the human instead of silently broadening access.
+
+Current references:
+
+- https://learn.chatgpt.com/docs/agent-configuration/agents-md
+- https://learn.chatgpt.com/docs/agent-configuration/subagents
+- https://learn.chatgpt.com/docs/environments/git-worktrees
+- https://learn.chatgpt.com/docs/developer-commands?surface=cli
+- https://openai.com/index/running-codex-safely/
+- https://openai.com/index/building-codex-windows-sandbox/
+- https://github.com/openai/codex/issues/27731
+- https://github.com/openai/codex/issues/34322
+
+
+## 12. Windows sandbox capability failures and isolated verifier fallback
+
+The Windows Codex sandbox is distinct from Microsoft's optional Windows Sandbox VM feature. The native Codex Windows design uses Windows process/token/ACL mechanisms; WSL, Docker, Hyper-V, or the Windows Sandbox feature are not prerequisites for the native Codex sandbox itself.
+
+OpenAI documents Windows sandbox setup modes named `elevated` and `unelevated`. This project does not require one universal mode across all machines. The human-managed effective mode is acceptable when it:
+
+- is supported by the installed Codex build
+- passes a minimal process-execution health check
+- preserves the repository write boundary
+- does not require Full Access
+
+If the sandbox cannot start a minimal process, classify `SANDBOX_INFRA_FAILURE`.
+
+If normal commands run but a verifier requires child-process behavior that the sandbox blocks (for example Node `child_process.spawn()` / Chromium helper startup returning `EPERM`), classify `SANDBOX_CAPABILITY_LIMITATION` / `SANDBOX_CHILD_PROCESS_LIMITATION`.
+
+Do not burn retries changing shells or executable paths after the same causal fingerprint is confirmed. Current `openai/codex` issue reports #21470 and #35070 contain minimal reproductions where Node itself runs while child-process spawning fails with `EPERM`; Computer Use/Chromium helper reports show the same class of failure. These are issue reports, not contractual product behavior, so the protocol uses them only to justify fail-safe classification/circuit breaking.
+
+For a deterministic check blocked only by that local sandbox capability, use the canonical fallback policy in `docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md`:
+
+1. local capable Codex sandbox
+2. GitHub-hosted runner for the connected repository
+3. another human-approved isolated CI environment
+
+The normal host outside the sandbox is diagnostic only. Full Access/danger bypass is never an acceptance fallback.
+
+GitHub-hosted CI must preserve the criterion and use least privilege. GitHub documents standard hosted runner labels such as `ubuntu-latest` and `windows-latest`, repository read access for viewing workflow run history/logs, and `Actions: read` for fine-grained workflow-run read APIs. Workflow changes remain a protected/human-gated surface.
+
+References:
+
+- https://openai.com/index/building-codex-windows-sandbox/
+- https://openai.com/index/running-codex-safely/
+- https://learn.chatgpt.com/docs/app-server
+- https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+- https://docs.github.com/en/actions/how-tos/monitor-workflows/view-workflow-run-history
+- https://docs.github.com/en/rest/actions/workflow-runs
+- https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+- https://github.com/openai/codex/issues/21470
+- https://github.com/openai/codex/issues/35070
+- https://github.com/openai/codex/issues/37272

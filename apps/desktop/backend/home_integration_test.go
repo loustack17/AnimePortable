@@ -107,7 +107,7 @@ func TestHomeHistoryAfterRestartInvokesExistingPlayback(t *testing.T) {
 	player := &playbackTestPlayer{}
 	service := newWithDependencies(dependencies{store: reopened,
 		source:    &persistentSource{item: core.SourceAnime{Ref: ref.Anime, Title: anime.Title}},
-		newPlayer: func(string) (core.Player, error) { return player, nil },
+		newPlayer: func() (core.Player, error) { return player, nil },
 	})
 	t.Cleanup(func() { _ = service.Close() })
 	history, err := service.History(ctx)

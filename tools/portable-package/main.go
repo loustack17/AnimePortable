@@ -3,9 +3,9 @@
 package main
 
 import (
-	"archive/tar"
 	"archive/zip"
-	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,22 +15,26 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"animeportable/internal/runtimepin"
 )
 
 type request struct {
-	OS        string
-	Arch      string
-	Binary    string
-	Output    string
-	License   string
-	Notices   string
-	Icon      string
-	InfoPlist string
+	OS            string
+	Arch          string
+	Binary        string
+	Output        string
+	License       string
+	Notices       string
+	LibMPV        string
+	LibMPVSHA256  string
+	LibMPVLicense string
 }
 
 type archiveFile struct {
 	name string
 	path string
+	hash string
 }
 
 func main() {
@@ -41,49 +45,62 @@ func main() {
 	flag.StringVar(&req.Output, "output", "", "portable archive path")
 	flag.StringVar(&req.License, "license", "", "repository license file")
 	flag.StringVar(&req.Notices, "notices", "", "third-party notices file")
-	flag.StringVar(&req.Icon, "icon", "", "macOS ICNS icon")
-	flag.StringVar(&req.InfoPlist, "plist", "", "macOS Info.plist")
+	flag.StringVar(&req.LibMPV, "libmpv", "", "Windows libmpv runtime DLL")
+	flag.StringVar(&req.LibMPVSHA256, "libmpv-sha256", "", "expected SHA-256 of libmpv runtime DLL")
+	flag.StringVar(&req.LibMPVLicense, "libmpv-license", "", "license notice for bundled libmpv runtime")
 	flag.Parse()
+	if err := validatePinnedRuntime(req); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if err := packageArtifact(req); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
+func validatePinnedRuntime(req request) error {
+	if req.OS == "windows" && req.LibMPV == "" {
+		return errors.New("Windows portable package requires the pinned libmpv runtime")
+	}
+	if req.LibMPV != "" {
+		if req.OS != "windows" || req.Arch != "amd64" {
+			return errors.New("pinned libmpv runtime supports Windows amd64 only")
+		}
+		if !strings.EqualFold(req.LibMPVSHA256, runtimepin.LibMPVSHA256) {
+			return errors.New("libmpv runtime digest differs from the executable pin")
+		}
+	}
+	return nil
+}
+
 func packageArtifact(req request) error {
 	if req.Arch == "" || req.Binary == "" || req.Output == "" || req.License == "" || req.Notices == "" {
 		return errors.New("arch, binary, output, license and notices are required")
 	}
-	if req.OS != "windows" && req.OS != "linux" && req.OS != "darwin" {
+	if req.OS != "windows" || req.Arch != "amd64" {
 		return fmt.Errorf("unsupported target OS %q", req.OS)
 	}
-	if req.OS == "linux" && !strings.HasSuffix(req.Output, ".tar.gz") {
-		return errors.New("Linux portable artifacts must use .tar.gz")
+	if !strings.HasSuffix(req.Output, ".zip") {
+		return errors.New("Windows portable artifacts must use .zip")
 	}
-	if req.OS != "linux" && !strings.HasSuffix(req.Output, ".zip") {
-		return errors.New("Windows and macOS portable artifacts must use .zip")
+	if req.LibMPV == "" || req.LibMPVLicense == "" {
+		return errors.New("Windows package requires libmpv runtime and license notice")
+	}
+	decoded, err := hex.DecodeString(req.LibMPVSHA256)
+	if err != nil || len(decoded) != sha256.Size {
+		return errors.New("libmpv runtime requires a valid SHA-256 digest")
 	}
 
-	files := []archiveFile{{name: "animeportable", path: req.Binary}}
-	if req.OS == "windows" {
-		files[0].name += ".exe"
-	}
+	files := []archiveFile{{name: "animeportable.exe", path: req.Binary}}
 	files = append(files,
 		archiveFile{name: "LICENSE", path: req.License},
 		archiveFile{name: "THIRD_PARTY_NOTICES.md", path: req.Notices},
 	)
-	if req.OS == "darwin" {
-		if req.Icon == "" || req.InfoPlist == "" {
-			return errors.New("macOS packages require an ICNS icon and Info.plist")
-		}
-		files = []archiveFile{
-			{name: "AnimePortable.app/Contents/MacOS/animeportable", path: req.Binary},
-			{name: "AnimePortable.app/Contents/Resources/icons.icns", path: req.Icon},
-			{name: "AnimePortable.app/Contents/Resources/LICENSE", path: req.License},
-			{name: "AnimePortable.app/Contents/Resources/THIRD_PARTY_NOTICES.md", path: req.Notices},
-			{name: "AnimePortable.app/Contents/Info.plist", path: req.InfoPlist},
-		}
-	}
+	files = append(files,
+		archiveFile{name: "libmpv-2.dll", path: req.LibMPV, hash: strings.ToLower(req.LibMPVSHA256)},
+		archiveFile{name: "licenses/libmpv.txt", path: req.LibMPVLicense},
+	)
 	for _, file := range files {
 		if err := validateEntryName(file.name); err != nil {
 			return err
@@ -106,11 +123,7 @@ func packageArtifact(req request) error {
 			os.Remove(req.Output)
 		}
 	}()
-	if req.OS == "linux" {
-		err = writeTarGzip(output, files)
-	} else {
-		err = writeZip(output, files)
-	}
+	err = writeZip(output, files)
 	if err != nil {
 		return err
 	}
@@ -202,48 +215,16 @@ func addZipFile(writer *zip.Writer, file archiveFile) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(entry, input)
-	return err
-}
-
-func writeTarGzip(output io.Writer, files []archiveFile) error {
-	gzipWriter := gzip.NewWriter(output)
-	gzipWriter.Header.ModTime = time.Time{}
-	tarWriter := tar.NewWriter(gzipWriter)
-	for _, file := range files {
-		if err := addTarFile(tarWriter, file); err != nil {
-			tarWriter.Close()
-			gzipWriter.Close()
-			return err
-		}
-	}
-	if err := tarWriter.Close(); err != nil {
-		gzipWriter.Close()
+	if file.hash == "" {
+		_, err = io.Copy(entry, input)
 		return err
 	}
-	return gzipWriter.Close()
-}
-
-func addTarFile(writer *tar.Writer, file archiveFile) error {
-	if err := validateEntryName(file.name); err != nil {
+	hasher := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(entry, hasher), input); err != nil {
 		return err
 	}
-	input, err := openRegularFile(file.path)
-	if err != nil {
-		return err
+	if hex.EncodeToString(hasher.Sum(nil)) != file.hash {
+		return errors.New("libmpv runtime SHA-256 mismatch")
 	}
-	defer input.Close()
-	info, err := input.Stat()
-	if err != nil {
-		return err
-	}
-	header := &tar.Header{Name: file.name, Mode: 0o755, Size: info.Size(), ModTime: time.Unix(0, 0).UTC(), Typeflag: tar.TypeReg, Format: tar.FormatUSTAR}
-	if strings.HasSuffix(file.name, ".md") || filepath.Base(file.name) == "LICENSE" || strings.HasSuffix(file.name, ".plist") {
-		header.Mode = 0o644
-	}
-	if err := writer.WriteHeader(header); err != nil {
-		return err
-	}
-	_, err = io.Copy(writer, input)
-	return err
+	return nil
 }

@@ -10,28 +10,25 @@ on:
   push:
 
 jobs:
-  linux:
-    runs-on: ubuntu-latest
+  windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: 1.26.x
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y build-essential pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev xvfb xdotool
       - name: Verify Go formatting
+        shell: pwsh
         run: |
-          files=$(git ls-files '*.go')
-          unformatted=$(gofmt -l $files)
-          test -z "$unformatted" || { printf 'Unformatted Go files:\n%s\n' "$unformatted"; exit 1; }
+          $files = @(git ls-files '*.go')
+          $unformatted = @(gofmt -l $files)
+          if ($unformatted.Count -ne 0) { throw "Unformatted Go files: $($unformatted -join ', ')" }
       - name: Verify Go module
         run: go mod verify
       - name: Test Go
-        run: go test ./...
-      - name: Repeat native Home keyboard and cancellation checks
-        run: go test -count=20 -run '^TestShellKeyboardMovesVisibleFocusAndCancelsHomeLoads$' ./apps/desktop/native
+        run: go test -count=1 ./...
+      - name: Repeat desktop lifecycle and player checks
+        run: go test -count=20 ./apps/desktop ./apps/desktop/backend ./apps/desktop/fltkhome ./adapters/player/libmpv
       - name: Test Anime1 adapter acceptance
         run: go test ./adapters/source/anime1 -run '^TestAnime1AdapterAcceptance'
       - name: Test Go with race detector
@@ -40,160 +37,41 @@ jobs:
         run: go vet ./...
       - name: Check Go vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
-      - name: Build and package native Linux desktop
-        run: |
-          mkdir -p "$RUNNER_TEMP/native-linux" "$RUNNER_TEMP/extracted-linux"
-          go build -tags production -trimpath -buildvcs=false -o "$RUNNER_TEMP/native-linux/animeportable" ./apps/desktop
-          go run ./tools/portable-package --os linux --arch amd64 --binary "$RUNNER_TEMP/native-linux/animeportable" --output "$RUNNER_TEMP/animeportable-linux-amd64.tar.gz" --license LICENSE --notices THIRD_PARTY_NOTICES.md
-          tar -xzf "$RUNNER_TEMP/animeportable-linux-amd64.tar.gz" -C "$RUNNER_TEMP/extracted-linux"
-          test -x "$RUNNER_TEMP/extracted-linux/animeportable"
-      - name: Smoke test extracted Linux desktop under Xvfb
-        timeout-minutes: 3
-        env:
-          XDG_CONFIG_HOME: ${{ runner.temp }}/original-config
-          XDG_CACHE_HOME: ${{ runner.temp }}/original-cache
-        run: |
-          xvfb-run -a sh -c '
-            "$1" & app_pid=$!
-            trap "kill $app_pid 2>/dev/null || true" EXIT
-            for attempt in $(seq 1 30); do
-              if xdotool search --onlyvisible --name AnimePortable >/dev/null 2>&1; then exit 0; fi
-              if ! kill -0 "$app_pid" 2>/dev/null; then exit 1; fi
-              sleep 1
-            done
-            exit 1
-          ' sh "$RUNNER_TEMP/extracted-linux/animeportable"
-          test ! -e "$XDG_CONFIG_HOME/fyne"
-          test ! -e "$XDG_CACHE_HOME/fyne"
-          test -d "$RUNNER_TEMP/extracted-linux/data/fyne-cache"
-          test -d "$RUNNER_TEMP/extracted-linux/data/fyne-cache/fyne"
-          test -d "$RUNNER_TEMP/extracted-linux/data/fyne-config/fyne"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: animeportable-linux-amd64-portable
-          path: ${{ runner.temp }}/animeportable-linux-amd64.tar.gz
-          if-no-files-found: error
-      - name: Verify clean worktree
-        run: test -z "$(git status --porcelain)"
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version: 1.26.x
-      - name: Test native macOS desktop and portable paths
-        run: |
-          export TMPDIR="$(cd "$TMPDIR" && pwd -P)"
-          go test -count=1 ./apps/desktop/... ./adapters/persistence/sqlite ./tools/portable-package
-      - name: Build and package native macOS desktop
-        run: |
-          mkdir -p "$RUNNER_TEMP/native-macos" "$RUNNER_TEMP/extracted-macos"
-          go build -tags production -trimpath -buildvcs=false -o "$RUNNER_TEMP/native-macos/animeportable" ./apps/desktop
-          go run ./tools/portable-package --os darwin --arch "$(go env GOARCH)" --binary "$RUNNER_TEMP/native-macos/animeportable" --output "$RUNNER_TEMP/animeportable-darwin-$(go env GOARCH).zip" --license LICENSE --notices THIRD_PARTY_NOTICES.md --icon apps/desktop/build/darwin/icons.icns --plist apps/desktop/build/darwin/Info.plist
-          unzip -q "$RUNNER_TEMP/animeportable-darwin-$(go env GOARCH).zip" -d "$RUNNER_TEMP/extracted-macos"
-          test -x "$RUNNER_TEMP/extracted-macos/AnimePortable.app/Contents/MacOS/animeportable"
-          file "$RUNNER_TEMP/extracted-macos/AnimePortable.app/Contents/MacOS/animeportable"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: animeportable-darwin-portable
-          path: ${{ runner.temp }}/animeportable-darwin-*.zip
-          if-no-files-found: error
-      - name: Smoke test extracted macOS desktop
-        timeout-minutes: 3
-        run: |
-          executable="$RUNNER_TEMP/extracted-macos/AnimePortable.app/Contents/MacOS/animeportable"
-          "$executable" & app_pid=$!
-          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 10); do
-            kill -0 "$app_pid" 2>/dev/null || exit 1
-            sleep 1
-          done
-          test ! -e "$HOME/Library/Preferences/fyne"
-          test ! -e "$HOME/Library/Caches/fyne"
-          test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Caches"
-          test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Caches/fyne"
-          test -d "$RUNNER_TEMP/extracted-macos/data/fyne-home/Library/Preferences/fyne"
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version: 1.26.x
-      - name: Install pinned external MPV test executable
+      - name: Verify desktop dependency closure
         shell: pwsh
         run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'mpv-v0.41.0.zip'
-          $uri = 'https://github.com/mpv-player/mpv/releases/download/v0.41.0/mpv-v0.41.0-x86_64-pc-windows-msvc.zip'
-          Invoke-WebRequest -Uri $uri -OutFile $archive
-          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = '4e197f729f5071c6772f35fffd96e0f36e3e8a044bd9479b136bb09b7c6a80ff'
-          if ($actual -ne $expected) { throw 'MPV download hash mismatch' }
-          $directory = Join-Path $env:RUNNER_TEMP 'external-mpv'
-          Expand-Archive -LiteralPath $archive -DestinationPath $directory
-          $executables = @(Get-ChildItem -LiteralPath $directory -Recurse -File -Filter mpv.exe)
-          if ($executables.Count -ne 1) { throw 'Expected one MPV executable' }
-          $process = Start-Process -FilePath $executables[0].FullName -ArgumentList '--version' -WindowStyle Hidden -Wait -PassThru
-          if ($process.ExitCode -ne 0) { throw 'MPV executable failed to start' }
-          Add-Content -LiteralPath $env:GITHUB_PATH -Value $executables[0].DirectoryName
-      - name: Verify native desktop and service
-        shell: pwsh
-        run: |
-          go test -count=1 ./apps/desktop/...
+          $dependencies = @(go list -deps -tags production ./apps/desktop)
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          go build -tags production -o "$env:RUNNER_TEMP\animeportable.exe" ./apps/desktop
+          $legacy = @($dependencies | Where-Object { $_ -match 'fyne|wails|webview|go-mpv' })
+          if ($legacy.Count -ne 0) { throw "Legacy desktop dependency: $($legacy -join ', ')" }
+      - name: Build Windows desktop
+        shell: pwsh
+        run: |
+          go build -tags production -trimpath -buildvcs=false -o "$env:RUNNER_TEMP\animeportable.exe" ./apps/desktop
           exit $LASTEXITCODE
-      - name: Package and inspect extracted Windows desktop
+      - name: Smoke test Windows portable startup without libmpv
         shell: pwsh
         run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'animeportable-windows-amd64.zip'
-          go run ./tools/portable-package --os windows --arch amd64 --binary "$env:RUNNER_TEMP\animeportable.exe" --output $archive --license LICENSE --notices THIRD_PARTY_NOTICES.md
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $extract = Join-Path $env:RUNNER_TEMP 'extracted-windows'
-          Expand-Archive -LiteralPath $archive -DestinationPath $extract
-          $names = @(Get-ChildItem -LiteralPath $extract -File | ForEach-Object Name | Sort-Object)
-          if (($names -join ',') -ne 'animeportable.exe,LICENSE,THIRD_PARTY_NOTICES.md') { throw "Unexpected portable files: $($names -join ',')" }
-          if ((Get-ChildItem -LiteralPath $extract -Recurse -File).Count -ne 3) { throw 'Unexpected nested portable files' }
-      - name: Smoke test extracted Windows desktop
-        shell: pwsh
-        run: |
-          $executable = Join-Path $env:RUNNER_TEMP 'extracted-windows\animeportable.exe'
-          $priorUserProfile = $env:USERPROFILE
-          $priorAppData = $env:APPDATA
-          $priorLocalAppData = $env:LOCALAPPDATA
-          $env:USERPROFILE = Join-Path $env:RUNNER_TEMP 'original-home'
-          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'original-config'
-          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'original-cache'
+          $directory = Join-Path $env:RUNNER_TEMP 'extracted-windows'
+          New-Item -ItemType Directory -Force -Path $directory | Out-Null
+          $executable = Join-Path $directory 'animeportable.exe'
+          Copy-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'animeportable.exe') -Destination $executable
+          $process = Start-Process -FilePath $executable -WorkingDirectory $directory -WindowStyle Hidden -PassThru
           try {
-            $process = Start-Process -FilePath $executable -WorkingDirectory (Join-Path $env:RUNNER_TEMP 'extracted-windows') -WindowStyle Hidden -PassThru
-            Start-Sleep -Seconds 10
+            Start-Sleep -Seconds 5
             $process.Refresh()
-            if ($process.HasExited) { throw "Extracted desktop exited during startup with code $($process.ExitCode)" }
-            $expectedPath = (Resolve-Path -LiteralPath $executable).Path
-            if ($process.Path -ne $expectedPath) { throw 'Unexpected desktop executable path' }
+            if ($process.HasExited) { throw 'FLTK desktop exited without libmpv' }
+            if ($process.Path -ne (Resolve-Path -LiteralPath $executable).Path) { throw 'Unexpected executable path' }
+            if (-not (Test-Path -LiteralPath (Join-Path $directory 'data\animeportable.db'))) { throw 'Portable database missing' }
           } finally {
-            if ($process) {
-              $process.Refresh()
-              if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
-              $process.Dispose()
+            if (-not $process.HasExited) {
+              $process.CloseMainWindow() | Out-Null
+              if (-not $process.WaitForExit(10000)) { Stop-Process -Id $process.Id -Force }
             }
-            $env:USERPROFILE = $priorUserProfile
-            $env:APPDATA = $priorAppData
-            $env:LOCALAPPDATA = $priorLocalAppData
+            $process.Dispose()
           }
-          if (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'original-home\AppData\Roaming\fyne')) { throw 'Fyne wrote to the original user profile' }
-          if (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'original-cache\fyne')) { throw 'Fyne wrote to the original cache' }
-          if (-not (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'extracted-windows\data\fyne-cache'))) { throw 'Fyne portable cache was not created' }
-          if (-not (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'extracted-windows\data\fyne-cache\fyne'))) { throw 'Fyne app cache was not created' }
-          if (-not (Test-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'extracted-windows\data\fyne-home\AppData\Roaming\fyne'))) { throw 'Fyne portable settings were not created' }
-      - name: Verify live Windows MPV IPC and playback
+      - name: Verify clean worktree
         shell: pwsh
-        env:
-          ANIMEPORTABLE_MPV_LIVE: '1'
-        run: go test -count=1 -run '^(TestLiveIPC|TestLiveMPVLoadsThreeMediaURLsOnOneProcess)$' -timeout 90s ./adapters/player/mpv
-      - uses: actions/upload-artifact@v4
-        with:
-          name: animeportable-windows-amd64-portable
-          path: ${{ runner.temp }}/animeportable-windows-amd64.zip
-          if-no-files-found: error
+        run: |
+          $changes = @(git status --porcelain)
+          if ($changes.Count -ne 0) { throw "CI modified the worktree: $($changes -join ', ')" }

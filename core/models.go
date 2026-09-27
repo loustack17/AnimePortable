@@ -117,7 +117,6 @@ const (
 
 type Settings struct {
 	Appearance     Appearance
-	MPVPath        string
 	AutoplayNext   Toggle
 	ResumePlayback Toggle
 	Language       Language

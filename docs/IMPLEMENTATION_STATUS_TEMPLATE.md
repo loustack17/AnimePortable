@@ -4,9 +4,9 @@
 
 ## Protocol
 
-- Loop Engineering: v2.3
+- Loop Engineering: v2.4.1
 - v2 effective from: Loop 23
-- Loops 01-22: grandfathered implementation; retrospective evidence audit only
+- Loops 01–22: historical implementation; v2.4.1 current-state retrospective baseline audit after Loop 23 PASS
 
 ## Execution profile
 
@@ -14,7 +14,7 @@
 - Root model: GPT-5.6 Sol | GPT-6 Astra | other explicit
 - Multi-agent: Yes | No
 - Subagent model policy: inherit | explicit human-approved override
-- Sandbox: workspace-write / externally isolated + workspace-write
+- Sandbox: workspace-write / approved isolated CI verifier fallback when required
 - GitHub repository scope: `<owner/repo>`
 - AGENTS.md scope verified: Yes | No
 
@@ -125,23 +125,28 @@ Allowed exit states:
 - [ ] Loop 18 — Bangumi
 - [ ] Loop 19 — Metadata matching
 - [ ] Loop 20 — Metadata content security
-- [ ] Loop 21 — Wails binding layer
-- [ ] Loop 22 — Svelte shell
-- [ ] Loop 23 — Home
-- [ ] Loop 24 — Search
-- [ ] Loop 25 — Anime detail
-- [ ] Loop 26 — Schedule UI
-- [ ] Loop 27 — Following UI
-- [ ] Loop 28 — History UI
-- [ ] Loop 29 — Keyboard navigation
-- [ ] Loop 30 — Cache-first refresh
-- [ ] Loop 31 — Autoplay next
-- [ ] Loop 32 — Settings
-- [ ] Loop 33 — Security hardening
-- [ ] Loop 34 — Resource-leak testing
-- [ ] Loop 35 — Cross-platform validation
-- [ ] Loop 36 — CI/release
-- [ ] Loop 37 — Full acceptance
+- [ ] Loop 21 — Historical Wails binding layer
+- [ ] Loop 22 — Historical Svelte shell
+- [ ] Loop 23 — Historical Home and protocol completion
+- [ ] Loop 24 — Fyne migration M0: contract and resource reference
+- [ ] Loop 25 — Fyne migration M1: lifecycle and Home
+- [ ] Loop 26 — Fyne migration M2: existing desktop behavior
+- [ ] Loop 27 — Fyne migration M3: portable packaging and Wails removal
+- [ ] Loop 28 — Fyne migration M4: integrated resource/platform gate
+- [ ] Loop 29 — Fyne Search
+- [ ] Loop 30 — Fyne Anime detail
+- [ ] Loop 31 — Fyne Schedule UI
+- [ ] Loop 32 — Fyne Following UI
+- [ ] Loop 33 — Fyne History UI
+- [ ] Loop 34 — Fyne keyboard navigation
+- [ ] Loop 35 — Fyne cache-first refresh
+- [ ] Loop 36 — Autoplay next
+- [ ] Loop 37 — Fyne Settings
+- [ ] Loop 38 — Native security hardening
+- [ ] Loop 39 — Native resource-leak testing
+- [ ] Loop 40 — Fyne cross-platform validation
+- [ ] Loop 41 — Portable CI/release
+- [ ] Loop 42 — Full acceptance
 
 ## Criterion evidence
 
@@ -208,9 +213,9 @@ None.
 
 - Anime1 upstream structure may change.
 - Metadata title matching may produce ambiguous candidates.
-- Wails v3 framework behavior may evolve.
+- Fyne rendering, decoded covers and object lifetimes may exceed the owner's resource envelope.
 - MPV IPC differs between Windows named pipes and Unix sockets.
-- Linux WebView/runtime packaging varies by distribution.
+- Linux Fyne runtime libraries and macOS/Windows portable behavior need native validation.
 
 ## Last verified commands
 
@@ -224,9 +229,20 @@ Not started.
 
 Not started.
 
-## Retrospective audit Loops 01-22
+## Retrospective baseline audit Loops 01–22
 
-| Loop | Existing evidence | Missing verification | Human check | Result |
-| ---: | --- | --- | --- | --- |
+- Required after Loop 23 PASS: Yes
+- Status file: `docs/RETRO_AUDIT_STATUS.md`
+- Overall: PENDING_LOOP_23_PASS | IN_PROGRESS | RETRO_BASELINE_PASS | NEEDS_HUMAN | BLOCKED
+- Verified HEAD: `<sha>`
 
-Do not reimplement an old loop solely because this table is incomplete.
+| Batch | Loops | Result | Open MUST_FIX |
+| --- | --- | --- | ---: |
+| RA-01 | 01–04 | NOT_STARTED | 0 |
+| RA-02 | 05–09 | NOT_STARTED | 0 |
+| RA-03 | 10–13 | NOT_STARTED | 0 |
+| RA-04 | 14–16 | NOT_STARTED | 0 |
+| RA-05 | 17–20 | NOT_STARTED | 0 |
+| RA-06 | 21–22 | NOT_STARTED | 0 |
+
+Do not reimplement historical loops solely because legacy evidence/report formatting is incomplete. Current code is reopened only for confirmed `MUST_FIX` findings.
