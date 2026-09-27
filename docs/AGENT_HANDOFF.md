@@ -10,8 +10,8 @@ updated_at_utc: "2026-09-26"
 status: WINDOWS_FLTK_CLEANUP_IN_PROGRESS
 repository:
   branch: codex/fyne-migration-verification-20260924
-  observed_head: ea7239e
-  working_tree: "Windows FLTK snapshot committed/pushed on verification branch; preserve unrelated untracked probes. MSYS2 CI correction pending. No reset/clean."
+  observed_head: bde9298
+  working_tree: "Windows FLTK snapshot committed/pushed on verification branch; preserve unrelated untracked probes. C++20 icon type fix pending. No reset/clean."
 active_loop:
   number: 28
   state: "Windows FLTK replacement in progress; no Loop 28 PASS, main merge or Loop 29."
@@ -31,7 +31,7 @@ current_changes:
   - "Removed Fyne apps/desktop/native, non-Windows entry/build recipes, Fyne/Wails resource probes, external adapters/player/mpv, backend player_error, and root Fyne deps. Windows-only CI retains full Go/race/vet/vuln/build/dependency checks."
   - "Removed MPVPath from active core/backend settings and player factory. SQLite legacy mpv_path column remains for old databases; current settings ignore and preserve it. Added regression test."
   - "Windows ZIP tool now accepts only Windows amd64 and requires hash-pinned libmpv plus license file; no distributable ZIP/CI artifact while exact license unresolved."
-  - "Exact CI 36281457807 at f6e2391 failed Test Go: runner GCC 15 could not link go-fltk prebuilt libraries (_setjmp); mpvwin rejected valid temp DLL. ea7239e corrected canonical DLL loading: exact CI 36281867374 passed mpvwin tests but GCC 14 on windows-2022 still failed the same linker symbol. Current CI diff selects pinned MSYS2 MINGW64 MSVCRT GCC; not yet verified."
+  - "Exact CI 36281457807 at f6e2391 failed Test Go: runner GCC 15 could not link go-fltk prebuilt libraries (_setjmp); mpvwin rejected valid temp DLL. ea7239e corrected canonical DLL loading: exact CI 36281867374 passed mpvwin tests but GCC 14 on windows-2022 still failed _setjmp. bde9298 selected pinned MSYS2 MINGW64 GCC; exact CI 36282386404 passed toolchain setup and found C++20 char8_t icon literal type mismatch. Current production fix adds guarded overload; not yet exact-CI verified."
 verification:
   passed:
     - "Final go test -count=1 ./..., go test -race -count=1 ./..., go vet ./..., go mod verify, Windows FLTK production build and git diff --check passed."
@@ -39,7 +39,7 @@ verification:
     - "After FFI uintptr correction, host real-player smoke opened player, Stop returned Home, exit 0. PrintWindow video capture blank; CopyFromScreen failed with invalid handle, so visible video not verified by this run."
     - "Earlier host real Anime1 720p Play/seek/Stop/Close passed with lazy pinned DLL; latest 12s unmatched 181.57 MiB private WS/618.07 MiB private bytes, 5s post-stop 55.45/181.61. Missing/corrupt DLL keeps Home usable."
   pending:
-    - "Exact-state isolated CI after MSYS2 correction and full owner-visible Windows playback/keyboard/mouse/focus and portable ZIP check."
+    - "Exact-state isolated CI after C++20 correction and full owner-visible Windows playback/keyboard/mouse/focus and portable ZIP check."
     - "Owner native keyboard/mouse/focus/episode/portable ZIP gate; prior test window was closed without full checklist result."
     - "Matched OneAnime resource comparison; new 15-minute idle authorization; exact libmpv build/codec license notices; clean-host Vulkan dependency."
     - "Candidate DLL remains outside repo in TEMP; SHA256 e466e34e425cb3b4546b18ad6dd66ad020dcb389bb3cd8fe9c843e8d6d8ee743. Test-only."

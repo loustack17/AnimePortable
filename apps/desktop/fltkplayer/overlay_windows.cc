@@ -15,6 +15,9 @@ static void line(float x1, float y1, float x2, float y2) {
 }
 static void label(const char* value, int x, int y, int size) { gl_font(1, size); gl_draw(value, x, y); }
 static void icon(const char* value, int x, int y, int size) { gl_font(4, size); gl_draw(value, x, y); }
+#if defined(__cpp_char8_t)
+static void icon(const char8_t* value, int x, int y, int size) { icon(reinterpret_cast<const char*>(value), x, y, size); }
+#endif
 static std::string itemAt(const char* values, int index) {
     if (values == nullptr || index < 0) return "";
     const char* start = values;
