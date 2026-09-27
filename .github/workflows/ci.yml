@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           work="$RUNNER_TEMP/libmpv-source-trial"
-          image=ghcr.io/btbn/ffmpeg-builds/win64-lgpl@sha256:ff679f7298f4a927ea8705c7523e61919d0eb6b632a5db18b36d29ed1158f89e
+          image=ghcr.io/btbn/ffmpeg-builds/win64-lgpl@sha256:15b4fa39e2f33a8c93842ea9a01c116eea1ecef5af9020c625c837dce3368fed
           printf '%s\n' "$image" > "$work/build-image.txt"
           docker run --rm --network none \
             --volume "$GITHUB_WORKSPACE:/project:ro" \
