@@ -37,7 +37,7 @@ static void focus(int current, int target, float x, float y, float w, float h) {
     line(x + w, y + h, x, y + h); line(x, y + h, x, y);
 }
 
-extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int resolution, double position, double duration, const char* episode_labels, const char* menu_labels) {
+extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int resolution, int loading, int progress_hover, int scrubbing, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels) {
     if (!visible && !menu && !episodes && selected < 0) return;
     GLint oldMatrix = GL_MODELVIEW;
     glGetIntegerv(GL_MATRIX_MODE, &oldMatrix);
@@ -48,10 +48,16 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     const float mid = height - 26.0f;
     ink(0.03f, 0.05f, 0.10f, 0.78f);
-    box(0, 0, width, 62); box(0, height - 52, width, 52);
-    ink(0.57f, 0.62f, 0.76f, 0.8f); box(0, height - 54, width, 2);
-    if (duration > 0 && position >= 0) {
-        ink(0.59f, 0.67f, 1); box(0, height - 54, width * std::min(1.0, position / duration), 3);
+    box(0, 0, width, 62); box(0, height - 84, width, 84);
+    if (duration > 0) {
+        double shown = scrubbing ? scrub_position : position;
+        float fraction = static_cast<float>(std::max(0.0, std::min(1.0, shown / duration)));
+        ink(0.50f, 0.54f, 0.66f); box(24, height - 69, width - 48, 4);
+        ink(0.59f, 0.67f, 1); box(24, height - 69, (width - 48) * fraction, 4);
+        if (progress_hover || scrubbing || selected == 6) {
+            box(18 + (width - 48) * fraction, height - 74, 12, 14);
+        }
+        focus(selected, 6, 22, height - 79, width - 44, 24);
     }
     ink(1, 1, 1);
     icon(u8"\uE700", 24, 40, 24);
@@ -62,7 +68,7 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     if (episodeLabel.empty()) episodeLabel = "選集";
     label(episodeLabel.c_str(), width - 185, 39, 15);
     icon(u8"\uE70D", width - 102, 39, 14);
-    focus(selected, 6, width - 195, 14, 114, 38);
+    focus(selected, 7, width - 195, 14, 114, 38);
     if (resolution > 0) {
         char quality[24]; std::snprintf(quality, sizeof(quality), "%dp", resolution);
         ink(0.8f, 0.84f, 0.94f); label(quality, width - 68, 39, 14);
@@ -88,13 +94,16 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     }
     if (duration > 0) {
         char positionLabel[64];
-        int now = static_cast<int>(std::max(0.0, position)), total = static_cast<int>(duration);
+        int now = static_cast<int>(std::max(0.0, scrubbing ? scrub_position : position)), total = static_cast<int>(duration);
         std::snprintf(positionLabel, sizeof(positionLabel), "%02d:%02d / %02d:%02d", now / 60, now % 60, total / 60, total % 60);
         ink(0.8f, 0.84f, 0.94f); label(positionLabel, volume_open ? 410 : 286, static_cast<int>(mid + 5), 12);
     }
     ink(1, 1, 1);
     icon(fullscreen ? u8"\uE73F" : u8"\uE740", width - 47, static_cast<int>(mid + 9), 24);
-    focus(selected, 7, width - 51, mid - 18, 36, 36);
+    focus(selected, 8, width - 51, mid - 18, 36, 36);
+    if (loading) {
+        ink(1, 1, 1); label("正在載入…", width / 2 - 42, height / 2, 18);
+    }
     if (menu) {
         ink(0.04f, 0.06f, 0.11f, 0.93f); box(0, 62, 180, height - 114);
         ink(0.73f, 0.77f, 0.86f);

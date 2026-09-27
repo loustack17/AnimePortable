@@ -3,6 +3,7 @@
 package fltkplayer
 
 import (
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ const (
 	focusSeekForward
 	focusStop
 	focusVolume
+	focusProgress
 	focusEpisodes
 	focusFullscreen
 )
@@ -25,6 +27,7 @@ const (
 type Callbacks struct {
 	PlayPause     func()
 	Seek          func(seconds int)
+	SeekTo        func(seconds int)
 	Stop          func()
 	Volume        func(percent int)
 	Fullscreen    func()
@@ -42,6 +45,7 @@ type State struct {
 	Episode    int
 	Focus      int
 	Fullscreen bool
+	Loading    bool
 }
 
 type View struct {
@@ -58,6 +62,10 @@ type View struct {
 	episodesOpen  bool
 	volumeOpen    bool
 	dragging      bool
+	scrubbing     bool
+	scrubPosition float64
+	progressHover bool
+	hoverControls bool
 	closed        bool
 	episodeStart  int
 	episodeCursor int
@@ -160,6 +168,9 @@ func (view *View) SetState(state State) {
 	if state.Episode < 0 || state.Episode >= len(view.episodes) {
 		state.Episode = 0
 	}
+	if !view.episodesOpen && state.Episode != view.state.Episode {
+		view.episodeCursor = state.Episode
+	}
 	view.state = state
 	view.Redraw()
 }
@@ -171,6 +182,7 @@ func (view *View) SetFocus(index int) {
 	view.state.Focus = index
 	if index >= 0 {
 		view.visible = true
+		view.lastMove = time.Now()
 		view.volumeOpen = index == focusVolume
 		view.keyboardFocus.TakeFocus()
 	}
@@ -187,8 +199,9 @@ func (view *View) tick() {
 	if view.closed {
 		return
 	}
-	if view.state.Playing && view.state.Focus < 0 && !view.menuPinned && !view.episodesOpen && time.Since(view.lastMove) > 2500*time.Millisecond {
+	if view.state.Playing && !view.state.Paused && !view.state.Loading && !view.hoverControls && !view.scrubbing && !view.menuVisible() && !view.episodesOpen && time.Since(view.lastMove) > 2500*time.Millisecond {
 		view.visible = false
+		view.state.Focus = -1
 		view.menuHover = false
 		view.volumeOpen = false
 		view.Redraw()
@@ -199,8 +212,11 @@ func (view *View) tick() {
 func (view *View) showAt(x, y int) {
 	view.lastMove = time.Now()
 	view.visible = true
+	view.state.Focus = -1
+	view.hoverControls = y < 62 || y >= view.video.H()-84
 	view.menuHover = x < 18 || view.menuHover && x < 180 && y < view.video.H()-54
 	view.volumeOpen = x >= 232 && x <= 395 && y >= view.video.H()-60 || view.state.Focus == focusVolume
+	view.progressHover = y >= view.video.H()-82 && y < view.video.H()-54 && x >= 24 && x <= view.video.W()-24
 	view.Redraw()
 }
 
@@ -211,6 +227,9 @@ func (view *View) actionAt(x, y int) int {
 	}
 	if x >= width-195 && x <= width-81 && y >= 14 && y <= 53 {
 		return focusEpisodes
+	}
+	if view.state.Duration > 0 && y >= height-82 && y < height-54 && x >= 24 && x <= width-24 {
+		return focusProgress
 	}
 	if y < height-54 {
 		return -1
@@ -259,6 +278,10 @@ func (view *View) activate(index int) {
 		}
 	case focusVolume:
 		view.volumeOpen = true
+	case focusProgress:
+		if view.callbacks.SeekTo != nil && view.state.Duration > 0 {
+			view.callbacks.SeekTo(int(math.Round(view.state.Position)))
+		}
 	case focusEpisodes:
 		if len(view.episodes) > 0 {
 			view.episodesOpen = !view.episodesOpen
@@ -288,13 +311,37 @@ func (view *View) setVolumeAt(x int) {
 	view.Redraw()
 }
 
+func progressPosition(x, width int, duration float64) float64 {
+	if duration <= 0 || width <= 48 {
+		return 0
+	}
+	return math.Max(0, math.Min(1, float64(x-24)/float64(width-48))) * duration
+}
+
+func (view *View) setScrubAt(x int) {
+	view.scrubPosition = progressPosition(x, view.video.W(), view.state.Duration)
+	view.visible = true
+	view.lastMove = time.Now()
+	view.Redraw()
+}
+
 func (view *View) handle(event fltk.Event) bool {
 	x, y := fltk.EventX()-view.video.X(), fltk.EventY()-view.video.Y()
 	switch event {
 	case fltk.MOVE, fltk.ENTER:
 		view.showAt(x, y)
 		return true
+	case fltk.LEAVE:
+		view.hoverControls = false
+		view.progressHover = false
+		view.menuHover = false
+		view.lastMove = time.Now()
+		return true
 	case fltk.DRAG:
+		if view.scrubbing {
+			view.setScrubAt(x)
+			return true
+		}
 		if view.dragging {
 			view.setVolumeAt(x)
 			return true
@@ -302,6 +349,15 @@ func (view *View) handle(event fltk.Event) bool {
 		view.showAt(x, y)
 		return true
 	case fltk.RELEASE:
+		if view.scrubbing {
+			view.setScrubAt(x)
+			view.scrubbing = false
+			view.state.Focus = -1
+			if view.callbacks.SeekTo != nil {
+				view.callbacks.SeekTo(int(math.Round(view.scrubPosition)))
+			}
+			return true
+		}
 		view.dragging = false
 		return true
 	case fltk.MOUSEWHEEL:
@@ -335,6 +391,11 @@ func (view *View) handle(event fltk.Event) bool {
 			view.setVolumeAt(x)
 			return true
 		}
+		if view.actionAt(x, y) == focusProgress {
+			view.scrubbing = true
+			view.setScrubAt(x)
+			return true
+		}
 		if index := view.actionAt(x, y); index >= 0 {
 			view.activate(index)
 			return true
@@ -352,14 +413,7 @@ func (view *View) handle(event fltk.Event) bool {
 
 func (view *View) handleKey(key int) bool {
 	if key == 9 || key == 0xff09 {
-		if fltk.EventState()&fltk.SHIFT != 0 {
-			view.state.Focus = (view.state.Focus + 7) % 8
-		} else {
-			view.state.Focus = (view.state.Focus + 1) % 8
-		}
-		view.visible = true
-		view.volumeOpen = view.state.Focus == focusVolume
-		view.Redraw()
+		view.moveTabFocus(fltk.EventState()&fltk.SHIFT != 0)
 		return true
 	}
 	if key == 27 || key == 0xff1b {
@@ -373,7 +427,7 @@ func (view *View) handleKey(key int) bool {
 		view.Redraw()
 		return true
 	}
-	if key == fltk.ENTER_KEY || key == 13 || key == int(' ') {
+	if key == fltk.ENTER_KEY || key == 13 || key == 0xff8d || key == int(' ') {
 		if view.state.Focus == focusEpisodes && view.episodesOpen {
 			view.selectEpisode(view.episodeCursor)
 			view.episodesOpen = false
@@ -391,6 +445,9 @@ func (view *View) handleKey(key int) bool {
 		}
 		if view.state.Focus < 0 {
 			view.state.Focus = focusPlayPause
+		}
+		if view.state.Focus == focusProgress {
+			return true
 		}
 		view.activate(view.state.Focus)
 		return true
@@ -439,13 +496,108 @@ func (view *View) handleKey(key int) bool {
 		view.Redraw()
 		return true
 	}
+	if view.state.Focus == focusProgress && (key == 0xff51 || key == 0xff53) {
+		if view.callbacks.SeekTo != nil && view.state.Duration > 0 {
+			step := -5.0
+			if key == 0xff53 {
+				step = 5
+			}
+			view.callbacks.SeekTo(int(math.Round(math.Max(0, math.Min(view.state.Duration, view.state.Position+step)))))
+		}
+		return true
+	}
+	if key == 0xff51 || key == 0xff53 || key == 0xff52 || key == 0xff54 {
+		return view.moveDirectionalFocus(key)
+	}
 	return false
+}
+
+var tabFocusOrder = [...]int{focusMenu, focusEpisodes, focusProgress, focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusFullscreen}
+
+func (view *View) moveTabFocus(reverse bool) {
+	view.SetFocus(nextTabFocus(view.state.Focus, reverse))
+}
+
+func nextTabFocus(current int, reverse bool) int {
+	index := -1
+	for position, focus := range tabFocusOrder {
+		if current == focus {
+			index = position
+			break
+		}
+	}
+	if reverse {
+		if index < 0 {
+			index = len(tabFocusOrder)
+		}
+		index = max(0, index-1)
+	} else {
+		index = min(len(tabFocusOrder)-1, index+1)
+	}
+	return tabFocusOrder[index]
+}
+
+func (view *View) moveDirectionalFocus(key int) bool {
+	current := view.state.Focus
+	var next int
+	switch key {
+	case 0xff52:
+		if current == focusMenu || current == focusEpisodes {
+			return true
+		}
+		if current == focusProgress {
+			next = focusEpisodes
+		} else {
+			next = focusProgress
+		}
+	case 0xff54:
+		if current == focusMenu || current == focusEpisodes {
+			next = focusProgress
+		} else if current == focusProgress || current < 0 {
+			next = focusPlayPause
+		} else {
+			return true
+		}
+	case 0xff51, 0xff53:
+		if current == focusMenu || current == focusEpisodes {
+			if key == 0xff51 {
+				next = focusMenu
+			} else {
+				next = focusEpisodes
+			}
+		} else if current == focusProgress {
+			return true
+		} else {
+			order := [...]int{focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusFullscreen}
+			index := 0
+			for position, focus := range order {
+				if current == focus {
+					index = position
+					break
+				}
+			}
+			if key == 0xff51 {
+				index = max(0, index-1)
+			} else {
+				index = min(len(order)-1, index+1)
+			}
+			next = order[index]
+		}
+	default:
+		return false
+	}
+	view.SetFocus(next)
+	return true
 }
 
 func (view *View) menuVisible() bool { return view.menuPinned || view.menuHover }
 
 func (view *View) selectEpisode(index int) {
 	if index < 0 || index >= len(view.episodes) {
+		return
+	}
+	view.episodeCursor = index
+	if index == view.state.Episode && view.state.Playing && !view.state.Loading {
 		return
 	}
 	view.state.Episode = index

@@ -34,6 +34,7 @@ func main() {
 	var home *fltk.Window
 	var navigateHome func(int)
 	var notifyHome func(string)
+	var play func(backend.PlayRequest)
 	var player *fltkplayer.View
 	var service *backend.Service
 	var selectedMu sync.Mutex
@@ -50,9 +51,34 @@ func main() {
 	}
 	var episodes []backend.Episode
 	var viewGeneration atomic.Uint64
+	var actionGeneration atomic.Uint64
+	var expectedPlaybackGeneration atomic.Uint64
+	var awaitingPlayback atomic.Bool
+	var playbackContextMu sync.Mutex
+	var playbackCancel context.CancelFunc
+	newPlaybackContext := func() (context.Context, context.CancelFunc) {
+		playbackContextMu.Lock()
+		defer playbackContextMu.Unlock()
+		if playbackCancel != nil {
+			playbackCancel()
+		}
+		operationCtx, cancelOperation := context.WithCancel(ctx)
+		playbackCancel = cancelOperation
+		return operationCtx, cancelOperation
+	}
+	cancelPlayback := func() {
+		playbackContextMu.Lock()
+		if playbackCancel != nil {
+			playbackCancel()
+		}
+		playbackContextMu.Unlock()
+	}
 	playQueue := newActionQueue()
 	stop := func(destination int) {
 		generation := viewGeneration.Add(1)
+		cancelPlayback()
+		expectedPlaybackGeneration.Store(0)
+		awaitingPlayback.Store(false)
 		playQueue.Enqueue(func() {
 			_ = service.StopPlayback(context.Background())
 			engineMu.Lock()
@@ -77,14 +103,74 @@ func main() {
 		current := active
 		engineMu.Unlock()
 		if current != nil {
-			go func() { _ = current.Control(ctx, command, value) }()
+			playQueue.Enqueue(func() { _ = current.Control(ctx, command, value) })
 		}
 	}
+	stopInPlayer := func() {
+		if !awaitingPlayback.Load() {
+			control("stop", 0)
+			return
+		}
+		generation := viewGeneration.Add(1)
+		cancelPlayback()
+		expectedPlaybackGeneration.Store(0)
+		engineMu.Lock()
+		current := active
+		engineMu.Unlock()
+		if current != nil {
+			go func() { _ = current.Control(ctx, "stop", 0) }()
+		}
+		state := player.State()
+		state.Playing = false
+		state.Paused = true
+		state.Loading = false
+		state.Position = 0
+		state.Duration = 0
+		for index, episode := range episodes {
+			if episode.ID == selection().EpisodeID {
+				state.Episode = index
+				break
+			}
+		}
+		player.SetState(state)
+		playQueue.Enqueue(func() {
+			_ = service.StopPlayback(context.Background())
+			if generation == viewGeneration.Load() {
+				awaitingPlayback.Store(false)
+			}
+			engineMu.Lock()
+			active = nil
+			engineMu.Unlock()
+			fltk.Awake(func() {
+				if generation == viewGeneration.Load() {
+					player.SetRenderHook(nil)
+				}
+			})
+		})
+	}
 	player = fltkplayer.NewWindow(fltkplayer.Callbacks{
-		PlayPause: func() { control("pause", 0) },
-		Seek:      func(seconds int) { control("seek", seconds) },
-		Stop:      func() { stop(0) },
-		Volume:    func(percent int) { control("volume", percent) },
+		PlayPause: func() {
+			state := player.State()
+			if state.Loading {
+				return
+			}
+			engineMu.Lock()
+			current := active
+			engineMu.Unlock()
+			if current == nil || !state.Playing {
+				request := selection()
+				request.StartAt = 0
+				if play != nil && request.AnimeID != "" && request.EpisodeID != "" {
+					play(request)
+				}
+				return
+			}
+			control("pause", 0)
+		},
+		Seek:   func(seconds int) { control("seek", seconds) },
+		SeekTo: func(seconds int) { control("seek_absolute", seconds) },
+		Stop:   stopInPlayer,
+		Volume: func(percent int) { control("volume", percent) },
 		Fullscreen: func() {
 			window := player.Window()
 			fullscreen := !window.FullscreenActive()
@@ -98,14 +184,27 @@ func main() {
 				return
 			}
 			generation := viewGeneration.Add(1)
+			operationCtx, cancelOperation := newPlaybackContext()
+			expectedPlaybackGeneration.Store(0)
+			awaitingPlayback.Store(true)
+			loading := player.State()
+			loading.Loading = true
+			loading.Position = 0
+			loading.Duration = 0
+			player.SetState(loading)
 			request := selection()
 			request.EpisodeID = episodes[index].ID
 			request.StartAt = 0
 			playQueue.Enqueue(func() {
+				defer cancelOperation()
 				if generation != viewGeneration.Load() {
 					return
 				}
-				if err := service.Play(ctx, request); err != nil {
+				actionGeneration.Store(generation)
+				if err := service.Play(operationCtx, request); err != nil {
+					if generation == viewGeneration.Load() {
+						awaitingPlayback.Store(false)
+					}
 					fltk.Awake(func() {
 						if generation == viewGeneration.Load() {
 							previous := 0
@@ -118,13 +217,17 @@ func main() {
 							}
 							state := player.State()
 							state.Episode = previous
+							state.Loading = false
 							player.SetState(state)
 							fltk.MessageBox("播放失敗", "無法播放此集，請重試。")
 						}
 					})
 					return
 				}
-				setSelection(request)
+				if generation == viewGeneration.Load() {
+					awaitingPlayback.Store(false)
+					setSelection(request)
+				}
 			})
 		},
 		Navigate: stop,
@@ -137,13 +240,38 @@ func main() {
 				return nil, nil, err
 			}
 			created.SetStateHandler(func(position, duration time.Duration, paused bool, resolution int) {
+				if awaitingPlayback.Load() {
+					return
+				}
 				state := player.State()
 				state.Playing = true
+				state.Loading = false
 				state.Paused = paused
 				state.Position = position.Seconds()
 				state.Duration = duration.Seconds()
 				state.Resolution = resolution
 				player.SetState(state)
+			})
+			created.SetLoadHandler(func(generation uint64) {
+				if actionGeneration.Load() == viewGeneration.Load() {
+					expectedPlaybackGeneration.Store(generation)
+				}
+			})
+			created.SetFailureHandler(func(generation uint64) {
+				if ctx.Err() != nil {
+					return
+				}
+				engineMu.Lock()
+				current := active == created
+				engineMu.Unlock()
+				if !current || generation != expectedPlaybackGeneration.Load() || !created.FailedGeneration(generation) {
+					return
+				}
+				state := player.State()
+				state.Playing = false
+				state.Loading = false
+				player.SetState(state)
+				fltk.MessageBox("播放失敗", "此集暫時無法播放。請重新選取該集或稍後再試。")
 			})
 			engineMu.Lock()
 			active = created
@@ -153,20 +281,25 @@ func main() {
 		}), nil
 	})
 	defer func() { _ = service.Close(); player.Close() }()
-	play := func(request backend.PlayRequest) {
+	play = func(request backend.PlayRequest) {
 		generation := viewGeneration.Add(1)
+		operationCtx, cancelOperation := newPlaybackContext()
+		expectedPlaybackGeneration.Store(0)
+		awaitingPlayback.Store(true)
 		setSelection(request)
 		episodes = nil
 		player.SetEpisodes(nil, 0)
-		player.SetState(fltkplayer.State{Volume: 100, Focus: 1})
+		player.SetState(fltkplayer.State{Volume: 100, Focus: 1, Loading: true})
 		player.Window().Show()
 		player.SetFocus(1)
 		home.Hide()
 		playQueue.Enqueue(func() {
+			defer cancelOperation()
 			if generation != viewGeneration.Load() {
 				return
 			}
-			items, err := service.Episodes(ctx, request.AnimeID)
+			actionGeneration.Store(generation)
+			items, err := service.Episodes(operationCtx, request.AnimeID)
 			if err == nil {
 				labels := make([]string, len(items))
 				current := 0
@@ -189,7 +322,10 @@ func main() {
 			if generation != viewGeneration.Load() {
 				return
 			}
-			if err := service.Play(ctx, request); err != nil {
+			if err := service.Play(operationCtx, request); err != nil {
+				if generation == viewGeneration.Load() {
+					awaitingPlayback.Store(false)
+				}
 				fltk.Awake(func() {
 					if generation != viewGeneration.Load() {
 						return
@@ -199,7 +335,10 @@ func main() {
 					home.Show()
 				})
 			} else {
-				setSelection(request)
+				if generation == viewGeneration.Load() {
+					awaitingPlayback.Store(false)
+					setSelection(request)
+				}
 			}
 		})
 	}
@@ -207,6 +346,7 @@ func main() {
 	closeApp := func() {
 		shutdown.Do(func() {
 			viewGeneration.Add(1)
+			cancelPlayback()
 			pending := playQueue.Drain()
 			cancel()
 			go func() {

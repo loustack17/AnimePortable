@@ -375,6 +375,28 @@ func TestResolveCancellationDuringAPIRequest(t *testing.T) {
 	}
 }
 
+func TestResolverPageTimeoutRetriesOnce(t *testing.T) {
+	fake := &resolverClient{
+		responses: []*securehttp.Response{nil, resolverPage(resolverTestToken), resolverSuccess()},
+		errors:    []error{context.DeadlineExceeded},
+	}
+	if _, err := newWithDo(fake).Resolve(context.Background(), resolverRef()); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.requests) != 3 || fake.requests[0].method != http.MethodGet || fake.requests[1].method != http.MethodGet || fake.requests[2].method != http.MethodPost {
+		t.Fatalf("retry requests = %#v", fake.requests)
+	}
+	fake = &resolverClient{errors: []error{context.DeadlineExceeded, context.DeadlineExceeded}}
+	if _, err := newWithDo(fake).Resolve(context.Background(), resolverRef()); !errors.Is(err, context.DeadlineExceeded) || len(fake.requests) != 2 {
+		t.Fatalf("exhausted timeout requests=%d error=%v", len(fake.requests), err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	fake = &resolverClient{errors: []error{context.DeadlineExceeded}, cancelAt: 1, cancel: cancel}
+	if _, err := newWithDo(fake).Resolve(ctx, resolverRef()); !errors.Is(err, context.Canceled) || len(fake.requests) != 1 {
+		t.Fatalf("canceled request retried; requests=%d error=%v", len(fake.requests), err)
+	}
+}
+
 func TestAllowedOriginsExactAndCloned(t *testing.T) {
 	want := []string{episodesOrigin, resolverOrigin}
 	got := AllowedOrigins()

@@ -6,6 +6,7 @@ import (
 	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,21 +21,37 @@ import (
 )
 
 type request struct {
-	OS            string
-	Arch          string
-	Binary        string
-	Output        string
-	License       string
-	Notices       string
-	LibMPV        string
-	LibMPVSHA256  string
-	LibMPVLicense string
+	OS             string
+	Arch           string
+	Binary         string
+	Output         string
+	License        string
+	Notices        string
+	LibMPV         string
+	LibMPVSHA256   string
+	LibMPVLicense  string
+	LibMPVManifest string
+	LibMPVSources  string
 }
 
 type archiveFile struct {
 	name string
 	path string
 	hash string
+}
+
+type provenanceManifest struct {
+	Schema        int                   `json:"schema"`
+	LibMPVSHA256  string                `json:"libmpv_sha256"`
+	SourcesSHA256 string                `json:"sources_sha256"`
+	Components    []provenanceComponent `json:"components"`
+}
+
+type provenanceComponent struct {
+	Name        string `json:"name"`
+	Revision    string `json:"revision"`
+	License     string `json:"license"`
+	SourceEntry string `json:"source_entry"`
 }
 
 func main() {
@@ -48,6 +65,8 @@ func main() {
 	flag.StringVar(&req.LibMPV, "libmpv", "", "Windows libmpv runtime DLL")
 	flag.StringVar(&req.LibMPVSHA256, "libmpv-sha256", "", "expected SHA-256 of libmpv runtime DLL")
 	flag.StringVar(&req.LibMPVLicense, "libmpv-license", "", "license notice for bundled libmpv runtime")
+	flag.StringVar(&req.LibMPVManifest, "libmpv-manifest", "", "JSON provenance manifest for bundled libmpv runtime")
+	flag.StringVar(&req.LibMPVSources, "libmpv-sources", "", "ZIP archive of corresponding libmpv dependency sources")
 	flag.Parse()
 	if err := validatePinnedRuntime(req); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -84,12 +103,16 @@ func packageArtifact(req request) error {
 	if !strings.HasSuffix(req.Output, ".zip") {
 		return errors.New("Windows portable artifacts must use .zip")
 	}
-	if req.LibMPV == "" || req.LibMPVLicense == "" {
-		return errors.New("Windows package requires libmpv runtime and license notice")
+	if req.LibMPV == "" || req.LibMPVLicense == "" || req.LibMPVManifest == "" || req.LibMPVSources == "" {
+		return errors.New("Windows package requires libmpv runtime, license notice, provenance manifest and corresponding sources")
 	}
 	decoded, err := hex.DecodeString(req.LibMPVSHA256)
 	if err != nil || len(decoded) != sha256.Size {
 		return errors.New("libmpv runtime requires a valid SHA-256 digest")
+	}
+	manifest, err := validateProvenance(req)
+	if err != nil {
+		return err
 	}
 
 	files := []archiveFile{{name: "animeportable.exe", path: req.Binary}}
@@ -100,6 +123,8 @@ func packageArtifact(req request) error {
 	files = append(files,
 		archiveFile{name: "libmpv-2.dll", path: req.LibMPV, hash: strings.ToLower(req.LibMPVSHA256)},
 		archiveFile{name: "licenses/libmpv.txt", path: req.LibMPVLicense},
+		archiveFile{name: "licenses/libmpv-provenance.json", path: req.LibMPVManifest, hash: manifest.manifestHash},
+		archiveFile{name: "sources/libmpv-sources.zip", path: req.LibMPVSources, hash: manifest.sourcesHash},
 	)
 	for _, file := range files {
 		if err := validateEntryName(file.name); err != nil {
@@ -134,6 +159,151 @@ func packageArtifact(req request) error {
 		return err
 	}
 	completed = true
+	return nil
+}
+
+type validatedProvenance struct {
+	manifestHash string
+	sourcesHash  string
+}
+
+func validateProvenance(req request) (validatedProvenance, error) {
+	var result validatedProvenance
+	manifestFile, err := openRegularFile(req.LibMPVManifest)
+	if err != nil {
+		return result, fmt.Errorf("invalid libmpv provenance manifest: %w", err)
+	}
+	defer manifestFile.Close()
+	info, err := manifestFile.Stat()
+	if err != nil {
+		return result, err
+	}
+	if info.Size() > 1<<20 {
+		return result, errors.New("libmpv provenance manifest exceeds 1 MiB")
+	}
+	manifestBytes, err := io.ReadAll(manifestFile)
+	if err != nil {
+		return result, err
+	}
+	var manifest provenanceManifest
+	decoder := json.NewDecoder(strings.NewReader(string(manifestBytes)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&manifest); err != nil {
+		return result, fmt.Errorf("decode libmpv provenance manifest: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return result, errors.New("libmpv provenance manifest must contain one JSON object")
+	}
+	if manifest.Schema != 1 {
+		return result, fmt.Errorf("unsupported libmpv provenance schema %d", manifest.Schema)
+	}
+	if !strings.EqualFold(manifest.LibMPVSHA256, req.LibMPVSHA256) {
+		return result, errors.New("provenance manifest libmpv digest does not match runtime")
+	}
+	if !validSHA256(manifest.SourcesSHA256) {
+		return result, errors.New("provenance manifest requires a valid sources SHA-256 digest")
+	}
+	if len(manifest.Components) < 2 {
+		return result, errors.New("provenance manifest requires mpv and FFmpeg components")
+	}
+	components := make(map[string]bool, len(manifest.Components))
+	sourceEntries := make(map[string]bool, len(manifest.Components))
+	for _, component := range manifest.Components {
+		name := strings.ToLower(strings.TrimSpace(component.Name))
+		if name == "" || strings.TrimSpace(component.Revision) == "" || strings.TrimSpace(component.License) == "" || component.SourceEntry == "" {
+			return result, errors.New("each provenance component requires name, exact revision, license and source entry")
+		}
+		if err := validateEntryName(component.SourceEntry); err != nil {
+			return result, fmt.Errorf("unsafe provenance source entry: %w", err)
+		}
+		if components[name] || sourceEntries[component.SourceEntry] {
+			return result, errors.New("provenance component names and source entries must be unique")
+		}
+		components[name] = true
+		sourceEntries[component.SourceEntry] = true
+	}
+	if !components["mpv"] || !components["ffmpeg"] {
+		return result, errors.New("provenance manifest must include mpv and FFmpeg")
+	}
+	if err := validateSourceArchive(req.LibMPVSources, manifest.SourcesSHA256, sourceEntries); err != nil {
+		return result, err
+	}
+	manifestDigest := sha256.Sum256(manifestBytes)
+	result.manifestHash = hex.EncodeToString(manifestDigest[:])
+	result.sourcesHash = strings.ToLower(manifest.SourcesSHA256)
+	return result, nil
+}
+
+func validSHA256(value string) bool {
+	decoded, err := hex.DecodeString(value)
+	return err == nil && len(decoded) == sha256.Size
+}
+
+func validateSourceArchive(filePath, expectedHash string, required map[string]bool) error {
+	input, err := openRegularFile(filePath)
+	if err != nil {
+		return fmt.Errorf("invalid libmpv source archive: %w", err)
+	}
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, input); err != nil {
+		input.Close()
+		return err
+	}
+	if err := input.Close(); err != nil {
+		return err
+	}
+	if !strings.EqualFold(hex.EncodeToString(hasher.Sum(nil)), expectedHash) {
+		return errors.New("libmpv source archive SHA-256 does not match provenance manifest")
+	}
+	reader, err := zip.OpenReader(filePath)
+	if err != nil {
+		return fmt.Errorf("open libmpv source archive: %w", err)
+	}
+	defer reader.Close()
+	found := make(map[string]bool, len(required))
+	for _, file := range reader.File {
+		name := file.Name
+		isDirectory := file.Mode().IsDir()
+		if isDirectory {
+			name = strings.TrimSuffix(name, "/")
+		}
+		if err := validateEntryName(name); err != nil {
+			return fmt.Errorf("unsafe libmpv source entry: %w", err)
+		}
+		if file.Mode()&os.ModeSymlink != 0 || (!isDirectory && !file.Mode().IsRegular()) {
+			return fmt.Errorf("libmpv source entry %q is not a regular file", file.Name)
+		}
+		if isDirectory {
+			continue
+		}
+		if !required[file.Name] {
+			continue
+		}
+		if found[file.Name] {
+			return fmt.Errorf("duplicate libmpv source entry %q", file.Name)
+		}
+		found[file.Name] = true
+		stream, err := file.Open()
+		if err != nil {
+			return err
+		}
+		size, readErr := io.Copy(io.Discard, stream)
+		closeErr := stream.Close()
+		if readErr != nil {
+			return fmt.Errorf("read libmpv source entry %q: %w", file.Name, readErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close libmpv source entry %q: %w", file.Name, closeErr)
+		}
+		if size == 0 {
+			return fmt.Errorf("libmpv source entry %q is empty", file.Name)
+		}
+	}
+	for name := range required {
+		if !found[name] {
+			return fmt.Errorf("libmpv source archive is missing required source entry %q", name)
+		}
+	}
 	return nil
 }
 

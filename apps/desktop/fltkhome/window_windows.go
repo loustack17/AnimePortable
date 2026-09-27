@@ -35,8 +35,11 @@ type view struct {
 	sectionTitle  *fltk.Box
 	contentHint   *fltk.Box
 	scroll        *fltk.Scroll
+	scrollOriginX int
+	scrollOriginY int
 	loadingText   *fltk.Box
 	retryButton   *fltk.Button
+	browseButton  *fltk.Button
 	contentLabels []themedLabel
 	staticLabels  int
 	cards         []*fltk.Box
@@ -100,9 +103,10 @@ func (ui *view) build() {
 		x, y, width, height := ui.themeToggle.X(), ui.themeToggle.Y(), ui.themeToggle.W(), ui.themeToggle.H()
 		if ui.themeToggle.HasFocus() {
 			roundedRect(x, y, width, height, 13, colors.accent)
-			x, y, width, height = x+3, y+3, width-6, height-6
+		} else {
+			roundedRect(x, y, width, height, 13, colors.soft)
 		}
-		roundedRect(x, y, width, height, 11, colors.soft)
+		roundedRect(x+3, y+3, width-6, height-6, 11, colors.soft)
 		fltk.SetDrawColor(colors.accent)
 		centerX, centerY := x+width/2, y+height/2
 		if ui.dark {
@@ -116,7 +120,7 @@ func (ui *view) build() {
 			fltk.DrawPie(centerX-4, centerY-13, 18, 18, 0, 360)
 		}
 	})
-	ui.themeToggle.SetCallback(func() {
+	toggleTheme := func() {
 		ui.dark = !ui.dark
 		if ui.dark {
 			ui.themeToggle.SetTooltip("切換明亮")
@@ -124,7 +128,9 @@ func (ui *view) build() {
 			ui.themeToggle.SetTooltip("切換暗色")
 		}
 		ui.applyTheme()
-	})
+	}
+	ui.bindButton(ui.themeToggle, toggleTheme)
+	ui.bindThemeKeys(toggleTheme)
 	ui.startupGroup = fltk.NewGroup(18, 78, 964, 520)
 	ui.startupGroup.End()
 	ui.startupGroup.Hide()
@@ -142,6 +148,8 @@ func (ui *view) build() {
 	ui.scroll.SetType(fltk.SCROLL_BOTH)
 	ui.scroll.SetBox(fltk.FLAT_BOX)
 	hero := fltk.NewBox(fltk.NO_BOX, 250, 115, 711, 139)
+	ui.scrollOriginX = ui.scroll.X() - hero.X()
+	ui.scrollOriginY = ui.scroll.Y() - hero.Y()
 	hero.SetDrawHandler(func(func()) { roundedRect(hero.X(), hero.Y(), hero.W(), hero.H(), 20, fltk.ColorFromRgb(48, 55, 125)) })
 	heroTitle := fltk.NewBox(fltk.NO_BOX, 278, 134, 600, 35, "繼續探索喜歡的故事")
 	heroTitle.SetLabelFont(fltk.HELVETICA_BOLD)
@@ -153,26 +161,39 @@ func (ui *view) build() {
 	heroHint.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
 	heroHint.SetLabelColor(fltk.WHITE)
 	browse := fltk.NewButton(278, 205, 132, 37, "瀏覽內容")
+	ui.browseButton = browse
 	browse.SetBox(fltk.NO_BOX)
 	browse.SetDrawHandler(func(func()) {
 		x, y, width, height := browse.X(), browse.Y(), browse.W(), browse.H()
 		if browse.HasFocus() {
 			roundedRect(x, y, width, height, 13, ui.colors().accent)
-			x, y, width, height = x+3, y+3, width-6, height-6
+		} else {
+			roundedRect(x, y, width, height, 13, fltk.WHITE)
 		}
-		roundedRect(x, y, width, height, 11, fltk.WHITE)
+		roundedRect(x+3, y+3, width-6, height-6, 11, fltk.WHITE)
 		fltk.SetDrawColor(fltk.ColorFromRgb(48, 55, 125))
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 13)
 		fltk.Draw(browse.Label(), x, y, width, height, fltk.ALIGN_CENTER)
 	})
-	browse.SetCallback(func() { ui.scroll.ScrollTo(0, 176) })
+	browseAction := func() { ui.scrollTo(176) }
+	ui.bindButton(browse, browseAction)
+	ui.bindContentKeys(browse, browseAction, nil, func() *fltk.Button {
+		if ui.retryButton != nil && ui.retryButton.Visible() {
+			return ui.retryButton
+		}
+		if len(ui.cardButtons) > 0 {
+			return ui.cardButtons[0]
+		}
+		return ui.themeToggle
+	})
 	ui.contentText(253, 274, 600, 32, "繼續觀看", 20, false, true)
 	ui.loadingText = fltk.NewBox(fltk.NO_BOX, 253, 326, 680, 36, "正在載入繼續觀看…")
 	ui.loadingText.SetLabelSize(13)
 	ui.loadingText.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
 	ui.retryButton = fltk.NewButton(253, 365, 126, 36, "重新載入")
 	ui.styleButton(ui.retryButton, func() bool { return true })
-	ui.retryButton.SetCallback(ui.loadHome)
+	ui.bindButton(ui.retryButton, ui.loadHome)
+	ui.bindContentKeys(ui.retryButton, ui.loadHome, func() *fltk.Button { return ui.browseButton }, func() *fltk.Button { return ui.themeToggle })
 	ui.retryButton.Hide()
 	ui.scroll.End()
 	ui.mainGroup.End()
@@ -192,9 +213,7 @@ func (ui *view) build() {
 	ui.tagline = tagline
 	for index, label := range sections {
 		button := fltk.NewButton(27, 111+index*55, 177, 43, label)
-		button.SetCallback(func(current int) func() {
-			return func() { ui.showSection(current) }
-		}(index))
+		ui.bindNavigationKeys(button, index)
 		button.SetLabelSize(15)
 		ui.styleButton(button, func() bool { return ui.selected == index })
 		ui.navigation = append(ui.navigation, button)
@@ -211,13 +230,13 @@ func (ui *view) showChoices(message string) {
 	ui.startupGroup.Begin()
 	create := fltk.NewButton(272, 132, 240, 48, "建立新的空白資料")
 	ui.styleButton(create, func() bool { return true })
-	create.SetCallback(func() { ui.start(false) })
+	ui.bindButton(create, func() { ui.start(false) })
 	copy := fltk.NewButton(530, 132, 240, 48, "複製既有資料")
 	ui.styleButton(copy, nil)
-	copy.SetCallback(func() { ui.start(true) })
+	ui.bindButton(copy, func() { ui.start(true) })
 	close := fltk.NewButton(272, 194, 160, 40, "關閉")
 	ui.styleButton(close, nil)
-	close.SetCallback(ui.cancel)
+	ui.bindButton(close, ui.cancel)
 	ui.startupGroup.End()
 	ui.startupGroup.Show()
 	fltk.AddTimeout(0.01, func() {
@@ -235,7 +254,7 @@ func (ui *view) showStartupError(message string) {
 		ui.startupGroup.Begin()
 		ui.closeButton = fltk.NewButton(272, 132, 160, 40, "關閉")
 		ui.styleButton(ui.closeButton, nil)
-		ui.closeButton.SetCallback(ui.cancel)
+		ui.bindButton(ui.closeButton, ui.cancel)
 		ui.startupGroup.End()
 	}
 	ui.startupGroup.Show()
@@ -243,11 +262,17 @@ func (ui *view) showStartupError(message string) {
 }
 
 func (ui *view) start(copyExisting bool) {
+	if ui.ctx.Err() != nil {
+		return
+	}
 	ui.message.SetLabel("正在準備資料…")
 	ui.startupGroup.Deactivate()
 	go func() {
 		var err error
 		imported := false
+		if ui.ctx.Err() != nil {
+			return
+		}
 		if copyExisting {
 			err = ui.plan.Import(ui.ctx)
 			imported = err == nil
@@ -373,10 +398,22 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		button := fltk.NewButton(813, y+28, 126, 36, "繼續播放")
 		ui.styleButton(button, func() bool { return true })
 		item := row.History
-		button.SetCallback(func() {
+		playRow := func() {
 			if ui.onPlay != nil && ui.ctx.Err() == nil {
 				ui.onPlay(playRequest(item))
 			}
+		}
+		ui.bindButton(button, playRow)
+		ui.bindContentKeys(button, playRow, func() *fltk.Button {
+			if index > 0 {
+				return ui.cardButtons[index-1]
+			}
+			return ui.browseButton
+		}, func() *fltk.Button {
+			if index+1 < len(ui.cardButtons) {
+				return ui.cardButtons[index+1]
+			}
+			return ui.themeToggle
 		})
 		ui.cardButtons = append(ui.cardButtons, button)
 	}
@@ -405,6 +442,216 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	ui.contentText(270, updateY+117, 620, 22, "目前沒有本機播出資料。", 12, true, false)
 	ui.scroll.End()
 	ui.applyTheme()
+}
+
+func (ui *view) bindButton(button *fltk.Button, action func()) {
+	button.SetCallback(action)
+	activate := ui.deferredKeyAction(action)
+	button.SetEventHandler(func(event fltk.Event) bool {
+		if event != fltk.KEYDOWN {
+			return false
+		}
+		key := fltk.EventKey()
+		if key != fltk.ENTER_KEY && key != 13 && key != 0xff8d {
+			return false
+		}
+		activate()
+		return true
+	})
+}
+
+func (ui *view) deferredKeyAction(action func()) func() {
+	queued := false
+	return func() {
+		if queued {
+			return
+		}
+		queued = true
+		fltk.AddTimeout(0.01, func() {
+			queued = false
+			if ui.ctx.Err() == nil {
+				action()
+			}
+		})
+	}
+}
+
+func (ui *view) focusAfterKey(action func()) {
+	fltk.AddTimeout(0.01, func() {
+		if ui.ctx.Err() == nil {
+			action()
+		}
+	})
+}
+
+func (ui *view) bindNavigationKeys(button *fltk.Button, index int) {
+	button.SetCallback(func() { ui.showSection(index) })
+	activate := ui.deferredKeyAction(func() { ui.showSection(index) })
+	button.SetEventHandler(func(event fltk.Event) bool {
+		if event != fltk.KEYDOWN {
+			return false
+		}
+		switch fltk.EventKey() {
+		case fltk.ENTER_KEY, 13, 0xff8d:
+			activate()
+		case 0xff52:
+			ui.focusAfterKey(func() { ui.navigation[max(0, index-1)].TakeFocus() })
+		case 0xff54:
+			ui.focusAfterKey(func() { ui.navigation[min(len(ui.navigation)-1, index+1)].TakeFocus() })
+		case 0xff53:
+			ui.focusAfterKey(ui.focusContent)
+		case 9, 0xff09:
+			if fltk.EventState()&fltk.SHIFT != 0 {
+				ui.focusAfterKey(func() { ui.navigation[max(0, index-1)].TakeFocus() })
+			} else if index+1 < len(ui.navigation) {
+				ui.focusAfterKey(func() { ui.navigation[index+1].TakeFocus() })
+			} else {
+				ui.focusAfterKey(ui.focusContent)
+			}
+		default:
+			return false
+		}
+		return true
+	})
+}
+
+func (ui *view) focusContent() {
+	if ui.scroll.Visible() && ui.browseButton != nil {
+		ui.scrollTo(0)
+		ui.browseButton.TakeFocus()
+		return
+	}
+	ui.themeToggle.TakeFocus()
+}
+
+func (ui *view) scrollTo(y int) {
+	targetY := ui.scrollOriginY + y
+	if ui.scroll.XPosition() != ui.scrollOriginX || ui.scroll.YPosition() != targetY {
+		ui.scroll.ScrollTo(ui.scrollOriginX, targetY)
+	}
+}
+
+func (ui *view) focusTarget(button *fltk.Button) {
+	if button == nil {
+		return
+	}
+	if button == ui.browseButton || button == ui.retryButton {
+		ui.scrollTo(0)
+	}
+	for index, card := range ui.cardButtons {
+		if card == button {
+			ui.scrollTo(index * 104)
+			break
+		}
+	}
+	button.TakeFocus()
+}
+
+func (ui *view) bindContentKeys(button *fltk.Button, action func(), previous, next func() *fltk.Button) {
+	activate := ui.deferredKeyAction(action)
+	button.SetEventHandler(func(event fltk.Event) bool {
+		if event != fltk.KEYDOWN {
+			return false
+		}
+		switch fltk.EventKey() {
+		case fltk.ENTER_KEY, 13, 0xff8d:
+			activate()
+		case 0xff51:
+			if button == ui.browseButton || button == ui.retryButton {
+				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
+			} else {
+				ui.focusAfterKey(func() { ui.focusTarget(ui.browseButton) })
+			}
+		case 0xff53:
+			if button == ui.browseButton && len(ui.cardButtons) > 0 {
+				ui.focusAfterKey(func() {
+					if len(ui.cardButtons) > 0 {
+						ui.focusTarget(ui.cardButtons[0])
+					}
+				})
+			} else if button == ui.retryButton {
+				ui.focusAfterKey(func() { ui.focusTarget(ui.themeToggle) })
+			} else {
+				return true
+			}
+		case 0xff52:
+			if button == ui.browseButton {
+				ui.focusAfterKey(func() { ui.focusTarget(ui.themeToggle) })
+			} else if previous == nil || previous() == nil {
+				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
+			} else {
+				ui.focusAfterKey(func() { ui.focusTarget(previous()) })
+			}
+		case 0xff54:
+			if next != nil && next() != nil {
+				ui.focusAfterKey(func() { ui.focusTarget(next()) })
+			} else {
+				return false
+			}
+		case 9, 0xff09:
+			if fltk.EventState()&fltk.SHIFT != 0 {
+				if previous == nil || previous() == nil {
+					ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
+				} else {
+					ui.focusAfterKey(func() { ui.focusTarget(previous()) })
+				}
+			} else if next != nil && next() != nil {
+				ui.focusAfterKey(func() { ui.focusTarget(next()) })
+			} else {
+				return false
+			}
+		default:
+			return false
+		}
+		return true
+	})
+}
+
+func (ui *view) bindThemeKeys(action func()) {
+	activate := ui.deferredKeyAction(action)
+	ui.themeToggle.SetEventHandler(func(event fltk.Event) bool {
+		if event != fltk.KEYDOWN {
+			return false
+		}
+		switch fltk.EventKey() {
+		case fltk.ENTER_KEY, 13, 0xff8d:
+			activate()
+		case 0xff51:
+			ui.focusAfterKey(func() { ui.navigation[0].TakeFocus() })
+		case 0xff54:
+			ui.focusAfterKey(ui.focusContent)
+		case 0xff52:
+			if len(ui.cardButtons) > 0 && ui.scroll.Visible() {
+				ui.focusAfterKey(func() {
+					if len(ui.cardButtons) > 0 {
+						ui.focusTarget(ui.cardButtons[len(ui.cardButtons)-1])
+					}
+				})
+			} else if ui.scroll.Visible() {
+				ui.focusAfterKey(ui.focusContent)
+			} else {
+				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
+			}
+		case 9, 0xff09:
+			if fltk.EventState()&fltk.SHIFT == 0 {
+				return false
+			}
+			if ui.scroll.Visible() && ui.retryButton != nil && ui.retryButton.Visible() {
+				ui.focusAfterKey(func() { ui.focusTarget(ui.retryButton) })
+			} else if len(ui.cardButtons) > 0 && ui.scroll.Visible() {
+				ui.focusAfterKey(func() {
+					if len(ui.cardButtons) > 0 {
+						ui.focusTarget(ui.cardButtons[len(ui.cardButtons)-1])
+					}
+				})
+			} else {
+				ui.focusAfterKey(func() { ui.navigation[len(ui.navigation)-1].TakeFocus() })
+			}
+		default:
+			return false
+		}
+		return true
+	})
 }
 
 func (ui *view) cancel() {

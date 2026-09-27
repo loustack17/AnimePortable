@@ -2,4 +2,4 @@
 
 package runtimepin
 
-const LibMPVSHA256 = "e466e34e425cb3b4546b18ad6dd66ad020dcb389bb3cd8fe9c843e8d6d8ee743"
+const LibMPVSHA256 = "24e848f59c047c9442501fdbe619ad39b98be7d4dd402691f79931c852c0070a"

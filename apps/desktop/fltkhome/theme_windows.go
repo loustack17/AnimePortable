@@ -76,12 +76,13 @@ func (ui *view) styleButton(button *fltk.Button, selected func() bool) {
 		x, y, width, height := button.X(), button.Y(), button.W(), button.H()
 		if button.HasFocus() {
 			roundedRect(x, y, width, height, 13, colors.accent)
-			x, y, width, height = x+3, y+3, width-6, height-6
+		} else {
+			roundedRect(x, y, width, height, 13, background)
 		}
-		roundedRect(x, y, width, height, 11, background)
+		roundedRect(x+3, y+3, width-6, height-6, 11, background)
 		fltk.SetDrawColor(foreground)
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 15)
-		fltk.Draw(button.Label(), x+15, y, width-20, height, fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE)
+		fltk.Draw(button.Label(), x+18, y+3, width-26, height-6, fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE)
 	})
 }
 

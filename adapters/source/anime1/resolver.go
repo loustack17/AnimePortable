@@ -33,6 +33,7 @@ const (
 	maxResolverURLBytes    = 8 << 10
 	maxResolverCookieBytes = 4 << 10
 	maxResolverHeaderBytes = 13 << 10
+	resolverPageTimeout    = 5 * time.Second
 )
 
 var (
@@ -95,37 +96,57 @@ func validResolverRef(ref core.EpisodeRef) bool {
 }
 
 func (client *Client) fetchResolver(ctx context.Context, method, target, body, contentType, referer string) (*securehttp.Response, error) {
-	var reader io.Reader
-	if body != "" {
-		reader = strings.NewReader(body)
+	attempts := 1
+	if method == http.MethodGet {
+		attempts = 2
 	}
-	request, err := http.NewRequestWithContext(ctx, method, target, reader)
-	if err != nil {
-		return nil, errResolverUnavailable
+	for attempt := 0; attempt < attempts; attempt++ {
+		requestCtx := ctx
+		cancel := func() {}
+		if method == http.MethodGet {
+			requestCtx, cancel = context.WithTimeout(ctx, resolverPageTimeout)
+		}
+		var reader io.Reader
+		if body != "" {
+			reader = strings.NewReader(body)
+		}
+		request, err := http.NewRequestWithContext(requestCtx, method, target, reader)
+		if err != nil {
+			cancel()
+			return nil, errResolverUnavailable
+		}
+		if contentType != "" {
+			request.Header.Set("Content-Type", contentType)
+		}
+		if referer != "" {
+			request.Header.Set("Referer", referer)
+		}
+		response, err := client.do.Do(request)
+		cancel()
+		if err != nil {
+			if method == http.MethodGet && attempt == 0 && ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+				continue
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, sanitizeResolverError(err)
+		}
+		if response == nil {
+			return nil, errResolverUnavailable
+		}
+		if err := response.RequireSuccess(); err != nil {
+			return nil, err
+		}
+		if len(response.Body) > maxResolverBodyBytes {
+			return nil, errResolverMalformed
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return response, nil
 	}
-	if contentType != "" {
-		request.Header.Set("Content-Type", contentType)
-	}
-	if referer != "" {
-		request.Header.Set("Referer", referer)
-	}
-	response, err := client.do.Do(request)
-	if err != nil {
-		return nil, sanitizeResolverError(err)
-	}
-	if response == nil {
-		return nil, errResolverUnavailable
-	}
-	if err := response.RequireSuccess(); err != nil {
-		return nil, err
-	}
-	if len(response.Body) > maxResolverBodyBytes {
-		return nil, errResolverMalformed
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return response, nil
+	return nil, errResolverUnavailable
 }
 
 func sanitizeResolverError(err error) error {

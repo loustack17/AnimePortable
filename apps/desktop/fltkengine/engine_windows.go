@@ -4,6 +4,7 @@ package fltkengine
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -41,6 +42,8 @@ type Engine struct {
 	pendingStarted bool
 	failed         bool
 	onState        func(time.Duration, time.Duration, bool, int)
+	onLoad         func(uint64)
+	onFailure      func(uint64)
 	closeOnce      sync.Once
 }
 
@@ -52,7 +55,11 @@ func New(ctx context.Context, video *fltk.GlWindow) (*Engine, error) {
 	if err != nil {
 		return nil, libmpv.ErrPlayerFailed
 	}
-	library, err := mpv.Open(filepath.Join(filepath.Dir(executable), "libmpv-2.dll"), runtimepin.LibMPVSHA256)
+	libraryPath, libraryHash, err := libraryLocation(executable, os.Getenv)
+	if err != nil {
+		return nil, libmpv.ErrPlayerFailed
+	}
+	library, err := mpv.Open(libraryPath, libraryHash)
 	if err != nil {
 		return nil, libmpv.ErrPlayerFailed
 	}
@@ -99,6 +106,21 @@ func New(ctx context.Context, video *fltk.GlWindow) (*Engine, error) {
 		return nil, err
 	}
 	return result, err
+}
+
+func libraryLocation(executable string, getenv func(string) string) (string, string, error) {
+	path := getenv("ANIMEPORTABLE_LIBMPV_OVERRIDE")
+	hash := getenv("ANIMEPORTABLE_LIBMPV_OVERRIDE_SHA256")
+	if path == "" && hash == "" {
+		return filepath.Join(filepath.Dir(executable), "libmpv-2.dll"), runtimepin.LibMPVSHA256, nil
+	}
+	if !filepath.IsAbs(path) || len(hash) != 64 {
+		return "", "", mpv.ErrInvalidLibrary
+	}
+	if _, err := hex.DecodeString(hash); err != nil {
+		return "", "", mpv.ErrInvalidLibrary
+	}
+	return path, hash, nil
 }
 
 func glProc(name string) uintptr {
@@ -172,7 +194,11 @@ func (engine *Engine) Load(ctx context.Context, url string, startAt time.Duratio
 		engine.pending = true
 		engine.pendingStarted = false
 		engine.failed = false
+		onLoad := engine.onLoad
 		engine.mu.Unlock()
+		if onLoad != nil {
+			onLoad(generation)
+		}
 		engine.video.Redraw()
 		return nil
 	})
@@ -184,6 +210,24 @@ func (engine *Engine) SetStateHandler(handler func(time.Duration, time.Duration,
 	engine.mu.Lock()
 	engine.onState = handler
 	engine.mu.Unlock()
+}
+
+func (engine *Engine) SetFailureHandler(handler func(uint64)) {
+	engine.mu.Lock()
+	engine.onFailure = handler
+	engine.mu.Unlock()
+}
+
+func (engine *Engine) SetLoadHandler(handler func(uint64)) {
+	engine.mu.Lock()
+	engine.onLoad = handler
+	engine.mu.Unlock()
+}
+
+func (engine *Engine) FailedGeneration(generation uint64) bool {
+	engine.mu.Lock()
+	defer engine.mu.Unlock()
+	return !engine.closed && engine.failed && engine.generation == generation
 }
 
 func (engine *Engine) Snapshot(ctx context.Context) (core.PlaybackSnapshot, error) {
@@ -222,8 +266,10 @@ func (engine *Engine) tick() {
 			engine.pending = false
 			engine.pendingStarted = false
 		}
-		if event.EventID == mpv.EventEnd && event.EndFile().Reason == mpv.EndFileError && (!pending || started) {
+		var notifyFailure func(uint64)
+		if event.EventID == mpv.EventEnd && event.EndFile().Reason == mpv.EndFileError && (!pending || started) && !engine.failed {
 			engine.failed = true
+			notifyFailure = engine.onFailure
 		}
 		engine.mu.Unlock()
 		if generation == 0 || event.EventID != mpv.EventEnd {
@@ -242,6 +288,9 @@ func (engine *Engine) tick() {
 		select {
 		case engine.events <- libmpv.Event{Generation: generation, Kind: kind}:
 		default:
+		}
+		if notifyFailure != nil {
+			fltk.Awake(func() { notifyFailure(generation) })
 		}
 	}
 	engine.mu.Lock()
@@ -306,6 +355,16 @@ func (engine *Engine) Control(ctx context.Context, command string, value int) er
 			return engine.core.SetProperty("pause", mpv.FormatFlag, engine.core.GetPropertyString("pause") != "yes")
 		case "seek":
 			return engine.core.Command([]string{"seek", strconv.Itoa(value), "relative"})
+		case "seek_absolute":
+			if value < 0 {
+				value = 0
+			}
+			return engine.core.Command([]string{"seek", strconv.Itoa(value), "absolute"})
+		case "stop":
+			if err := engine.core.SetProperty("pause", mpv.FormatFlag, true); err != nil {
+				return err
+			}
+			return engine.core.Command([]string{"seek", "0", "absolute"})
 		case "volume":
 			return engine.core.SetProperty("volume", mpv.FormatDouble, float64(value))
 		default:
