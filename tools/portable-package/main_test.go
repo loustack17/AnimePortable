@@ -201,6 +201,52 @@ func TestWindowsPackagePinsBundledLibMPVAndIncludesLicense(t *testing.T) {
 	}
 }
 
+func TestCommunityRuntimePackageDisclosesUnverifiedSourceAndPinsDLL(t *testing.T) {
+	root := t.TempDir()
+	runtimeBytes := []byte("runtime")
+	digest := sha256.Sum256(runtimeBytes)
+	runtimeHash := hex.EncodeToString(digest[:])
+	req := request{
+		OS: "windows", Arch: "amd64", CommunityRuntime: true,
+		Binary:        writeFile(t, root, "animeportable.exe", "application"),
+		Output:        filepath.Join(root, "community.zip"),
+		License:       writeFile(t, root, "LICENSE", "application license"),
+		Notices:       writeFile(t, root, "THIRD_PARTY_NOTICES.md", "third-party notices"),
+		LibMPV:        writeFile(t, root, "libmpv-2.dll", string(runtimeBytes)),
+		LibMPVSHA256:  runtimeHash,
+		LibMPVLicense: writeFile(t, root, "libmpv-notice.txt", runtimeHash+"\nhttps://example.org/upstream\nsource unverified\n"),
+	}
+	if err := packageArtifact(req); err != nil {
+		t.Fatal(err)
+	}
+	entries, contents, err := readZip(req.Output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(entries)
+	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv.txt"}
+	if !reflect.DeepEqual(entries, want) || contents["libmpv-2.dll"] != string(runtimeBytes) {
+		t.Fatalf("community entries = %v, want %v", entries, want)
+	}
+	req.Output = filepath.Join(root, "missing-disclosure.zip")
+	req.LibMPVLicense = writeFile(t, root, "bad-notice.txt", "https://example.org/upstream\n")
+	if err := packageArtifact(req); err == nil {
+		t.Fatal("community package accepted notice without matching runtime hash and disclosure")
+	}
+	req.LibMPVLicense = writeFile(t, root, "valid-notice.txt", runtimeHash+"\nhttps://example.org/upstream\nsource unverified\n")
+	req.Output = filepath.Join(root, "mixed-inputs.zip")
+	req.LibMPVManifest = writeFile(t, root, "provenance.json", "{}")
+	if err := packageArtifact(req); err == nil {
+		t.Fatal("community package accepted strict source inputs")
+	}
+	req.LibMPVManifest = ""
+	req.Output = filepath.Join(root, "wrong-dll.zip")
+	req.LibMPVSHA256 = strings.Repeat("0", 64)
+	if err := packageArtifact(req); err == nil {
+		t.Fatal("community package accepted a mismatched DLL digest")
+	}
+}
+
 func TestPortablePackageFailsClosedOnIncompleteOrMismatchedProvenance(t *testing.T) {
 	valid := provenanceFixture(t, t.TempDir())
 	if err := packageArtifact(valid); err != nil {
@@ -212,8 +258,8 @@ func TestPortablePackageFailsClosedOnIncompleteOrMismatchedProvenance(t *testing
 		want   string
 		mutate func(*request)
 	}{
-		{name: "missing manifest", want: "requires libmpv runtime", mutate: func(req *request) { req.LibMPVManifest = "" }},
-		{name: "missing sources", want: "requires libmpv runtime", mutate: func(req *request) { req.LibMPVSources = "" }},
+		{name: "missing manifest", want: "requires libmpv provenance manifest", mutate: func(req *request) { req.LibMPVManifest = "" }},
+		{name: "missing sources", want: "requires libmpv provenance manifest", mutate: func(req *request) { req.LibMPVSources = "" }},
 		{name: "missing FLTK source", want: "requires FLTK source", mutate: func(req *request) { req.FLTKSource = "" }},
 		{name: "missing FLTK patch", want: "requires FLTK source", mutate: func(req *request) { req.FLTKPatch = "" }},
 		{name: "FLTK source digest mismatch", want: "SHA-256 mismatch for sources/fltk-1.4.5.tar.gz", mutate: func(req *request) {

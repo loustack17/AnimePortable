@@ -1,0 +1,18 @@
+AnimePortable Windows libmpv runtime notice
+
+Bundled file: libmpv-2.dll
+SHA-256: 24e848f59c047c9442501fdbe619ad39b98be7d4dd402691f79931c852c0070a
+Binary release: https://github.com/Predidit/libmpv-win32-video-cmake/releases/tag/20260811
+Build repository revision: https://github.com/Predidit/libmpv-win32-video-cmake/tree/6ef6f2ea5ebb5d60bc329ef59b6a751ff6fd9633
+mpv source revision selected by that build: https://github.com/mpv-player/mpv/tree/ad59ff1b4a7479e15cb01a96f64ada4fb4df4951
+FFmpeg source branch selected by that build: https://github.com/FFmpeg/FFmpeg/tree/release/7.1
+
+mpv is GPL-2.0-or-later by default and may be LGPL-2.1-or-later when built without GPL-only components. FFmpeg is LGPL-2.1-or-later by default and may be GPL-2.0-or-later when optional GPL components are included. The linked build scripts request non-GPL configurations. The exact FFmpeg revision, complete statically linked dependency inventory, applicable license set, and corresponding source snapshot for this binary are unverified. The branch link above is not a claim that its current contents are the exact source used for this DLL.
+
+AnimePortable loads this DLL by absolute path and verifies its SHA-256. This notice identifies the upstream binary and the known build inputs; it does not certify the DLL as an LGPL-only build or certify that all source-distribution obligations have been met. AnimePortable's own source files remain under MPL-2.0.
+
+Upstream license information:
+https://github.com/mpv-player/mpv/blob/master/Copyright
+https://github.com/mpv-player/mpv/blob/master/LICENSE.GPL
+https://github.com/mpv-player/mpv/blob/master/LICENSE.LGPL
+https://www.ffmpeg.org/legal.html

@@ -30,6 +30,7 @@ type request struct {
 	LibMPV           string
 	LibMPVSHA256     string
 	LibMPVLicense    string
+	CommunityRuntime bool
 	LibMPVManifest   string
 	LibMPVSources    string
 	FLTKSource       string
@@ -69,6 +70,7 @@ func main() {
 	flag.StringVar(&req.LibMPV, "libmpv", "", "Windows libmpv runtime DLL")
 	flag.StringVar(&req.LibMPVSHA256, "libmpv-sha256", "", "expected SHA-256 of libmpv runtime DLL")
 	flag.StringVar(&req.LibMPVLicense, "libmpv-license", "", "license notice for bundled libmpv runtime")
+	flag.BoolVar(&req.CommunityRuntime, "community-runtime", false, "package pinned runtime with disclosed upstream provenance instead of bundled source archives")
 	flag.StringVar(&req.LibMPVManifest, "libmpv-manifest", "", "JSON provenance manifest for bundled libmpv runtime")
 	flag.StringVar(&req.LibMPVSources, "libmpv-sources", "", "ZIP archive of corresponding libmpv dependency sources")
 	flag.StringVar(&req.FLTKSource, "fltk-source", "", "FLTK 1.4.5 source archive")
@@ -111,19 +113,36 @@ func packageArtifact(req request) error {
 	if !strings.HasSuffix(req.Output, ".zip") {
 		return errors.New("Windows portable artifacts must use .zip")
 	}
-	if req.LibMPV == "" || req.LibMPVLicense == "" || req.LibMPVManifest == "" || req.LibMPVSources == "" {
-		return errors.New("Windows package requires libmpv runtime, license notice, provenance manifest and corresponding sources")
+	if req.LibMPV == "" || req.LibMPVLicense == "" {
+		return errors.New("Windows package requires libmpv runtime and license notice")
 	}
-	if req.FLTKSource == "" || req.FLTKPatch == "" || !validSHA256(req.FLTKSourceSHA256) || !validSHA256(req.FLTKPatchSHA256) {
-		return errors.New("Windows package requires FLTK source archive, Windows patch and their SHA-256 digests")
+	if !req.CommunityRuntime {
+		if req.LibMPVManifest == "" || req.LibMPVSources == "" {
+			return errors.New("Windows package requires libmpv provenance manifest and corresponding sources")
+		}
+		if req.FLTKSource == "" || req.FLTKPatch == "" || !validSHA256(req.FLTKSourceSHA256) || !validSHA256(req.FLTKPatchSHA256) {
+			return errors.New("Windows package requires FLTK source archive, Windows patch and their SHA-256 digests")
+		}
+	} else if req.LibMPVManifest != "" || req.LibMPVSources != "" || req.FLTKSource != "" || req.FLTKPatch != "" {
+		return errors.New("community runtime package cannot mix bundled source inputs")
 	}
 	decoded, err := hex.DecodeString(req.LibMPVSHA256)
 	if err != nil || len(decoded) != sha256.Size {
 		return errors.New("libmpv runtime requires a valid SHA-256 digest")
 	}
-	manifest, err := validateProvenance(req)
-	if err != nil {
-		return err
+	var manifest validatedProvenance
+	var noticeHash string
+	if req.CommunityRuntime {
+		noticeHash, err = validateCommunityNotice(req.LibMPVLicense, req.LibMPVSHA256)
+		if err != nil {
+			return err
+		}
+	} else {
+		var err error
+		manifest, err = validateProvenance(req)
+		if err != nil {
+			return err
+		}
 	}
 
 	files := []archiveFile{{name: "animeportable.exe", path: req.Binary}}
@@ -133,12 +152,16 @@ func packageArtifact(req request) error {
 	)
 	files = append(files,
 		archiveFile{name: "libmpv-2.dll", path: req.LibMPV, hash: strings.ToLower(req.LibMPVSHA256)},
-		archiveFile{name: "licenses/libmpv.txt", path: req.LibMPVLicense},
-		archiveFile{name: "licenses/libmpv-provenance.json", path: req.LibMPVManifest, hash: manifest.manifestHash},
-		archiveFile{name: "sources/libmpv-sources.zip", path: req.LibMPVSources, hash: manifest.sourcesHash},
-		archiveFile{name: "sources/fltk-1.4.5.tar.gz", path: req.FLTKSource, hash: strings.ToLower(req.FLTKSourceSHA256)},
-		archiveFile{name: "sources/fltk-1.4.patch", path: req.FLTKPatch, hash: strings.ToLower(req.FLTKPatchSHA256)},
+		archiveFile{name: "licenses/libmpv.txt", path: req.LibMPVLicense, hash: noticeHash},
 	)
+	if !req.CommunityRuntime {
+		files = append(files,
+			archiveFile{name: "licenses/libmpv-provenance.json", path: req.LibMPVManifest, hash: manifest.manifestHash},
+			archiveFile{name: "sources/libmpv-sources.zip", path: req.LibMPVSources, hash: manifest.sourcesHash},
+			archiveFile{name: "sources/fltk-1.4.5.tar.gz", path: req.FLTKSource, hash: strings.ToLower(req.FLTKSourceSHA256)},
+			archiveFile{name: "sources/fltk-1.4.patch", path: req.FLTKPatch, hash: strings.ToLower(req.FLTKPatchSHA256)},
+		)
+	}
 	for _, file := range files {
 		if err := validateEntryName(file.name); err != nil {
 			return err
@@ -178,6 +201,27 @@ func packageArtifact(req request) error {
 type validatedProvenance struct {
 	manifestHash string
 	sourcesHash  string
+}
+
+func validateCommunityNotice(filePath, runtimeHash string) (string, error) {
+	input, err := openRegularFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("invalid libmpv notice: %w", err)
+	}
+	defer input.Close()
+	contents, err := io.ReadAll(io.LimitReader(input, 1<<20+1))
+	if err != nil {
+		return "", fmt.Errorf("read libmpv notice: %w", err)
+	}
+	if len(contents) > 1<<20 {
+		return "", errors.New("libmpv notice exceeds 1 MiB")
+	}
+	notice := strings.ToLower(string(contents))
+	if !strings.Contains(notice, strings.ToLower(runtimeHash)) || !strings.Contains(notice, "https://") || !strings.Contains(notice, "unverified") {
+		return "", errors.New("community libmpv notice requires runtime hash, upstream URL and unverified-source disclosure")
+	}
+	digest := sha256.Sum256(contents)
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func validateProvenance(req request) (validatedProvenance, error) {

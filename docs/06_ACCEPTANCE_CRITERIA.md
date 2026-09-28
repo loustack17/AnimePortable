@@ -543,13 +543,13 @@ Dependency lockfiles are committed.
 Platform release artifacts can be produced.
 
 ### CI-010
-Each desktop release artifact runs from an extracted folder without an installer, privileged installation, or OS-wide registration. The Windows ZIP must include a verified, licensed libmpv runtime.
+Each desktop release artifact runs from an extracted folder without an installer, privileged installation, or OS-wide registration. For the Windows Loop 28 community package, the ZIP includes the tested, SHA-256-pinned libmpv runtime, its upstream binary/build links, applicable known license references, and an explicit disclosure of source and license details that remain unverified. This is the owner's accepted project release gate, not a certification of third-party license compliance. The stricter corresponding-source archive verifier remains available when complete build-specific material is obtained.
 
 ---
 
 # Windows phase gate
 
-The owner selected Windows-only development and acceptance first. Windows Loop 28 closes against FLTK and in-process libmpv, portable state/import, no WebView, keyboard/mouse, security, regression and matched-resource criteria in ADR-023. Windows Loop 28 PASS permits Loop 29 feature work on Windows. `WINDOWS_COMPLETE` requires all applicable Windows feature and final-release criteria. Linux development follows Windows stability; macOS follows Linux stability. Criteria explicitly naming Linux or macOS remain deferred and cannot be marked PASS from Windows evidence. The all-platform `COMPLETE` gate below remains unchanged.
+The owner selected Windows-only development and acceptance first. Windows Loop 28 closes against FLTK and in-process libmpv, portable state/import, no WebView, keyboard/mouse, security, regression and the owner-accepted Windows ZIP gate. On 2026-09-28 the owner accepted the existing resource and interaction evidence without another comparison run, and selected the community provenance disclosure described in CI-010 for this individual open-source project. PERF-008 remains the resource objective for later formal comparison; this exception does not turn an unmatched measurement into a matched PASS. Windows Loop 28 PASS permits Loop 29 feature work on Windows. `WINDOWS_COMPLETE` requires all applicable Windows feature and final-release criteria. Linux development follows Windows stability; macOS follows Linux stability. Criteria explicitly naming Linux or macOS remain deferred and cannot be marked PASS from Windows evidence. The all-platform `COMPLETE` gate below remains unchanged.
 
 # MVP final gate
 
