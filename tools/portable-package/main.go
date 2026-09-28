@@ -21,17 +21,21 @@ import (
 )
 
 type request struct {
-	OS             string
-	Arch           string
-	Binary         string
-	Output         string
-	License        string
-	Notices        string
-	LibMPV         string
-	LibMPVSHA256   string
-	LibMPVLicense  string
-	LibMPVManifest string
-	LibMPVSources  string
+	OS               string
+	Arch             string
+	Binary           string
+	Output           string
+	License          string
+	Notices          string
+	LibMPV           string
+	LibMPVSHA256     string
+	LibMPVLicense    string
+	LibMPVManifest   string
+	LibMPVSources    string
+	FLTKSource       string
+	FLTKSourceSHA256 string
+	FLTKPatch        string
+	FLTKPatchSHA256  string
 }
 
 type archiveFile struct {
@@ -67,6 +71,10 @@ func main() {
 	flag.StringVar(&req.LibMPVLicense, "libmpv-license", "", "license notice for bundled libmpv runtime")
 	flag.StringVar(&req.LibMPVManifest, "libmpv-manifest", "", "JSON provenance manifest for bundled libmpv runtime")
 	flag.StringVar(&req.LibMPVSources, "libmpv-sources", "", "ZIP archive of corresponding libmpv dependency sources")
+	flag.StringVar(&req.FLTKSource, "fltk-source", "", "FLTK 1.4.5 source archive")
+	flag.StringVar(&req.FLTKSourceSHA256, "fltk-source-sha256", "", "expected SHA-256 of FLTK source archive")
+	flag.StringVar(&req.FLTKPatch, "fltk-patch", "", "go-fltk Windows source patch")
+	flag.StringVar(&req.FLTKPatchSHA256, "fltk-patch-sha256", "", "expected SHA-256 of FLTK patch")
 	flag.Parse()
 	if err := validatePinnedRuntime(req); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -106,6 +114,9 @@ func packageArtifact(req request) error {
 	if req.LibMPV == "" || req.LibMPVLicense == "" || req.LibMPVManifest == "" || req.LibMPVSources == "" {
 		return errors.New("Windows package requires libmpv runtime, license notice, provenance manifest and corresponding sources")
 	}
+	if req.FLTKSource == "" || req.FLTKPatch == "" || !validSHA256(req.FLTKSourceSHA256) || !validSHA256(req.FLTKPatchSHA256) {
+		return errors.New("Windows package requires FLTK source archive, Windows patch and their SHA-256 digests")
+	}
 	decoded, err := hex.DecodeString(req.LibMPVSHA256)
 	if err != nil || len(decoded) != sha256.Size {
 		return errors.New("libmpv runtime requires a valid SHA-256 digest")
@@ -125,6 +136,8 @@ func packageArtifact(req request) error {
 		archiveFile{name: "licenses/libmpv.txt", path: req.LibMPVLicense},
 		archiveFile{name: "licenses/libmpv-provenance.json", path: req.LibMPVManifest, hash: manifest.manifestHash},
 		archiveFile{name: "sources/libmpv-sources.zip", path: req.LibMPVSources, hash: manifest.sourcesHash},
+		archiveFile{name: "sources/fltk-1.4.5.tar.gz", path: req.FLTKSource, hash: strings.ToLower(req.FLTKSourceSHA256)},
+		archiveFile{name: "sources/fltk-1.4.patch", path: req.FLTKPatch, hash: strings.ToLower(req.FLTKPatchSHA256)},
 	)
 	for _, file := range files {
 		if err := validateEntryName(file.name); err != nil {
@@ -394,7 +407,7 @@ func addZipFile(writer *zip.Writer, file archiveFile) error {
 		return err
 	}
 	if hex.EncodeToString(hasher.Sum(nil)) != file.hash {
-		return errors.New("libmpv runtime SHA-256 mismatch")
+		return fmt.Errorf("SHA-256 mismatch for %s", file.name)
 	}
 	return nil
 }

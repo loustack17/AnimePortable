@@ -55,6 +55,7 @@ meson setup build . \
     -Dd3d11=disabled \
     -Dd3d-hwaccel=enabled \
     -Dwasapi=enabled \
+    -Dwin32-threads=enabled \
     -Dlua=disabled \
     -Djavascript=disabled \
     -Dsubrandr=disabled \

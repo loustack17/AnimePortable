@@ -57,7 +57,7 @@ func TestPortableArchivesContainOnlyExtractedAppPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	sort.Strings(entries)
-	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv-provenance.json", "licenses/libmpv.txt", "sources/libmpv-sources.zip"}
+	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv-provenance.json", "licenses/libmpv.txt", "sources/fltk-1.4.5.tar.gz", "sources/fltk-1.4.patch", "sources/libmpv-sources.zip"}
 	if !reflect.DeepEqual(entries, want) {
 		t.Fatalf("entries = %v, want %v", entries, want)
 	}
@@ -170,14 +170,14 @@ func TestWindowsPackagePinsBundledLibMPVAndIncludesLicense(t *testing.T) {
 		t.Fatal(err)
 	}
 	sort.Strings(entries)
-	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv-provenance.json", "licenses/libmpv.txt", "sources/libmpv-sources.zip"}
+	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv-provenance.json", "licenses/libmpv.txt", "sources/fltk-1.4.5.tar.gz", "sources/fltk-1.4.patch", "sources/libmpv-sources.zip"}
 	if !reflect.DeepEqual(entries, want) {
 		t.Fatalf("entries = %v, want %v", entries, want)
 	}
 	if contents["libmpv-2.dll"] != "libmpv runtime" || contents["licenses/libmpv.txt"] != "libmpv license" {
 		t.Fatal("bundled runtime or license changed")
 	}
-	if contents["licenses/libmpv-provenance.json"] == "" || contents["sources/libmpv-sources.zip"] == "" {
+	if contents["licenses/libmpv-provenance.json"] == "" || contents["sources/libmpv-sources.zip"] == "" || contents["sources/fltk-1.4.5.tar.gz"] == "" || contents["sources/fltk-1.4.patch"] == "" {
 		t.Fatal("provenance manifest or corresponding sources missing")
 	}
 	req.Output = filepath.Join(root, "bad.zip")
@@ -214,6 +214,14 @@ func TestPortablePackageFailsClosedOnIncompleteOrMismatchedProvenance(t *testing
 	}{
 		{name: "missing manifest", want: "requires libmpv runtime", mutate: func(req *request) { req.LibMPVManifest = "" }},
 		{name: "missing sources", want: "requires libmpv runtime", mutate: func(req *request) { req.LibMPVSources = "" }},
+		{name: "missing FLTK source", want: "requires FLTK source", mutate: func(req *request) { req.FLTKSource = "" }},
+		{name: "missing FLTK patch", want: "requires FLTK source", mutate: func(req *request) { req.FLTKPatch = "" }},
+		{name: "FLTK source digest mismatch", want: "SHA-256 mismatch for sources/fltk-1.4.5.tar.gz", mutate: func(req *request) {
+			req.FLTKSource = writeFile(t, filepath.Dir(req.FLTKSource), "wrong-fltk.tar.gz", "different source")
+		}},
+		{name: "FLTK patch digest mismatch", want: "SHA-256 mismatch for sources/fltk-1.4.patch", mutate: func(req *request) {
+			req.FLTKPatch = writeFile(t, filepath.Dir(req.FLTKPatch), "wrong-fltk.patch", "different patch")
+		}},
 		{name: "source archive digest mismatch", want: "SHA-256 does not match", mutate: func(req *request) {
 			req.LibMPVSources = writeFile(t, filepath.Dir(req.LibMPVSources), "bad-sources.zip", "changed")
 		}},
@@ -377,6 +385,14 @@ func attachProvenance(t *testing.T, root string, req *request) {
 
 func writeProvenanceFixture(t *testing.T, root string, req *request, components []provenanceComponent) {
 	t.Helper()
+	fltkSource := writeFile(t, root, "fltk-1.4.5.tar.gz", "FLTK source archive")
+	fltkPatch := writeFile(t, root, "fltk-1.4.patch", "Windows source patch")
+	sourceDigest := sha256.Sum256([]byte("FLTK source archive"))
+	patchDigest := sha256.Sum256([]byte("Windows source patch"))
+	req.FLTKSource = fltkSource
+	req.FLTKSourceSHA256 = hex.EncodeToString(sourceDigest[:])
+	req.FLTKPatch = fltkPatch
+	req.FLTKPatchSHA256 = hex.EncodeToString(patchDigest[:])
 	sources := writeSourceArchive(t, root, []sourceArchiveEntry{
 		{Name: "source/mpv.tar.xz", Body: "mpv source"},
 		{Name: "source/ffmpeg.tar.xz", Body: "ffmpeg source"},
