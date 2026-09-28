@@ -51,12 +51,15 @@ meson setup build . \
     -Dcplayer=false \
     -Dlibmpv=true \
     -Dgl=enabled \
-    -Dd3d11=enabled \
+    -Dplain-gl=enabled \
+    -Dd3d11=disabled \
+    -Dd3d-hwaccel=enabled \
+    -Dwasapi=enabled \
     -Dlua=disabled \
     -Djavascript=disabled \
     -Dsubrandr=disabled \
-    -Dshaderc=enabled \
-    -Dspirv-cross=enabled \
+    -Dshaderc=disabled \
+    -Dspirv-cross=disabled \
     -Dvulkan=disabled \
     -Dwin32-smtc=disabled
 meson compile -C build -j4

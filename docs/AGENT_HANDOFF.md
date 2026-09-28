@@ -10,8 +10,8 @@ updated_at_utc: "2026-09-27"
 status: IN_PROGRESS
 repository:
   branch: codex/loop28-release-probe-20260927
-  observed_head: a2e91dd93d9cfe2b6eff6a869f112aed314b7331
-  working_tree: "Scoped Loop-28 probe commits pushed; Meson option fix pending commit. Preserve all untracked .slim/.codex/experiments and unrelated files; no reset/clean."
+  observed_head: 3db8a534595158d20c70fa9e4e054953e9829a30
+  working_tree: "Scoped Loop-28 probe commits pushed; plain-GL build adjustment and FLTK notice research pending commit. Preserve all untracked .slim/.codex/experiments and unrelated files; no reset/clean."
 active_loop:
   number: 28
   state: "Windows FLTK accepted visually; release runtime, exact CI, portable and matched-resource gates open. No Loop 29."
@@ -33,7 +33,9 @@ current_slice:
   - "Predidit, zhongfly and mpv development DLL candidates lack complete matching source/notices. ADR-023 records exact hashes and evidence; none may be published from current evidence. No product pin change."
   - "New packaging gate requires schema-1 libmpv provenance JSON + source ZIP, binds DLL/source hashes and checks listed members. New Go notice generator includes linked modules' root/nested license texts; Windows package script requires both provenance inputs. Independent package review fixed corrupt-entry and test-isolation defects, then found no remaining MUST_FIX."
   - "Authorized ci.yml manual build probe uses fixed mpv/FFmpeg source archive hashes and pinned cross-build image, with container network disabled and no third-party clone. After GHCR removed the prior digest, a2e91dd changed it to sha256:15b4fa39e2f33a8c93842ea9a01c116eea1ecef5af9020c625c837dce3368fed, verified by registry HEAD and docker manifest inspect; independent workflow/security re-review found no MUST_FIX. This remains diagnostic and lacks linked-component source/license closure."
-  - "Exact a2e91dd manual run 36360005977 passed Windows CI and compiled FFmpeg; mpv Meson setup failed because D3D11 was enabled while shaderc and spirv-cross were disabled. Official mpv fixed-commit meson.build requires both. Local build.sh now enables both; independent review and isolated rerun pending."
+  - "Exact a2e91dd manual run 36360005977 passed Windows CI and compiled FFmpeg; mpv Meson setup failed because D3D11 was enabled while shaderc and spirv-cross were disabled. Official mpv fixed-commit meson.build requires both; 3db8a53 enabled both for the next probe."
+  - "Exact 3db8a53 manual run 36361126878 passed Windows CI and found shaderc/spirv-cross, but mpv setup failed because GL was enabled with every GL output disabled. Product uses FLTK-provided OpenGL libmpv rendering, not mpv's D3D11 video output. Local build.sh now selects plain-gl, Windows WASAPI and D3D hwaccel while disabling D3D11 output/shaderc/spirv-cross; independent review and CI rerun pending."
+  - "Official FLTK release-1.4.5 tag resolves to a9b1113516ffd15fc7602a6d425a317df30f4720; its bundled image sources identify IJG JPEG 9f, libpng 1.6.44 and zlib 1.3.1. THIRD_PARTY_NOTICES and ADR updated locally; source/notice package still open."
 verification:
   passed:
     - "Exact branch commit fc27271 Windows CI run 36357946493 passed formatting, module verify, full/repeated/race Go tests, Anime1 acceptance, vet, govulncheck, dependency closure, Windows build and bare-EXE startup. Local full tests/vet/build and git diff --check also passed."
@@ -44,7 +46,7 @@ verification:
     - "Successful libmpv probe compilation after Meson option fix, then exact DLL/component license/BOM/source/notice evidence plus FLTK patched-source and image-library source/notice inventory; do not publish current DLL/ZIP."
     - "Matched same-content/home/playback/cleanup AnimePortable–OneAnime resource comparison with private resident/commit, CPU/GPU and repeatability; final release-state isolated CI."
 next_actions:
-  - "Review Meson flag correction, commit/push only build.sh and this handoff to the authorized temporary branch, then rerun manual probe on exact commit. Diagnose only new failure fingerprints. Finish LGPL libmpv linked-component closure and source/notice bundle without any third-party clone/vendor; local Docker daemon is absent."
+  - "Review plain-GL option correction, commit/push only Loop-28 build script, notice/ADR and this handoff to the authorized temporary branch, then rerun manual probe on exact commit. Diagnose only new failure fingerprints. Finish LGPL libmpv linked-component closure and source/notice bundle without any third-party clone/vendor; local Docker daemon is absent."
   - "Prepare matched resource and extracted ZIP checks only after a distributable runtime is identified; do not infer PASS from unmatched host samples."
   - "At next recoverability boundary update this file; do not mark Loop 28 PASS or start Loop 29 until all ADR-023 gates and exact-state CI close."
 references:
