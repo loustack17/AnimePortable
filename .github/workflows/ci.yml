@@ -11,46 +11,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  libmpv-build-probe:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - name: Download fixed source archives
-        shell: bash
-        run: |
-          set -euo pipefail
-          work="$RUNNER_TEMP/libmpv-source-trial"
-          mkdir -p "$work/mpv" "$work/ffmpeg"
-          curl --fail --location --retry 2 --output "$work/mpv.tar.gz" https://codeload.github.com/mpv-player/mpv/tar.gz/a1bf4b6559d6e644b967c22d87232dc77c7dd442
-          curl --fail --location --retry 2 --output "$work/ffmpeg.tar.gz" https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/b227d1e4be9371e37da8107f7a30364fa8cff5fb
-          printf '%s  %s\n' 61901f483f30ee9ff0fc202ac3761629a365bf91463a0bc233a6ecbbb04135fe "$work/mpv.tar.gz" 3ecf2663b37e7979d7e7d6da9a45d25aca2281fc18206224b452d11293a9aea7 "$work/ffmpeg.tar.gz" | sha256sum --check
-          tar -xzf "$work/mpv.tar.gz" --directory "$work/mpv" --strip-components=1
-          tar -xzf "$work/ffmpeg.tar.gz" --directory "$work/ffmpeg" --strip-components=1
-      - name: Probe archive-only LGPL libmpv build
-        shell: bash
-        run: |
-          set -euo pipefail
-          work="$RUNNER_TEMP/libmpv-source-trial"
-          image=ghcr.io/btbn/ffmpeg-builds/win64-lgpl@sha256:15b4fa39e2f33a8c93842ea9a01c116eea1ecef5af9020c625c837dce3368fed
-          printf '%s\n' "$image" > "$work/build-image.txt"
-          docker run --rm --network none \
-            --volume "$GITHUB_WORKSPACE:/project:ro" \
-            --volume "$work:/work" \
-            --workdir /work \
-            "$image" bash /project/tools/libmpv-build/build.sh
-      - name: Preserve build evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: libmpv-build-probe
-          path: |
-            ${{ runner.temp }}/libmpv-source-trial/build-image.txt
-            ${{ runner.temp }}/libmpv-source-trial/mpv.tar.gz
-            ${{ runner.temp }}/libmpv-source-trial/ffmpeg.tar.gz
-            ${{ runner.temp }}/libmpv-source-trial/evidence/
-          if-no-files-found: error
-          retention-days: 7
   windows:
     runs-on: windows-latest
     steps:
