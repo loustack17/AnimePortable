@@ -55,7 +55,8 @@ meson setup build . \
     -Dlua=disabled \
     -Djavascript=disabled \
     -Dsubrandr=disabled \
-    -Dshaderc=disabled \
+    -Dshaderc=enabled \
+    -Dspirv-cross=enabled \
     -Dvulkan=disabled \
     -Dwin32-smtc=disabled
 meson compile -C build -j4

@@ -10,8 +10,8 @@ updated_at_utc: "2026-09-27"
 status: IN_PROGRESS
 repository:
   branch: codex/loop28-release-probe-20260927
-  observed_head: fc27271a205ac449172722ef724d0646b92fab4e
-  working_tree: "Scoped Loop-28 release-probe commit pushed; one-line CI image digest fix pending commit. Preserve all untracked .slim/.codex/experiments and unrelated files; no reset/clean."
+  observed_head: a2e91dd93d9cfe2b6eff6a869f112aed314b7331
+  working_tree: "Scoped Loop-28 probe commits pushed; Meson option fix pending commit. Preserve all untracked .slim/.codex/experiments and unrelated files; no reset/clean."
 active_loop:
   number: 28
   state: "Windows FLTK accepted visually; release runtime, exact CI, portable and matched-resource gates open. No Loop 29."
@@ -32,7 +32,8 @@ current_slice:
   - "Explicit replacement path now accepts an absolute DLL path plus SHA-256 through two environment variables and preserves default pin and loader checks; independent read-only review found no MUST_FIX. Actual replacement runtime still needs verification."
   - "Predidit, zhongfly and mpv development DLL candidates lack complete matching source/notices. ADR-023 records exact hashes and evidence; none may be published from current evidence. No product pin change."
   - "New packaging gate requires schema-1 libmpv provenance JSON + source ZIP, binds DLL/source hashes and checks listed members. New Go notice generator includes linked modules' root/nested license texts; Windows package script requires both provenance inputs. Independent package review fixed corrupt-entry and test-isolation defects, then found no remaining MUST_FIX."
-  - "Authorized ci.yml manual build probe uses fixed mpv/FFmpeg source archive hashes and pinned cross-build image, with container network disabled and no third-party clone. After GHCR removed the prior digest, the digest was changed to sha256:15b4fa39e2f33a8c93842ea9a01c116eea1ecef5af9020c625c837dce3368fed, resolved from public registry latest and verified with docker manifest inspect. Independent one-line workflow/security re-review found no MUST_FIX. This remains diagnostic and lacks linked-component source/license closure."
+  - "Authorized ci.yml manual build probe uses fixed mpv/FFmpeg source archive hashes and pinned cross-build image, with container network disabled and no third-party clone. After GHCR removed the prior digest, a2e91dd changed it to sha256:15b4fa39e2f33a8c93842ea9a01c116eea1ecef5af9020c625c837dce3368fed, verified by registry HEAD and docker manifest inspect; independent workflow/security re-review found no MUST_FIX. This remains diagnostic and lacks linked-component source/license closure."
+  - "Exact a2e91dd manual run 36360005977 passed Windows CI and compiled FFmpeg; mpv Meson setup failed because D3D11 was enabled while shaderc and spirv-cross were disabled. Official mpv fixed-commit meson.build requires both. Local build.sh now enables both; independent review and isolated rerun pending."
 verification:
   passed:
     - "Exact branch commit fc27271 Windows CI run 36357946493 passed formatting, module verify, full/repeated/race Go tests, Anime1 acceptance, vet, govulncheck, dependency closure, Windows build and bare-EXE startup. Local full tests/vet/build and git diff --check also passed."
@@ -40,10 +41,10 @@ verification:
     - "Five-minute minimized diagnostic: AnimePortable 6.26 MiB private resident/107.18 commit; OneAnime 98.32/309.48; data, startup and profile differed, so not matched PASS."
   pending:
     - "Repeat episode-switch reliability under comparable real source conditions; final native extracted-ZIP first-run/import/move/reopen and clean-host runtime/dependency checks."
-    - "Actual libmpv probe compilation, then exact DLL/component license/BOM/source/notice evidence plus FLTK patched-source and image-library source/notice inventory; do not publish current DLL/ZIP."
+    - "Successful libmpv probe compilation after Meson option fix, then exact DLL/component license/BOM/source/notice evidence plus FLTK patched-source and image-library source/notice inventory; do not publish current DLL/ZIP."
     - "Matched same-content/home/playback/cleanup AnimePortable–OneAnime resource comparison with private resident/commit, CPU/GPU and repeatability; final release-state isolated CI."
 next_actions:
-  - "Commit/push reviewed CI digest correction and this handoff to the authorized temporary branch; rerun manual probe on exact commit. Diagnose only new failure fingerprints. Then finish LGPL libmpv linked-component closure and source/notice bundle without any third-party clone/vendor; local Docker daemon is absent."
+  - "Review Meson flag correction, commit/push only build.sh and this handoff to the authorized temporary branch, then rerun manual probe on exact commit. Diagnose only new failure fingerprints. Finish LGPL libmpv linked-component closure and source/notice bundle without any third-party clone/vendor; local Docker daemon is absent."
   - "Prepare matched resource and extracted ZIP checks only after a distributable runtime is identified; do not infer PASS from unmatched host samples."
   - "At next recoverability boundary update this file; do not mark Loop 28 PASS or start Loop 29 until all ADR-023 gates and exact-state CI close."
 references:
