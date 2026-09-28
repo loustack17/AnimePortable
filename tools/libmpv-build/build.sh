@@ -38,6 +38,7 @@ popd
 
 pushd mpv
 mkdir -p ../evidence
+printf '#include <d3d11sdklayers.h>\nconst GUID *dxgi_debug_id = &DXGI_DEBUG_D3D11;\n' | "$CC" -x c -c -o /dev/null -
 meson setup build . \
     --cross-file /cross.meson \
     --wrap-mode=nodownload \
@@ -45,6 +46,7 @@ meson setup build . \
     --buildtype=release \
     --prefer-static \
     --default-library=shared \
+    -Dc_args=-DHAVE_DXGI_DEBUG_D3D11=1 \
     -Dc_link_args="$FF_LIBS" \
     -Dcpp_link_args="$FF_LIBS" \
     -Dgpl=false \
