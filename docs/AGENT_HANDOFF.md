@@ -10,8 +10,8 @@ updated_at_utc: "2026-09-28"
 status: IN_PROGRESS
 repository:
   branch: codex/loop28-release-probe-20260927
-  observed_head: 6a46f537cd2eff66d767399359e3f97361f607b2
-  working_tree: "Tracked files were clean before this handoff edit. Preserve unrelated untracked research files; no reset/clean."
+  observed_head: 207485e
+  working_tree: "Only the ADR-023 and handoff candidate-screen notes changed in this turn. Preserve unrelated untracked research files; no reset/clean."
 active_loop:
   number: 28
   state: "Windows FLTK accepted visually; release runtime, exact CI, portable and matched-resource gates open. No Loop 29."
@@ -31,7 +31,7 @@ current_slice:
   - "Current pin is OneAnime 1.4.7 DLL SHA256 24e848f59c047c9442501fdbe619ad39b98be7d4dd402691f79931c852c0070a from Predidit/libmpv-win32-video-cmake 20260811. Exact archive has no complete build-specific BOM/notices/source; test only, do not distribute."
   - "Own files remain MPL for now. Owner authorized GPL distribution if required; no license change has yet been made, and it would not remove source/notice duties. ADR-023 records provenance research."
   - "Explicit replacement path now accepts an absolute DLL path plus SHA-256 through two environment variables and preserves default pin and loader checks; independent read-only review found no MUST_FIX. Actual replacement runtime still needs verification."
-  - "Current Predidit, zhongfly and official mpv development DLLs lack complete matching source/notices in their binary archives. Owner authorized one bounded screen of Zencok's source-bundled AGPL runtime: its 101 MiB DLL loaded in the existing app by explicit hash override; a hidden-window 12-second host sample was 148.06 MiB private resident and 459.39 MiB private commit. Video rendering and matched OneAnime comparison were not established, so no acceptance or product pin change. Temp downloads/test build/cache were removed."
+  - "Current Predidit, zhongfly and official mpv development DLLs lack complete matching source/notices in their binary archives. Owner authorized one bounded screen of Zencok's AGPL runtime. Its release manifest, 80,355,595-byte Windows archive and 158,488,996-byte corresponding-source archive matched published SHA-256 digests; source listing contains distribution build definitions and mpv, LibreMPEG, libplacebo and other dependency trees. The 101,652,480-byte DLL loaded in the current app by explicit hash override. Two further 12-second host diagnostics measured private resident/commit 233.78/646.25 and 233.16/650.17 MiB; a visible-window diagnostic measured 179.80/650.46 MiB. PrintWindow returned a black OpenGL capture and automated window close timed out, so video rendering, cleanup and matched OneAnime comparison remain unverified. Candidate is not adopted and no product pin changed."
   - "New packaging gate requires schema-1 libmpv provenance JSON + source ZIP, binds DLL/source hashes and checks listed members. New Go notice generator includes linked modules' root/nested license texts; Windows package script requires both provenance inputs. Independent package review fixed corrupt-entry and test-isolation defects, then found no remaining MUST_FIX."
   - "Historical manual build-probe runs 36360005977–36364632847 never produced a DLL. The probe job and tools/libmpv-build/build.sh are removed; Windows CI remains unchanged. Exact linked-component license/source closure remains open."
   - "FLTK release-1.4.5 tag resolves to a9b1113516ffd15fc7602a6d425a317df30f4720; bundled IJG JPEG 9f, libpng 1.6.44 and zlib 1.3.1 identified. Official source tar SHA 7715e69c...f593ea and pinned go-fltk patch SHA 44688325...f3a4f6 verified. Local package script pins both, Go packager requires/includes both under sources/; focused tests and independent review passed, real package/notice audit pending."
@@ -49,7 +49,7 @@ verification:
 next_actions:
   - "Keep product code unchanged unless a concrete acceptance defect appears. Pursue a minimal legal package using the already working DLL; do not rerun custom build probe. Current Predidit build recipe has many linked dependencies, so merely changing AnimePortable to GPL does not complete corresponding-source duties. Avoid third-party clone/vendor in Git."
   - "Prepare matched resource and extracted ZIP checks only after a distributable runtime is identified; do not infer PASS from unmatched host samples."
-  - "Owner requested to close this bounded work and avoid expanding tasks. Do not mark Loop 28 PASS, merge main or start Loop 29 until ADR-023 release, native and matched-resource gates close. At the next authorized continuation, reconcile this handoff with Git and current diff."
+  - "The single owner-authorized AGPL candidate test is complete. Its repeat short-run private commit around 650 MiB is above the owner's observed OneAnime peak around 580 MiB, but the comparison was not matched or isolated. Do not adopt it or mark a definitive resource failure without matched evidence. Owner requested the shortest path and no candidate/build proliferation; do not mark Loop 28 PASS, merge main or start Loop 29 until ADR-023 release, native and matched-resource gates close. At the next authorized continuation, reconcile this handoff with Git and current diff."
 references:
   - "docs/README.md; docs/19_ADR_FLTK_WINDOWS_DESKTOP.md; docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md; docs/10_DURABLE_AGENT_STATE.md; THIRD_PARTY_NOTICES.md"
 ```
