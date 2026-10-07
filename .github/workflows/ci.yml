@@ -24,7 +24,7 @@ jobs:
           msystem: MINGW64
           release: false
           update: true
-          install: mingw-w64-x86_64-gcc
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-mesa
       - name: Select MSVCRT C toolchain
         shell: pwsh
         env:
@@ -37,6 +37,11 @@ jobs:
           & $gcc -v
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CC=$gcc"
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CXX=$gxx"
+          $mesaVersion = & (Join-Path $env:MSYS2_ROOT 'usr\bin\pacman.exe') -Q mingw-w64-x86_64-mesa
+          if ($LASTEXITCODE -ne 0 -or $mesaVersion -ne 'mingw-w64-x86_64-mesa 26.2.4-1') { throw 'Unexpected Mesa verifier package version' }
+          $mesaArchive = Join-Path $env:MSYS2_ROOT 'var\cache\pacman\pkg\mingw-w64-x86_64-mesa-26.2.4-1-any.pkg.tar.zst'
+          if ((Get-FileHash -LiteralPath $mesaArchive -Algorithm SHA256).Hash -ne '10b2497b17d7554ea9d758b7db2ebf648f6ece10d19e239f63ecce978a331980') { throw 'Mesa verifier package hash mismatch' }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "ANIMEPORTABLE_TEST_MESA_BIN=$(Join-Path $env:MSYS2_ROOT 'mingw64\bin')"
       - name: Verify Go formatting
         shell: pwsh
         run: |
@@ -46,13 +51,21 @@ jobs:
       - name: Verify Go module
         run: go mod verify
       - name: Test Go
-        run: go test -count=1 ./...
+        shell: pwsh
+        run: |
+          $launcher = 'pwsh -NoProfile -File "' + (Join-Path $env:GITHUB_WORKSPACE 'tools\windows-mesa-test-exec.ps1') + '"'
+          go test -exec $launcher -count=1 ./...
+          exit $LASTEXITCODE
       - name: Repeat desktop lifecycle and player checks
         run: go test -count=20 ./apps/desktop ./apps/desktop/backend ./apps/desktop/fltkhome ./adapters/player/libmpv
       - name: Test Anime1 adapter acceptance
         run: go test ./adapters/source/anime1 -run '^TestAnime1AdapterAcceptance'
       - name: Test Go with race detector
-        run: go test -race ./...
+        shell: pwsh
+        run: |
+          $launcher = 'pwsh -NoProfile -File "' + (Join-Path $env:GITHUB_WORKSPACE 'tools\windows-mesa-test-exec.ps1') + '"'
+          go test -exec $launcher -race ./...
+          exit $LASTEXITCODE
       - name: Vet Go
         run: go vet ./...
       - name: Check Go vulnerabilities
@@ -68,7 +81,12 @@ jobs:
         shell: pwsh
         run: |
           go build -tags production -trimpath -buildvcs=false -o "$env:RUNNER_TEMP\animeportable.exe" ./apps/desktop
-          exit $LASTEXITCODE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $imports = & (Join-Path $env:ANIMEPORTABLE_TEST_MESA_BIN 'objdump.exe') -p (Join-Path $env:RUNNER_TEMP 'animeportable.exe')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $dllNames = @($imports | Select-String 'DLL Name:' | ForEach-Object { $_.Line.Trim() })
+          $dllNames
+          if ($dllNames -match 'gallium|LLVM|mesa') { throw 'Verifier dependency entered the product executable' }
       - name: Smoke test Windows portable startup without libmpv
         shell: pwsh
         run: |
