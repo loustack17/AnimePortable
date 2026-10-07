@@ -4,7 +4,35 @@
 
 ## Current loop
 
-### Windows FLTK replacement — Loop 27 historical Fyne WINDOWS_PASS; Loop 28 Windows gate open
+### Loop 29 Windows Search — implemented / ENVIRONMENT_BLOCKED / NEEDS_HUMAN
+
+On 2026-10-06 the owner requested Loop 29 after completed Windows Loop 28. The Search slice uses the existing typed backend Library, Search and Detail actions in `apps/desktop/fltkhome`. Input changes filter cached title/native-title data; Enter in the input or the Search button explicitly refreshes the remote source. The view renders eight results per page, supports result arrows and Enter, opens a concise cached-work preview, and returns through Back/Escape. Slash and Ctrl+K focus Search. Native Input owns text editing and composition before the unconsumed SHORTCUT handler. Full metadata/episode UI and the complete UX-001 episode/play flow remain Loop 30 work.
+
+The controller owns one physical request and at most one latest pending intent. Query edits, section changes, preview transitions and shutdown invalidate stale work. Library hydration is tracked separately from remote results; Library errors settle until explicit retry. Deferred actions capture the page at activation and discard work after navigation. Result widgets and preview excerpts are bounded. No workflow, dependency, core, provider, persistence-schema or player changes are included.
+
+Final local sandbox evidence, using repository-local `GOCACHE=.slim/go-cache` and `CGO_ENABLED=0`:
+
+- `go test -count=1 apps/desktop/fltkhome/model.go apps/desktop/fltkhome/model_test.go apps/desktop/fltkhome/search_model.go apps/desktop/fltkhome/search_model_test.go` — PASS.
+- `go vet apps/desktop/fltkhome/model.go apps/desktop/fltkhome/model_test.go apps/desktop/fltkhome/search_model.go apps/desktop/fltkhome/search_model_test.go` — PASS.
+- `go test -count=1 ./core ./adapters/... ./apps/desktop/backend ./tests/...` — PASS, including architecture and adapter contracts.
+- `go vet ./core ./adapters/... ./apps/desktop/backend ./tests/...` — PASS on the unchanged baseline packages.
+- `gofmt -l apps/desktop/fltkhome` — no output; `git diff --check` — PASS. `go mod verify` — PASS; dependency files are unchanged.
+
+Fresh read-only quality reviewer `/root/search_quality` returned `PASS_REVIEW` for QUAL-001..012 with no unresolved MUST_FIX. Separate `/root/search_safety` returned `PASS_REVIEW` for static security, concurrency and native input ownership. These are source-review results. Neither reviewer ran native tests. Root independently reran the final pure model and package regression checks above.
+
+The mandatory TypeSafe skill and current official index/API/Score/State/composite-scoring guidance were applied. The owner authorized retrieving the key through BWS and submitting necessary review snippets. Credentials were used in memory and never persisted or output. The final API judgment was `jev-1.13.0`: scope 1.98/2 (confidence 0.97), lifecycle 2/2 (confidence 1), interaction 1.99/2 (confidence 0.98). Raw answers, probabilities and confidence remain separate in `.slim/deepwork/loop29-typesafe-final.json`. Positive, defective and missing-evidence rubric controls were checked; each dimension escalates independently. These judgments support review and do not replace tests, reviewer findings or human gates. The model is not added to the product runtime.
+
+Native verification is **ENVIRONMENT_BLOCKED**. Before production edits, `go test ./apps/desktop/fltkhome ./apps/desktop/backend` failed while building `runtime/cgo`: `cannot parse $WORK\\b270\\_cgo_.o as ELF, Mach-O, PE or XCOFF`. One focused reproduction also reported temp-object unlink `Access is denied`; equivalent local native attempts stopped. Backend baseline passed. No Loop 29 native test, full Windows regression/race/vet/vulnerability check or production build has been certified. The new Windows widget/callback tests cover result bounds, footer parenting and reflow, deferred action invalidation, settled Library failure/explicit retry, loading feedback and preview behavior, but are **NOT_RUN** locally. The existing Windows CI must verify the exact committed state; no workflow edits are needed. Native results must not be inferred from pure model tests or prior Loop 28 CI.
+
+Human Search acceptance is **NEEDS_HUMAN** after capable Windows verification. Use the built application: press `/` or Ctrl+K, type an available title with Traditional Chinese input, press input Enter to refresh, Tab to results, use arrows and result Enter to open preview, and Escape/Back to return. Repeat Search/open/Back/paging with mouse. Test a no-match query; disconnect and retry a previously searched title to confirm cached results and a clear remote error. Resize to 760x480 and check light/dark focus, clipping and scrolling. Confirm IME candidate selection and cancellation remain native. Record the tested build and observations; this procedure does not require IDs, database edits or fixture internals.
+
+The owner explicitly approved continuing with commit/push to `main` on 2026-10-06 so the existing Windows CI can verify this change from baseline `9950c80`. Preserve the pre-existing AGENTS.md instruction change and unrelated untracked files. Code blast radius is six fltkhome Go files. Rollback is a scoped reversal of those Loop 29 edits; no data migration is involved, and cached canonical anime ingested through existing Search remain ordinary local data. The finite contract, raw review evidence and code hashes are in `.slim/deepwork/loop29-search.md` and its referenced files. Release and workflow changes are outside this authorization. Loop 29 is not PASS and Loop 30 must not start.
+
+### Loop 28 Windows — CLOSED / PASS
+
+Completion was recorded in commit `9950c80` after production `54c5cc7`, Windows CI `36399950933`, and same-head main CI `36400374366`. The owner accepted prior Windows interaction/resource evidence and the community portable-package provenance disclosure under ADR-023 on 2026-09-28. Loop 29 may proceed on Windows; Linux/macOS and formal matched PERF-008 comparison remain deferred. Earlier entries below preserve their historical checkpoint state.
+
+### Windows FLTK replacement — historical 2026-09-26 checkpoint
 
 On 2026-09-26 the owner directed Windows-only development and complete removal of active Fyne/Wails/Svelte/NSIS, Linux/macOS, and external MPV code. The local uncommitted cleanup removes those source/build paths, makes the Go module and CI Windows-only, and keeps the legacy SQLite player-path column solely for existing-data compatibility while removing it from current settings and playback. Final `go test -count=1 ./...`, go test -race -count=1 ./..., `go vet ./...`, `go mod verify`, Windows FLTK production build and `git diff --check` pass. Independent workflow/security and production-quality reviews found no MUST_FIX. A real-player host smoke opened the player, returned Home on Stop and exited 0 after the FFI pointer correction; its `PrintWindow` video capture was blank and `CopyFromScreen` failed in this environment, so visible video remains unverified in this run. Windows native UX, matched OneAnime resource comparison, exact libmpv license review, clean-host DLL portability, distributable ZIP and exact-state CI remain open. This is not Loop 28 PASS or authorization to merge.
 

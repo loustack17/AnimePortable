@@ -6,29 +6,35 @@
 schema_version: 1
 protocol_version: v2.4.1
 instruction_version: v2.4.1
-updated_at_utc: "2026-09-28"
-status: PASS
+updated_at_utc: "2026-10-06"
+status: NEEDS_HUMAN
 repository:
   branch: main
   verified_code_head: 54c5cc7
-  working_tree: "Only this final handoff update is tracked-modified; preserve unrelated untracked .codex, .ignore, .slim, docs/CODEX_*, experiments."
+  observed_head: 9950c80
+  working_tree: "Six Loop29 fltkhome Go files plus status/handoff ready for authorized commit/push to main. Preserve prior AGENTS.md instruction change and unrelated untracked .codex, .ignore, .slim, docs/CODEX_*, experiments. Release/workflow changes remain outside scope."
 active_loop:
-  number: 28
-  state: "Windows-only Loop 28 passed under the owner's 2026-09-28 community package and prior-resource-evidence acceptance. Loop 29 may begin on Windows; Linux and macOS remain deferred."
-  goal: "Windows portable FLTK/libmpv desktop with existing Go core."
-  criteria: "ADR-023; docs/06 Windows phase gate and CI-010 as amended 2026-09-28."
+  number: 29
+  state: "Search implemented; final pure-Go checks and independent source reviews passed. Native Windows CI and human acceptance pending; not Loop PASS."
+  goal: "Windows FLTK Search: cached title filtering, explicit remote submit, 8-result pages, keyboard/mouse and concise cached-work preview with Back."
+  criteria: "Phase23; FUNC-003; Search UX-002/003/005..010; QUAL-001..012 and relevant architecture/security/lifecycle/LOOP. UX-001 partial find/open evidence only; full detail/episode/play flow remains Loop30."
 decisions:
-  - "Owner accepted prior Windows resource and interaction evidence without another comparison or long-idle run. PERF-008 remains a future formal matched-comparison objective, not an asserted matched PASS."
-  - "Owner selected the tested OneAnime-identical DLL with SHA-256 pin, upstream links and explicit unverified source/license disclosure for this individual open-source project's Windows package gate. This is not a legal-compliance certification. AnimePortable source stays MPL-2.0."
-  - "Do not build custom libmpv, switch player libraries, resume Linux/macOS, edit workflows or publish a release without new scope/authorization."
+  - "Loop28 Windows PASS recorded9950c80 for production54c5cc7. Owner's ADR-023 package/prior-resource acceptance stands; Linux/macOS, custom libmpv, workflow edits and release remain deferred."
+  - "Mandatory TypeSafe skill/current official guidance used project-wide. Owner authorized BWS key retrieval and necessary review snippets. Key never persisted/output; no runtime AI integration."
+  - "One physical request and one latest pending intent; query/navigation/preview/shutdown invalidate stale completion. Library hydration separate from remote results; errors settle for explicit retry."
+  - "Native Input handles KEYDOWN/IME; unconsumed SHORTCUT Escape navigates Back. Native event docs corroborate dispatch; actual Windows IME remains human-gated."
 evidence:
-  - "Exact production commit 54c5cc7 passed Windows CI run 36399950933: Go tests, repeated lifecycle/player checks, Anime1 acceptance, race, vet, govulncheck, build and bare startup."
-  - "Official package.ps1 ZIP SHA256 2B13FFF1B286817B36948C4E8154C66EBF9CBDD7FA3DE0B0E754FF5AD1992D8C had EXE, MPL LICENSE, generated third-party notices, pinned libmpv DLL and runtime notice. Extracted DLL SHA256 24E848F59C047C9442501FDBE619AD39B98BE7D4DD402691F79931C852C0070A. Fresh extracted startup/clean exit passed; with Loop23 acceptance data, player window opened, returned Home on close and exited 0. This ZIP test did not assert decoded frames; prior playback tests cover that."
-  - "go test ./tools/portable-package and git diff --check passed. Independent read-only review found one notice validation/write race; fixed by hashing validated notice during ZIP creation. Final review found no material package-code or disclosure defect."
-  - "Previous owner-visible Home, focus, episode switching, Stop/replay and visual checks passed. Earlier same-DLL playback cycles cleaned up without orphan. No new matched resource comparison was run."
-  - "main fast-forwarded from 36a7391 to 54c5cc7 and pushed. Same-head main CI run 36400374366 passed. The completed temporary branch was deleted locally and remotely; only main remains. Session-created .slim/loop28-zip-test and .slim/go-cache were removed after evidence was recorded."
+  - "Root final CGO_ENABLED=0 pure Home/Search file-list go test and vet PASS; core/adapters/backend/tests regression PASS, including architecture/contracts. gofmt and git diff --check PASS; unchanged dependencies go mod verify PASS. Commands in docs/IMPLEMENTATION_STATUS.md Loop29."
+  - "Fresh read-only /root/search_quality QUAL source review and /root/search_safety security/concurrency/native-input source review PASS_REVIEW, zero open MUST_FIX. Native tests were NOT_RUN, not reported PASS."
+  - "TypeSafe jev-1.13.0 final scope1.98/conf.97, lifecycle2/conf1, interaction1.99/conf.98, each /2; raw probabilities/confidence retained .slim/deepwork/loop29-typesafe-final.json. Positive/negative/missing-evidence rubric controls checked."
+  - "Native baseline failed before tests: runtime/cgo cannot parse _cgo_.o as ELF/Mach-O/PE/XCOFF. One focused retry confirmed with temp-object unlink Access denied. Stop equivalent retries; classify ENVIRONMENT_BLOCKED, not repository test failure."
 pending:
-  - "Commit/push this handoff checkpoint. Begin Loop 29 Windows feature work only under its own defined contract. Do not publish a GitHub Release without separate owner authorization."
+  - "Owner explicitly approved continuing with commit/push on 2026-10-06. Submit reviewed Loop29 change to main and verify existing Windows CI on that exact commit. No workflow edit required."
+  - "Capable Windows verifier must run native widget/callback tests, full Go regression/race/vet/vulnerability and production build. Prior Loop28 CI and pure tests cannot certify new native code."
+  - "Then prepare validated executable and simple human Search procedure from status: Chinese IME, shortcuts, Tab/arrows/Enter, preview/Back/Escape, mouse/paging, empty/error/cache, 760x480 light/dark. Record actual observations."
+  - "Update durable evidence/handoff after CI/human results. Do not start Loop30 until Loop29 required gates pass."
 references:
-  - "docs/06_ACCEPTANCE_CRITERIA.md; docs/19_ADR_FLTK_WINDOWS_DESKTOP.md; docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md; tools/portable-package; apps/desktop/build/windows/package.ps1"
+  - "docs/IMPLEMENTATION_STATUS.md Loop29; .slim/deepwork/loop29-search.md; loop29-code-hashes.json"
+  - "apps/desktop/fltkhome/search_model.go; search_view_windows.go and tests; window_windows.go; theme_windows.go"
+  - "docs/04_MVP_IMPLEMENTATION_PLAN.md Phase23; docs/06_ACCEPTANCE_CRITERIA.md; docs/08_VERIFICATION_MATRIX.md; docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md; docs/19_ADR_FLTK_WINDOWS_DESKTOP.md"
 ```

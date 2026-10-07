@@ -123,5 +123,25 @@ func (ui *view) applyTheme() {
 	}
 	ui.themeToggle.Redraw()
 	ui.retryButton.Redraw()
+	if ui.searchInput != nil {
+		ui.searchInput.SetColor(colors.surface)
+		ui.searchInput.SetLabelColor(colors.ink)
+		ui.searchScroll.SetColor(colors.background)
+		ui.searchStatus.SetLabelColor(colors.muted)
+		ui.searchPageText.SetLabelColor(colors.muted)
+		ui.previewTitle.SetLabelColor(colors.ink)
+		ui.previewNative.SetLabelColor(colors.muted)
+		ui.previewDescription.SetLabelColor(colors.ink)
+		ui.searchInput.Redraw()
+		ui.searchScroll.Redraw()
+		ui.searchStatus.Redraw()
+		ui.searchPageText.Redraw()
+		ui.previewTitle.Redraw()
+		ui.previewNative.Redraw()
+		ui.previewDescription.Redraw()
+		for _, button := range append(append([]*fltk.Button(nil), ui.searchRows...), ui.searchButton, ui.searchBack, ui.searchPrevious, ui.searchNext, ui.previewBack) {
+			button.Redraw()
+		}
+	}
 	ui.window.Redraw()
 }

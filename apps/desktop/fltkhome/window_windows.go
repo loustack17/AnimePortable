@@ -16,6 +16,8 @@ import (
 type Service interface {
 	Start(context.Context) error
 	Library(context.Context) ([]backend.Anime, error)
+	Search(context.Context, string) ([]backend.Anime, error)
+	Detail(context.Context, string) (backend.Detail, error)
 	History(context.Context) ([]backend.History, error)
 	Following(context.Context) ([]backend.Following, error)
 }
@@ -29,31 +31,50 @@ type view struct {
 	onPlay        func(backend.PlayRequest)
 	onClose       func()
 
-	message       *fltk.Box
-	header        *fltk.Box
-	tagline       *fltk.Box
-	sectionTitle  *fltk.Box
-	contentHint   *fltk.Box
-	scroll        *fltk.Scroll
-	scrollOriginX int
-	scrollOriginY int
-	loadingText   *fltk.Box
-	retryButton   *fltk.Button
-	browseButton  *fltk.Button
-	contentLabels []themedLabel
-	staticLabels  int
-	cards         []*fltk.Box
-	cardButtons   []*fltk.Button
-	startupGroup  *fltk.Group
-	mainGroup     *fltk.Group
-	navigation    []*fltk.Button
-	selected      int
-	rows          []homeRow
-	loadFailed    bool
-	closeOnce     sync.Once
-	closeButton   *fltk.Button
-	themeToggle   *fltk.Button
-	dark          bool
+	message            *fltk.Box
+	header             *fltk.Box
+	tagline            *fltk.Box
+	sectionTitle       *fltk.Box
+	contentHint        *fltk.Box
+	scroll             *fltk.Scroll
+	scrollOriginX      int
+	scrollOriginY      int
+	loadingText        *fltk.Box
+	retryButton        *fltk.Button
+	browseButton       *fltk.Button
+	contentLabels      []themedLabel
+	staticLabels       int
+	cards              []*fltk.Box
+	cardButtons        []*fltk.Button
+	startupGroup       *fltk.Group
+	mainGroup          *fltk.Group
+	navigation         []*fltk.Button
+	selected           int
+	rows               []homeRow
+	loadFailed         bool
+	searchModel        searchModel
+	searchPage         *fltk.Group
+	searchInput        *fltk.Input
+	searchButton       *fltk.Button
+	searchBack         *fltk.Button
+	searchScroll       *fltk.Scroll
+	searchStatus       *fltk.Box
+	searchPageText     *fltk.Box
+	searchPrevious     *fltk.Button
+	searchNext         *fltk.Button
+	searchRows         []*fltk.Button
+	previewGroup       *fltk.Group
+	previewBack        *fltk.Button
+	previewTitle       *fltk.Box
+	previewNative      *fltk.Box
+	previewDescription *fltk.Box
+	searchPreview      bool
+	pageGeneration     uint64
+	searchInputVersion uint64
+	closeOnce          sync.Once
+	closeButton        *fltk.Button
+	themeToggle        *fltk.Button
+	dark               bool
 }
 
 func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int), func(string)) {
@@ -196,6 +217,7 @@ func (ui *view) build() {
 	ui.bindContentKeys(ui.retryButton, ui.loadHome, func() *fltk.Button { return ui.browseButton }, func() *fltk.Button { return ui.themeToggle })
 	ui.retryButton.Hide()
 	ui.scroll.End()
+	ui.buildSearchView()
 	ui.mainGroup.End()
 	ui.mainGroup.Hide()
 	navPanel := fltk.NewGroup(14, 18, 205, 582)
@@ -222,7 +244,10 @@ func (ui *view) build() {
 	ui.window.End()
 	ui.applyTheme()
 	ui.staticLabels = len(ui.contentLabels)
-	ui.window.SetResizeHandler(func() { ui.scroll.Resize(236, 110, max(400, ui.window.W()-259), max(250, ui.window.H()-131)) })
+	ui.window.SetResizeHandler(func() {
+		ui.scroll.Resize(236, 110, max(400, ui.window.W()-259), max(250, ui.window.H()-131))
+		ui.resizeSearch()
+	})
 }
 
 func (ui *view) showChoices(message string) {
@@ -308,6 +333,18 @@ func (ui *view) showSection(index int) {
 	if index < 0 || index >= len(sections) {
 		return
 	}
+	if ui.selected != index {
+		ui.pageGeneration++
+	}
+	if index == 4 && ui.searchPreview {
+		ui.pageGeneration++
+		ui.searchModel.cancel()
+		ui.searchPreview = false
+	}
+	if ui.selected == 4 && index != 4 {
+		ui.searchModel.cancel()
+		ui.searchPreview = false
+	}
 	ui.selected = index
 	for _, button := range ui.navigation {
 		button.Redraw()
@@ -317,9 +354,20 @@ func (ui *view) showSection(index int) {
 		ui.sectionTitle.SetLabel("今天想看什麼？")
 		ui.contentHint.SetLabel("輕鬆找到下一個喜歡的故事")
 		ui.scroll.Show()
+		ui.searchPage.Hide()
+		ui.previewGroup.Hide()
+	} else if index == 4 {
+		ui.contentHint.SetLabel("搜尋作品名稱，先查看已儲存的作品，再按 Enter 更新搜尋。")
+		ui.scroll.Hide()
+		ui.searchPage.Show()
+		ui.previewGroup.Hide()
+		ui.loadSearchLibrary()
+		ui.renderSearch()
 	} else {
 		ui.contentHint.SetLabel("此頁面尚未建立")
 		ui.scroll.Hide()
+		ui.searchPage.Hide()
+		ui.previewGroup.Hide()
 	}
 	ui.window.Redraw()
 }
@@ -516,6 +564,14 @@ func (ui *view) bindNavigationKeys(button *fltk.Button, index int) {
 }
 
 func (ui *view) focusContent() {
+	if ui.selected == 4 {
+		if ui.searchPreview {
+			ui.previewBack.TakeFocus()
+		} else {
+			ui.searchInput.TakeFocus()
+		}
+		return
+	}
 	if ui.scroll.Visible() && ui.browseButton != nil {
 		ui.scrollTo(0)
 		ui.browseButton.TakeFocus()
@@ -656,6 +712,7 @@ func (ui *view) bindThemeKeys(action func()) {
 
 func (ui *view) cancel() {
 	ui.closeOnce.Do(func() {
+		ui.searchModel.close()
 		ui.cancelContext()
 		if ui.onClose != nil {
 			ui.onClose()
