@@ -39,8 +39,22 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CXX=$gxx"
           $mesaVersion = & (Join-Path $env:MSYS2_ROOT 'usr\bin\pacman.exe') -Q mingw-w64-x86_64-mesa
           if ($LASTEXITCODE -ne 0 -or $mesaVersion -ne 'mingw-w64-x86_64-mesa 26.2.4-1') { throw 'Unexpected Mesa verifier package version' }
-          $mesaArchive = Join-Path $env:MSYS2_ROOT 'var\cache\pacman\pkg\mingw-w64-x86_64-mesa-26.2.4-1-any.pkg.tar.zst'
+          $mesaArchive = Join-Path $env:RUNNER_TEMP 'mingw-w64-x86_64-mesa-26.2.4-1-any.pkg.tar.zst'
+          $curlInfo = & curl.exe --version
+          if ($LASTEXITCODE -ne 0 -or $curlInfo[0] -notmatch '^curl (\d+\.\d+\.\d+) ' -or [version]$Matches[1] -lt [version]'8.4.0') { throw 'curl 8.4.0 or newer required for bounded download' }
+          & curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 60 --max-filesize 20971520 --output $mesaArchive 'https://mirror.msys2.org/mingw/mingw64/mingw-w64-x86_64-mesa-26.2.4-1-any.pkg.tar.zst'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-Item -LiteralPath $mesaArchive).Length -gt 20MB) { throw 'Unexpected Mesa archive size' }
           if ((Get-FileHash -LiteralPath $mesaArchive -Algorithm SHA256).Hash -ne '10b2497b17d7554ea9d758b7db2ebf648f6ece10d19e239f63ecce978a331980') { throw 'Mesa verifier package hash mismatch' }
+          $mesaExtract = Join-Path $env:RUNNER_TEMP 'mesa-verified'
+          New-Item -ItemType Directory -Force -Path $mesaExtract | Out-Null
+          & (Join-Path $env:MSYS2_ROOT 'usr\bin\tar.exe') --force-local -xf ($mesaArchive.Replace('\', '/')) -C ($mesaExtract.Replace('\', '/')) 'mingw64/bin/opengl32.dll' 'mingw64/bin/libgallium_wgl.dll'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($name in @('opengl32.dll', 'libgallium_wgl.dll')) {
+            $expectedDLL = Join-Path $mesaExtract ('mingw64\bin\' + $name)
+            $installedDLL = Join-Path $env:MSYS2_ROOT ('mingw64\bin\' + $name)
+            if ((Get-FileHash -LiteralPath $expectedDLL -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $installedDLL -Algorithm SHA256).Hash) { throw "Installed Mesa DLL hash mismatch: $name" }
+          }
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "ANIMEPORTABLE_TEST_MESA_BIN=$(Join-Path $env:MSYS2_ROOT 'mingw64\bin')"
       - name: Verify Go formatting
         shell: pwsh
