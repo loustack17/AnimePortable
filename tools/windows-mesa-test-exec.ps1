@@ -2,8 +2,8 @@ $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $args.Count -lt 1) { throw 'Isolated GitHub test execution required' }
 $testExecutable = (Resolve-Path -LiteralPath $args[0]).Path
 if (-not $testExecutable.EndsWith('.test.exe', [StringComparison]::OrdinalIgnoreCase)) { throw 'Go test executable required' }
-$allowedRoots = @($env:RUNNER_TEMP, $env:TEMP) | Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd('\') + '\' }
-if (-not ($allowedRoots | Where-Object { $testExecutable.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) })) { throw 'Go test executable must be inside runner temporary storage' }
+$allowedRoots = @($env:RUNNER_TEMP, $env:TEMP) | Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar }
+if (-not ($allowedRoots | Where-Object { $testExecutable.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) })) { throw "Go test executable must be inside runner temporary storage: $testExecutable" }
 $mesaDirectory = (Resolve-Path -LiteralPath $env:ANIMEPORTABLE_TEST_MESA_BIN).Path
 $testDirectory = Split-Path -Parent $testExecutable
 foreach ($name in @('opengl32.dll', 'libgallium_wgl.dll')) {

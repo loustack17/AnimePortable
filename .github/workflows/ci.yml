@@ -56,6 +56,9 @@ jobs:
             if ((Get-FileHash -LiteralPath $expectedDLL -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $installedDLL -Algorithm SHA256).Hash) { throw "Installed Mesa DLL hash mismatch: $name" }
           }
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "ANIMEPORTABLE_TEST_MESA_BIN=$(Join-Path $env:MSYS2_ROOT 'mingw64\bin')"
+          $goVerifierTemp = Join-Path $env:RUNNER_TEMP 'go-native-verifier'
+          New-Item -ItemType Directory -Force -Path $goVerifierTemp | Out-Null
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "GOTMPDIR=$goVerifierTemp"
       - name: Verify Go formatting
         shell: pwsh
         run: |
