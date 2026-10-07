@@ -23,9 +23,29 @@ type searchViewTestService struct {
 	libraryCalls atomic.Int32
 	searchCalls  atomic.Int32
 	libraryErr   error
+	appearance   string
+	episodes     func(context.Context, string) ([]backend.Episode, error)
 }
 
 func (service *searchViewTestService) Start(context.Context) error { return nil }
+
+func (service *searchViewTestService) Settings(context.Context) (backend.Settings, error) {
+	if service.appearance != "" {
+		return backend.Settings{Appearance: service.appearance}, nil
+	}
+	return backend.Settings{Appearance: "light"}, nil
+}
+
+func (service *searchViewTestService) SaveSettings(context.Context, backend.Settings) error {
+	return nil
+}
+
+func (service *searchViewTestService) Episodes(ctx context.Context, animeID string) ([]backend.Episode, error) {
+	if service.episodes != nil {
+		return service.episodes(ctx, animeID)
+	}
+	return []backend.Episode{{ID: "episode-1"}}, nil
+}
 
 func (service *searchViewTestService) Library(context.Context) ([]backend.Anime, error) {
 	service.libraryCalls.Add(1)

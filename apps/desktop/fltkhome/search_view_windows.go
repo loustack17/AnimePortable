@@ -25,7 +25,7 @@ func (ui *view) buildSearchView() {
 		inputVersion := ui.searchInputVersion
 		pageGeneration := ui.pageGeneration
 		fltk.AddTimeout(0.01, func() {
-			if ui.ctx.Err() != nil || ui.pageGeneration != pageGeneration || ui.searchInputVersion != inputVersion || ui.selected != 4 || ui.searchPreview || ui.mainGroup == nil || !ui.mainGroup.Visible() {
+			if ui.ctx.Err() != nil || ui.closing || ui.pageGeneration != pageGeneration || ui.searchInputVersion != inputVersion || ui.selected != 4 || ui.searchPreview || ui.mainGroup == nil || !ui.mainGroup.Visible() {
 				return
 			}
 			ui.searchModel.setQuery(query)
@@ -71,6 +71,9 @@ func (ui *view) buildSearchView() {
 	ui.previewBack = fltk.NewButton(252, 118, 113, 38, "返回結果")
 	ui.styleButton(ui.previewBack, nil)
 	ui.bindSearchButton(ui.previewBack, ui.backToSearchResults)
+	ui.previewPlay = fltk.NewButton(385, 118, 165, 38, "播放第一集")
+	ui.styleButton(ui.previewPlay, nil)
+	ui.bindSearchButton(ui.previewPlay, ui.playSearchPreview)
 	ui.previewTitle = fltk.NewBox(fltk.NO_BOX, 252, 174, 705, 46, "")
 	ui.previewTitle.SetLabelFont(fltk.HELVETICA_BOLD)
 	ui.previewTitle.SetLabelSize(22)
@@ -124,7 +127,7 @@ func (ui *view) buildSearchView() {
 }
 
 func (ui *view) bindSearchButton(button *fltk.Button, action func()) {
-	previewAction := button == ui.previewBack
+	previewAction := button == ui.previewBack || button == ui.previewPlay
 	activate := ui.deferredSearchAction(action, previewAction)
 	button.SetCallback(activate)
 	button.SetEventHandler(func(event fltk.Event) bool {
@@ -175,7 +178,7 @@ func (ui *view) loadSearchLibrary() {
 		items, err := ui.service.Library(ctx)
 		fltk.Awake(func() {
 			ui.searchModel.finishLibrary(request, items, err)
-			if ui.ctx.Err() != nil {
+			if ui.ctx.Err() != nil || ui.closing {
 				return
 			}
 			if ui.selected == 4 {
@@ -221,7 +224,7 @@ func (ui *view) startRemoteSearch() {
 		items, err := ui.service.Search(ctx, query)
 		fltk.Awake(func() {
 			ui.searchModel.finishSearch(request, items, err)
-			if ui.ctx.Err() != nil {
+			if ui.ctx.Err() != nil || ui.closing {
 				return
 			}
 			if ui.selected == 4 {
@@ -257,11 +260,39 @@ func (ui *view) openSearchResult(item backend.Anime) {
 		detail, err := ui.service.Detail(ctx, item.ID)
 		fltk.Awake(func() {
 			ui.searchModel.finishDetail(request, detail, err)
-			if ui.ctx.Err() != nil {
+			if ui.ctx.Err() != nil || ui.closing {
 				return
 			}
 			if ui.selected == 4 {
 				ui.refreshSearchView()
+			}
+		})
+	}()
+}
+
+func (ui *view) playSearchPreview() {
+	if ui.closing || ui.onPlay == nil || ui.service == nil || !ui.searchPreview {
+		return
+	}
+	request, ctx, ok := ui.searchModel.beginPlayback()
+	if !ok {
+		return
+	}
+	animeID := ui.searchModel.previewItem.ID
+	ui.renderPreview()
+	go func() {
+		episodes, err := ui.service.Episodes(ctx, animeID)
+		fltk.Awake(func() {
+			playRequest, current := ui.searchModel.finishPlayback(request, episodes, err)
+			if ui.ctx.Err() != nil || ui.closing {
+				return
+			}
+			if ui.selected == 4 {
+				ui.refreshSearchView()
+				if current && ui.searchPreview {
+					ui.pageGeneration++
+					ui.onPlay(playRequest)
+				}
 			}
 		})
 	}()
@@ -374,11 +405,19 @@ func (ui *view) renderPreview() {
 	title, native, description := item.Title, item.NativeTitle, item.Description
 	status := ""
 	if ui.searchModel.phase == searchPhaseLoading {
-		status = "正在載入作品資料…"
+		if ui.searchModel.active.kind == searchRequestPlayback {
+			status = "正在取得集數，準備播放…"
+		} else {
+			status = "正在載入作品資料…"
+		}
 	} else if ui.searchModel.requestActive {
 		status = "正在取消上一個要求，完成後會顯示預覽…\n\n"
 	} else if ui.searchModel.phase == searchPhaseFailed {
-		status = "無法載入作品資料，請返回搜尋結果後重試。"
+		if ui.searchModel.playbackFailed {
+			status = "目前無法取得可播放的集數，請檢查網路後按播放重試。"
+		} else {
+			status = "無法載入作品資料，請返回搜尋結果後重試。"
+		}
 	} else if detail := ui.searchModel.preview; detail != nil {
 		if strings.TrimSpace(detail.Anime.Title) != "" {
 			title = detail.Anime.Title
@@ -409,6 +448,11 @@ func (ui *view) renderPreview() {
 		status += "\n\n"
 	}
 	ui.previewDescription.SetLabel(status + truncateSearchDescription(description))
+	if ui.searchModel.preview != nil && !ui.searchModel.requestActive && ui.onPlay != nil {
+		ui.previewPlay.Activate()
+	} else {
+		ui.previewPlay.Deactivate()
+	}
 	ui.applyTheme()
 }
 
@@ -537,6 +581,7 @@ func (ui *view) resizeSearch() {
 	ui.searchPageText.Resize(365, footerY+2, max(220, width-450), 28)
 	ui.searchNext.Resize(right-113, footerY, 113, 36)
 	ui.previewBack.Resize(252, 118, 113, 38)
+	ui.previewPlay.Resize(385, 118, 165, 38)
 	ui.previewTitle.Resize(252, 174, width-32, 46)
 	ui.previewNative.Resize(252, 226, width-32, 38)
 	ui.previewDescription.Resize(252, 278, width-32, max(140, height-168))

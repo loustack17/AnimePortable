@@ -17,6 +17,17 @@ const rowLimit = 6
 
 var sections = [...]string{"首頁", "時間表", "追蹤", "歷史紀錄", "搜尋", "設定"}
 
+var navigationOrder = [...]int{0, 4, 1, 2, 3, 5}
+
+func navigationPosition(section int) int {
+	for position, index := range navigationOrder {
+		if index == section {
+			return position
+		}
+	}
+	return 0
+}
+
 type homeRow struct {
 	History backend.History
 	Title   string

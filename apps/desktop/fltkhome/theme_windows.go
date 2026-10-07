@@ -87,6 +87,11 @@ func (ui *view) styleButton(button *fltk.Button, selected func() bool) {
 }
 
 func (ui *view) applyTheme() {
+	if ui.dark {
+		ui.themeToggle.SetTooltip("切換明亮")
+	} else {
+		ui.themeToggle.SetTooltip("切換暗色")
+	}
 	colors := ui.colors()
 	if ui.dark {
 		fltk.SetBackgroundColor(17, 22, 35)
@@ -139,7 +144,7 @@ func (ui *view) applyTheme() {
 		ui.previewTitle.Redraw()
 		ui.previewNative.Redraw()
 		ui.previewDescription.Redraw()
-		for _, button := range append(append([]*fltk.Button(nil), ui.searchRows...), ui.searchButton, ui.searchBack, ui.searchPrevious, ui.searchNext, ui.previewBack) {
+		for _, button := range append(append([]*fltk.Button(nil), ui.searchRows...), ui.searchButton, ui.searchBack, ui.searchPrevious, ui.searchNext, ui.previewBack, ui.previewPlay) {
 			button.Redraw()
 		}
 	}

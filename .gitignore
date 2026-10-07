@@ -13,11 +13,7 @@ profile.cov
 go.work
 go.work.sum
 .env
-apps/desktop/frontend/dist/
-apps/desktop/frontend/node_modules/
 apps/desktop/bin/
-apps/desktop/.task/
-apps/desktop/build/android/
-apps/desktop/build/ios/
-apps/desktop/build/linux/appimage/build/
-.slim/deepwork/
+/.slim/
+/artifacts/
+/.code-review-graph/

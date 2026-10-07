@@ -14,10 +14,12 @@ import (
 )
 
 type Service interface {
+	appearanceService
 	Start(context.Context) error
 	Library(context.Context) ([]backend.Anime, error)
 	Search(context.Context, string) ([]backend.Anime, error)
 	Detail(context.Context, string) (backend.Detail, error)
+	Episodes(context.Context, string) ([]backend.Episode, error)
 	History(context.Context) ([]backend.History, error)
 	Following(context.Context) ([]backend.Following, error)
 }
@@ -65,6 +67,7 @@ type view struct {
 	searchRows         []*fltk.Button
 	previewGroup       *fltk.Group
 	previewBack        *fltk.Button
+	previewPlay        *fltk.Button
 	previewTitle       *fltk.Box
 	previewNative      *fltk.Box
 	previewDescription *fltk.Box
@@ -75,6 +78,8 @@ type view struct {
 	closeButton        *fltk.Button
 	themeToggle        *fltk.Button
 	dark               bool
+	appearance         *appearancePersistence
+	closing            bool
 }
 
 func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int), func(string)) {
@@ -87,6 +92,14 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 	window := fltk.NewWindow(1000, 618, "AnimePortable")
 	window.SetSizeRange(760, 480, 0, 0, 0, 0, false)
 	ui := &view{window: window, service: service, plan: plan, ctx: ctx, cancelContext: cancel, onPlay: onPlay, onClose: onClose}
+	ui.appearance = newAppearancePersistence(service, func(error) {
+		fltk.Awake(func() {
+			if ui.ctx.Err() == nil && !ui.closing {
+				ui.message.SetLabel("無法儲存主題設定，請重試。")
+				ui.window.Redraw()
+			}
+		})
+	})
 	showMessage := func(message string) { ui.message.SetLabel(message); ui.window.Redraw() }
 	window.SetCallback(ui.cancel)
 	ui.build()
@@ -94,11 +107,7 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 		ui.showStartupError("無法使用這個資料夾，請將程式解壓到可寫入的位置後重新開啟。")
 		return window, ui.showSection, showMessage
 	}
-	if plan.OfferImport {
-		ui.showChoices("找到舊版資料。你可以複製一份到這個資料夾，或建立新的空白資料；舊資料都會保留。")
-		return window, ui.showSection, showMessage
-	}
-	ui.start(false)
+	ui.start()
 	return window, ui.showSection, showMessage
 }
 
@@ -142,16 +151,18 @@ func (ui *view) build() {
 		}
 	})
 	toggleTheme := func() {
+		if ui.closing {
+			return
+		}
 		ui.dark = !ui.dark
-		if ui.dark {
-			ui.themeToggle.SetTooltip("切換明亮")
-		} else {
-			ui.themeToggle.SetTooltip("切換暗色")
+		if ui.appearance != nil {
+			ui.appearance.setDark(ui.dark)
 		}
 		ui.applyTheme()
 	}
 	ui.bindButton(ui.themeToggle, toggleTheme)
 	ui.bindThemeKeys(toggleTheme)
+	ui.themeToggle.Deactivate()
 	ui.startupGroup = fltk.NewGroup(18, 78, 964, 520)
 	ui.startupGroup.End()
 	ui.startupGroup.Hide()
@@ -181,7 +192,7 @@ func (ui *view) build() {
 	heroHint.SetLabelSize(13)
 	heroHint.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
 	heroHint.SetLabelColor(fltk.WHITE)
-	browse := fltk.NewButton(278, 205, 132, 37, "瀏覽內容")
+	browse := fltk.NewButton(278, 205, 132, 37, "搜尋作品")
 	ui.browseButton = browse
 	browse.SetBox(fltk.NO_BOX)
 	browse.SetDrawHandler(func(func()) {
@@ -196,7 +207,7 @@ func (ui *view) build() {
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 13)
 		fltk.Draw(browse.Label(), x, y, width, height, fltk.ALIGN_CENTER)
 	})
-	browseAction := func() { ui.scrollTo(176) }
+	browseAction := func() { ui.showSection(4); ui.focusSearchInput() }
 	ui.bindButton(browse, browseAction)
 	ui.bindContentKeys(browse, browseAction, nil, func() *fltk.Button {
 		if ui.retryButton != nil && ui.retryButton.Visible() {
@@ -233,12 +244,13 @@ func (ui *view) build() {
 	tagline.SetLabelSize(10)
 	tagline.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
 	ui.tagline = tagline
-	for index, label := range sections {
-		button := fltk.NewButton(27, 111+index*55, 177, 43, label)
+	ui.navigation = make([]*fltk.Button, len(sections))
+	for position, index := range navigationOrder {
+		button := fltk.NewButton(27, 111+position*55, 177, 43, sections[index])
 		ui.bindNavigationKeys(button, index)
 		button.SetLabelSize(15)
 		ui.styleButton(button, func() bool { return ui.selected == index })
-		ui.navigation = append(ui.navigation, button)
+		ui.navigation[index] = button
 	}
 	navPanel.End()
 	ui.window.End()
@@ -248,29 +260,6 @@ func (ui *view) build() {
 		ui.scroll.Resize(236, 110, max(400, ui.window.W()-259), max(250, ui.window.H()-131))
 		ui.resizeSearch()
 	})
-}
-
-func (ui *view) showChoices(message string) {
-	ui.message.SetLabel(message)
-	ui.startupGroup.Begin()
-	create := fltk.NewButton(272, 132, 240, 48, "建立新的空白資料")
-	ui.styleButton(create, func() bool { return true })
-	ui.bindButton(create, func() { ui.start(false) })
-	copy := fltk.NewButton(530, 132, 240, 48, "複製既有資料")
-	ui.styleButton(copy, nil)
-	ui.bindButton(copy, func() { ui.start(true) })
-	close := fltk.NewButton(272, 194, 160, 40, "關閉")
-	ui.styleButton(close, nil)
-	ui.bindButton(close, ui.cancel)
-	ui.startupGroup.End()
-	ui.startupGroup.Show()
-	fltk.AddTimeout(0.01, func() {
-		if ui.ctx.Err() == nil {
-			create.TakeFocus()
-			create.Redraw()
-		}
-	})
-	ui.window.Redraw()
 }
 
 func (ui *view) showStartupError(message string) {
@@ -286,51 +275,65 @@ func (ui *view) showStartupError(message string) {
 	ui.window.Redraw()
 }
 
-func (ui *view) start(copyExisting bool) {
-	if ui.ctx.Err() != nil {
+func (ui *view) start() {
+	if ui.ctx.Err() != nil || ui.closing {
 		return
 	}
 	ui.message.SetLabel("正在準備資料…")
 	ui.startupGroup.Deactivate()
 	go func() {
 		var err error
-		imported := false
+		var dark bool
+		var appearanceErr error
 		if ui.ctx.Err() != nil {
 			return
 		}
-		if copyExisting {
-			err = ui.plan.Import(ui.ctx)
-			imported = err == nil
-		} else if !ui.plan.TargetExists {
+		if !ui.plan.TargetExists {
 			err = ui.plan.CreateFresh()
 		}
-		if err == nil && ui.service != nil {
-			err = ui.service.Start(ui.ctx)
+		if err == nil {
+			if ui.service == nil {
+				err = backend.ErrUnavailable
+			} else {
+				err = ui.service.Start(ui.ctx)
+				if err == nil {
+					dark, appearanceErr = loadAppearance(ui.ctx, ui.service)
+				}
+			}
 		}
 		fltk.Awake(func() {
-			if ui.ctx.Err() != nil {
-				return
-			}
-			if err != nil {
-				ui.startupGroup.Activate()
-				ui.message.SetLabel(startupErrorMessage(err, copyExisting, imported))
-				if !copyExisting || backend.IsPortableImportConflict(err) {
-					ui.showStartupError(startupErrorMessage(err, copyExisting, imported))
-				}
-				return
-			}
-			ui.startupGroup.Hide()
-			ui.mainGroup.Show()
-			ui.showSection(0)
-			ui.navigation[0].TakeFocus()
-			ui.loadHome()
-			ui.window.Redraw()
+			ui.finishStartup(err, dark, appearanceErr)
 		})
 	}()
 }
 
+func (ui *view) finishStartup(err error, dark bool, appearanceErr error) {
+	if ui.ctx.Err() != nil || ui.closing {
+		return
+	}
+	if err != nil {
+		ui.startupGroup.Activate()
+		ui.showStartupError(startupErrorMessage(err, false, false))
+		return
+	}
+	ui.startupGroup.Hide()
+	ui.dark = dark
+	ui.applyTheme()
+	ui.themeToggle.Activate()
+	if appearanceErr != nil {
+		ui.message.SetLabel("無法載入主題設定，暫時使用亮色。")
+	} else {
+		ui.message.SetLabel("")
+	}
+	ui.mainGroup.Show()
+	ui.showSection(0)
+	ui.navigation[0].TakeFocus()
+	ui.loadHome()
+	ui.window.Redraw()
+}
+
 func (ui *view) showSection(index int) {
-	if index < 0 || index >= len(sections) {
+	if ui.closing || index < 0 || index >= len(sections) {
 		return
 	}
 	if ui.selected != index {
@@ -393,7 +396,7 @@ func (ui *view) loadHome() {
 	go func() {
 		wait.Wait()
 		fltk.Awake(func() {
-			if ui.ctx.Err() != nil {
+			if ui.ctx.Err() != nil || ui.closing {
 				return
 			}
 			if libraryErr != nil || historyErr != nil || followingErr != nil {
@@ -447,7 +450,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		ui.styleButton(button, func() bool { return true })
 		item := row.History
 		playRow := func() {
-			if ui.onPlay != nil && ui.ctx.Err() == nil {
+			if ui.onPlay != nil && ui.ctx.Err() == nil && !ui.closing {
 				ui.onPlay(playRequest(item))
 			}
 		}
@@ -517,7 +520,7 @@ func (ui *view) deferredKeyAction(action func()) func() {
 		queued = true
 		fltk.AddTimeout(0.01, func() {
 			queued = false
-			if ui.ctx.Err() == nil {
+			if ui.ctx.Err() == nil && !ui.closing {
 				action()
 			}
 		})
@@ -526,13 +529,14 @@ func (ui *view) deferredKeyAction(action func()) func() {
 
 func (ui *view) focusAfterKey(action func()) {
 	fltk.AddTimeout(0.01, func() {
-		if ui.ctx.Err() == nil {
+		if ui.ctx.Err() == nil && !ui.closing {
 			action()
 		}
 	})
 }
 
 func (ui *view) bindNavigationKeys(button *fltk.Button, index int) {
+	position := navigationPosition(index)
 	button.SetCallback(func() { ui.showSection(index) })
 	activate := ui.deferredKeyAction(func() { ui.showSection(index) })
 	button.SetEventHandler(func(event fltk.Event) bool {
@@ -543,16 +547,16 @@ func (ui *view) bindNavigationKeys(button *fltk.Button, index int) {
 		case fltk.ENTER_KEY, 13, 0xff8d:
 			activate()
 		case 0xff52:
-			ui.focusAfterKey(func() { ui.navigation[max(0, index-1)].TakeFocus() })
+			ui.focusAfterKey(func() { ui.navigation[navigationOrder[max(0, position-1)]].TakeFocus() })
 		case 0xff54:
-			ui.focusAfterKey(func() { ui.navigation[min(len(ui.navigation)-1, index+1)].TakeFocus() })
+			ui.focusAfterKey(func() { ui.navigation[navigationOrder[min(len(navigationOrder)-1, position+1)]].TakeFocus() })
 		case 0xff53:
 			ui.focusAfterKey(ui.focusContent)
 		case 9, 0xff09:
 			if fltk.EventState()&fltk.SHIFT != 0 {
-				ui.focusAfterKey(func() { ui.navigation[max(0, index-1)].TakeFocus() })
-			} else if index+1 < len(ui.navigation) {
-				ui.focusAfterKey(func() { ui.navigation[index+1].TakeFocus() })
+				ui.focusAfterKey(func() { ui.navigation[navigationOrder[max(0, position-1)]].TakeFocus() })
+			} else if position+1 < len(navigationOrder) {
+				ui.focusAfterKey(func() { ui.navigation[navigationOrder[position+1]].TakeFocus() })
 			} else {
 				ui.focusAfterKey(ui.focusContent)
 			}
@@ -712,11 +716,25 @@ func (ui *view) bindThemeKeys(action func()) {
 
 func (ui *view) cancel() {
 	ui.closeOnce.Do(func() {
+		ui.closing = true
 		ui.searchModel.close()
-		ui.cancelContext()
-		if ui.onClose != nil {
-			ui.onClose()
-		}
+		ui.mainGroup.Deactivate()
+		ui.themeToggle.Deactivate()
+		go func() {
+			var err error
+			if ui.appearance != nil {
+				err = ui.appearance.close()
+			}
+			fltk.Awake(func() {
+				if err != nil {
+					fltk.MessageBox("設定未儲存", "無法儲存主題設定，下次開啟可能恢復先前的主題。")
+				}
+				ui.cancelContext()
+				if ui.onClose != nil {
+					ui.onClose()
+				}
+			})
+		}()
 	})
 }
 

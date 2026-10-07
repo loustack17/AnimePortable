@@ -2,7 +2,11 @@
 
 # AnimePortable
 
-Windows development currently uses Go, FLTK and in-process libmpv. The FLTK replacement is a development snapshot: Loop 28 resource, native-operation and portable-release acceptance are still open. No libmpv binary is committed or distributed until its exact build and linked-codec licenses are verified. Linux and macOS development is paused.
+Windows development uses Go, FLTK and in-process libmpv. Loop 28 Windows acceptance is complete. Loop 29 Search has passed automated Windows checks and is awaiting human acceptance. Linux and macOS development is paused; release publication remains pending.
+
+## Current test build
+
+The local acceptance build is [artifacts/loop29/AnimePortable.exe](artifacts/loop29/AnimePortable.exe). Generated artifacts are not tracked; a fresh clone can download the executable from [the verified Windows CI run](https://github.com/loustack17/AnimePortable/actions/runs/37558539916). Follow [the test objects, actions and expected results](docs/LOOP29_HUMAN_CHECK.md).
 
 See [the engineering status](docs/IMPLEMENTATION_STATUS.md) and [Windows desktop decision](docs/19_ADR_FLTK_WINDOWS_DESKTOP.md).
 

@@ -67,6 +67,8 @@ Automation should cover keyboard events, focusability, DOM semantics, routing/st
 
 For each affected UI loop:
 
+Provide the test object before requesting human acceptance: a clickable executable/package path, build identity, startup steps, concrete input or visible work to test, and expected results for each action. Prepare the object before handing off the checks; the human must not need to find a build among diagnostic files. Current Search example: [Loop 29 human check](LOOP29_HUMAN_CHECK.md).
+
 1. launch the built application
 2. complete the intended workflow with keyboard only
 3. repeat core actions with mouse

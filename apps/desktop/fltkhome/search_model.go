@@ -18,6 +18,7 @@ const (
 	searchRequestLibrary searchRequestKind = iota + 1
 	searchRequestRemote
 	searchRequestDetail
+	searchRequestPlayback
 )
 
 type searchRequest struct {
@@ -34,23 +35,24 @@ const (
 )
 
 type searchModel struct {
-	items         []backend.Anime
-	results       []backend.Anime
-	query         string
-	selected      int
-	phase         searchPhase
-	loaded        bool
-	libraryFailed bool
-	preview       *backend.Detail
-	previewItem   backend.Anime
-	remoteQuery   string
-	closed        bool
-	generation    uint64
-	active        searchRequest
-	requestActive bool
-	cancelRequest context.CancelFunc
-	pending       searchRequestKind
-	pendingItem   backend.Anime
+	items          []backend.Anime
+	results        []backend.Anime
+	query          string
+	selected       int
+	phase          searchPhase
+	loaded         bool
+	libraryFailed  bool
+	preview        *backend.Detail
+	previewItem    backend.Anime
+	remoteQuery    string
+	closed         bool
+	generation     uint64
+	active         searchRequest
+	requestActive  bool
+	cancelRequest  context.CancelFunc
+	pending        searchRequestKind
+	pendingItem    backend.Anime
+	playbackFailed bool
 }
 
 func (model *searchModel) setItems(items []backend.Anime) {
@@ -99,7 +101,29 @@ func (model *searchModel) beginDetail(item backend.Anime) (searchRequest, contex
 	}
 	model.previewItem = item
 	model.preview = nil
+	model.playbackFailed = false
 	return request, ctx, true
+}
+
+func (model *searchModel) beginPlayback() (searchRequest, context.Context, bool) {
+	if model.preview == nil || model.previewItem.ID == "" {
+		return searchRequest{}, nil, false
+	}
+	model.playbackFailed = false
+	return model.begin(searchRequestPlayback)
+}
+
+func (model *searchModel) finishPlayback(request searchRequest, episodes []backend.Episode, err error) (backend.PlayRequest, bool) {
+	if !model.finishRequest(request) || !model.current(request) {
+		return backend.PlayRequest{}, false
+	}
+	if err != nil || len(episodes) == 0 || episodes[0].ID == "" {
+		model.phase = searchPhaseFailed
+		model.playbackFailed = true
+		return backend.PlayRequest{}, false
+	}
+	model.phase = searchPhaseIdle
+	return backend.PlayRequest{AnimeID: model.previewItem.ID, EpisodeID: episodes[0].ID}, true
 }
 
 func (model *searchModel) queueSearch() {
