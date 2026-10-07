@@ -52,7 +52,7 @@ func TestNativeStartupOpensHomeWithoutRecordChoiceAndKeepsLegacyUntouched(t *tes
 	})
 	ui.start()
 	pumpSearchEvents(t, func() bool { return ui.mainGroup.Visible() })
-	if ui.startupGroup.Visible() || ui.startupGroup.Children() != 0 || !ui.dark || !ui.themeToggle.IsActive() {
+	if ui.startupGroup.Visible() || len(ui.startupGroup.Children()) != 0 || !ui.dark || !ui.themeToggle.IsActive() {
 		t.Fatal("startup blocked on choices or failed to apply saved theme")
 	}
 	if ui.navigation[0].Y() >= ui.navigation[4].Y() || ui.navigation[4].Y() >= ui.navigation[1].Y() || ui.browseButton.Label() != "搜尋作品" {
