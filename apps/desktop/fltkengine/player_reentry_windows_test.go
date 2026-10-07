@@ -7,9 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"image"
-	"image/color"
-	"image/gif"
 	"io"
 	"net/http"
 	"os"
@@ -55,9 +52,9 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 
 	preparePinnedRuntime(t)
 	mediaDirectory := t.TempDir()
-	media := []string{filepath.Join(mediaDirectory, "first-black.gif"), filepath.Join(mediaDirectory, "second-black.gif")}
+	media := []string{filepath.Join(mediaDirectory, "first-black.mp4"), filepath.Join(mediaDirectory, "second-black.mp4")}
 	for _, path := range media {
-		writeBlackAnimation(t, path)
+		writeBlackVideo(t, path)
 	}
 
 	view := fltkplayer.NewWindow(fltkplayer.Callbacks{})
@@ -102,7 +99,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 		mediaReady := false
 		readyDraws := 0
 		engine.SetStateHandler(func(position, duration time.Duration, paused bool, resolution int) {
-			mediaReady = duration > 0 && resolution == 180
+			mediaReady = duration >= 2900*time.Millisecond && duration <= 3100*time.Millisecond && resolution == 180
 		})
 		var drawContext uintptr
 		view.SetRenderHook(func(width, height int) {
@@ -316,27 +313,16 @@ func findSevenZip() string {
 	return ""
 }
 
-func writeBlackAnimation(t *testing.T, path string) {
+func writeBlackVideo(t *testing.T, path string) {
 	t.Helper()
-	frame := image.NewPaletted(image.Rect(0, 0, 320, 180), color.Palette{color.Black})
-	file, err := os.Create(path)
+	data, err := os.ReadFile(filepath.Join("testdata", "black-3s.mp4"))
 	if err != nil {
-		t.Fatalf("create synthetic black GIF: %v", err)
+		t.Fatalf("read three-second H264 fixture: %v", err)
 	}
-	animation := &gif.GIF{Image: make([]*image.Paletted, 30), Delay: make([]int, 30), LoopCount: 0}
-	for index := range animation.Image {
-		animation.Image[index] = frame
-		animation.Delay[index] = 10
-	}
-	if err := gif.EncodeAll(file, animation); err != nil {
-		_ = file.Close()
-		t.Fatalf("encode synthetic black animation: %v", err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatalf("close synthetic black animation: %v", err)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write black video: %v", err)
 	}
 }
-
 func pumpFLTKResult[T any](t *testing.T, timeout time.Duration, action func() (T, error)) (T, error) {
 	t.Helper()
 	type result struct {

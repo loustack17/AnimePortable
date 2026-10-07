@@ -10,12 +10,12 @@ updated_at_utc: "2026-10-07T05:00:00Z"
 status: VERIFYING
 repository:
   branch: main
-  observed_head: 63e4f1fa1e3884a12a9edaa66cc1d0cfd48fbda4
+  observed_head: b4afd2ffaa3d6eb07969898821a48caca105b9a2
   verified_code_head: 2013fce6af2d593d2e0c60b6b4eec259b51768b8
   working_tree: "Production fixes committed63e4f1f; narrow exact-seek/native-fixture follow-up and checkpoint docs pending. Preserve unrelated AGENTS.md/.codex and user DB. No release authorization."
 active_loop:
   number: 29
-  state: "Owner requested direct fix after budget stop, authorizing scoped resumption for controls and stale Continue. Apply bounded CPU glyph bitmap renderer and reviewed Home/liveSnapshot fixes; no further verifier environment work. CI37572285446 passes both actual glyph rounds and overlay reentry; immediate seek Snapshot1s versus2s and hidden Home fixture fail. Follow-up waits bounded3s outside UI for mpv seek/restart events before Snapshot and shows fixture; rerun and human acceptance pending."
+  state: "Owner requested direct fix after budget stop, authorizing scoped resumption for controls and stale Continue. Apply bounded CPU glyph bitmap renderer and reviewed Home/liveSnapshot fixes; no further verifier environment work. CI37572285446 passes both actual glyph rounds and overlay reentry; immediate seek Snapshot1s versus2s and hidden Home fixture fail. Follow-up waits bounded3s outside UI for mpv seek/restart events before Snapshot and shows fixture; CI37573212734 samefailure diagnosed: pinnedruntime GIF duration1s clampsseek2; H264 fixture3s/seek2 independently demonstrated as diagnosis, notPASS. Test fixture corrected and Home readiness predicate latched; no furtherproduction/environment change. Rerun and owner acceptance pending."
   goal: "Every playback has visible controls; closing saves latest position; Home refreshes and Continue/restart use it. Retain accepted Search/theme/startup/keyboard/spacing."
   criteria: "Phase23/FUNC-003; Search UX-002/003/005..010; QUAL-001..012; native lifecycle, isolated verification, actual owner tests. Full detail and Following later."
 decisions:

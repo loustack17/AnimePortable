@@ -170,9 +170,14 @@ func TestNativeHomeReturnCoalescesRefreshAfterOlderReadAndRejectsQueuedContinue(
 	unblock := func() { releaseOnce.Do(func() { close(release) }) }
 	defer unblock()
 	ui.loadHome()
+	readEntered := false
 	pumpSearchEvents(t, func() bool {
+		if readEntered {
+			return true
+		}
 		select {
 		case <-entered:
+			readEntered = true
 			return true
 		default:
 			return false
