@@ -439,7 +439,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		ui.loadingText.Hide()
 	}
 	for index, row := range ui.rows {
-		y := 370 + index*104
+		y := 318 + index*104
 		card := fltk.NewBox(fltk.NO_BOX, 250, y, 711, 92)
 		card.SetDrawHandler(func(func()) { roundedRect(card.X(), card.Y(), card.W(), card.H(), 16, ui.colors().surface) })
 		ui.cards = append(ui.cards, card)
@@ -468,7 +468,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		})
 		ui.cardButtons = append(ui.cardButtons, button)
 	}
-	followY := 390 + len(ui.rows)*104
+	followY := 326 + len(ui.rows)*104
 	if len(ui.rows) == 0 {
 		followY = 385
 	}

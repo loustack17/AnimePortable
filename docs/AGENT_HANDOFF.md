@@ -15,7 +15,7 @@ repository:
   working_tree: "Checkpoint documents reflect verified code3fd78e3; subsequent documentation commit is discoverable in Git. Preserve unrelated AGENTS.md and .codex. No release authorization."
 active_loop:
   number: 29
-  state: "Owner corrections verified; concrete playable test object ready; human retest pending."
+  state: "Owner accepted first play/episode dropdown and other corrections, but second-title overlay disappears and Continue Watching gap is excessive. Focused final correction implemented; fresh quality/platform PASS_REVIEW, exact-state CI pending."
   goal: "Saved light/dark, Search second/from Home, automatic portable startup, explicit first-episode play through existing source/player. Full detail/episode-list UI remains later."
   criteria: "Phase23/FUNC-003; Search UX-002/003/005..010; QUAL-001..012 and architecture/security/lifecycle/LOOP. Full UX-001 detail flow remains later."
 decisions:
@@ -33,7 +33,7 @@ evidence:
   - "Legacy cleanup204 entries archived/hash-verified; historical status moved docs/archive/IMPLEMENTATION_HISTORY.md; no canonical source/tests/deps removed. artifacts/evidence/legacy-verification.zip and legacy-manifest.json."
 pending:
   - "Provide docs/LOOP29_HUMAN_CHECK.md object and retest corrected appearance both ways/quickclose, Search second/Home, direct startup and explicit play of searched 無職英雄：技能什麼的毫無用處. Stop stays in player; player close returns Home. Keyboard/results already accepted. Offline/small-layout observations remain pending."
-  - "Record owner observations, classify/fix any actual defect. Keep Loop29 NEEDS_HUMAN until all gates; do not start Loop30. Correction budget4/5, max2 identical failures,1 replan,2 unchanged flaky reruns."
+  - "Cycle5/5: overlay owns viewport/scissor with state restoration; first Home record12px below heading, next section20px below lastcard. New native pixel hide/show and loaded/empty/repopulate geometry tests; pure regression PASS, native local NOT_RUN. Fresh quality/platform PASS_REVIEW zero MUST_FIX; push approvedmain, exact Windows CI, replace test exe/ZIP preserving data, TypeSafe final evidence, then second-title/spacing human retest. Following remains futurePhase26. Contract reentry-contract.md; budget5/5, max2 identical failures,1 replan,2 unchanged flaky reruns."
 references:
   - "docs/IMPLEMENTATION_STATUS.md Current loop; docs/LOOP29_HUMAN_CHECK.md; artifacts/evidence/loop29/correction-contract.md"
   - "apps/desktop/fltkhome/appearance.go,search_model.go,search_view_windows.go,window_windows.go and tests"

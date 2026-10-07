@@ -41,7 +41,9 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     if (!visible && !menu && !episodes && selected < 0) return;
     GLint oldMatrix = GL_MODELVIEW;
     glGetIntegerv(GL_MATRIX_MODE, &oldMatrix);
-    glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT | GL_LINE_BIT);
+    glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT | GL_LINE_BIT | GL_VIEWPORT_BIT | GL_SCISSOR_BIT);
+    glViewport(0, 0, width, height);
+    glDisable(GL_SCISSOR_TEST);
     glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity(); glOrtho(0, width, height, 0, -1, 1);
     glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity();
     glDisable(GL_DEPTH_TEST); glDisable(GL_TEXTURE_2D);
