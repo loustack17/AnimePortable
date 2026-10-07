@@ -22,10 +22,12 @@ const (
 type EventID uint32
 
 const (
-	EventNone       EventID = 0
-	EventStart      EventID = 6
-	EventEnd        EventID = 7
-	EventFileLoaded EventID = 8
+	EventNone            EventID = 0
+	EventStart           EventID = 6
+	EventEnd             EventID = 7
+	EventFileLoaded      EventID = 8
+	EventSeek            EventID = 20
+	EventPlaybackRestart EventID = 21
 )
 
 type EndFileReason int32

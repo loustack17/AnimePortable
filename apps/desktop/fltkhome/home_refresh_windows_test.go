@@ -98,6 +98,7 @@ func newHomeRefreshFixture(t *testing.T, service Service) *view {
 	ui.appearance = newAppearancePersistence(service, nil)
 	ui.build()
 	ui.mainGroup.Show()
+	window.Show()
 	t.Cleanup(func() {
 		ui.searchModel.close()
 		_ = ui.appearance.close()

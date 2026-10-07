@@ -10,12 +10,12 @@ updated_at_utc: "2026-10-07T05:00:00Z"
 status: VERIFYING
 repository:
   branch: main
-  observed_head: 81810be379b31df705bcc878e4620ff571c27ae9
+  observed_head: 63e4f1fa1e3884a12a9edaa66cc1d0cfd48fbda4
   verified_code_head: 2013fce6af2d593d2e0c60b6b4eec259b51768b8
-  working_tree: "Reviewed uncommitted Home/main/live-Snapshot changes and Home native tests; checkpoint docs. Preserve unrelated AGENTS.md/.codex and user DB. No release authorization."
+  working_tree: "Production fixes committed63e4f1f; narrow exact-seek/native-fixture follow-up and checkpoint docs pending. Preserve unrelated AGENTS.md/.codex and user DB. No release authorization."
 active_loop:
   number: 29
-  state: "Owner requested direct fix after budget stop, authorizing scoped resumption for controls and stale Continue. Apply bounded CPU glyph bitmap renderer and reviewed Home/liveSnapshot fixes; no further verifier environment work. Native CI and human acceptance pending."
+  state: "Owner requested direct fix after budget stop, authorizing scoped resumption for controls and stale Continue. Apply bounded CPU glyph bitmap renderer and reviewed Home/liveSnapshot fixes; no further verifier environment work. CI37572285446 passes both actual glyph rounds and overlay reentry; immediate seek Snapshot1s versus2s and hidden Home fixture fail. Follow-up waits bounded3s outside UI for mpv seek/restart events before Snapshot and shows fixture; rerun and human acceptance pending."
   goal: "Every playback has visible controls; closing saves latest position; Home refreshes and Continue/restart use it. Retain accepted Search/theme/startup/keyboard/spacing."
   criteria: "Phase23/FUNC-003; Search UX-002/003/005..010; QUAL-001..012; native lifecycle, isolated verification, actual owner tests. Full detail and Following later."
 decisions:
@@ -29,7 +29,7 @@ evidence:
   - "Repair3 81810be CI37570998564/job112629360207 FAILED actual glyph oracle: explicitGOTMPDIR underRUNNER_TEMP; strictguard retained. Local pure launcher probe reproducesdistinctTMP/TEMP rejection andpasses with explicitapprovedroot (noGLclaim). Read-only independentreview PASS_REVIEW allworkflowrepairs."
   - "CI uses official signed MSYS2 Mesa26.2.4-1, archiveSHA10b2497b17d7554ea9d758b7db2ebf648f6ece10d19e239f63ecce978a331980; HTTPS curl>=8.4 streaming20MiB/60s; hash beforefixed2DLLextract, installedDLLhashmatch; temp.test.exe-onlyDLLs/llvmpipe; samefull/race tests; productPE Mesa/Gallium/LLVM rejection."
   - "Pure actualSQLite finalcheckpoint42.75s/reopen/Continue PASS after10s seed. Source-confirmed staleHome callbacks and cachednativeSnapshot; preparedreload/coalescing/stalecard/error/liveproperty fixes sourceQUAL PASS_REVIEW, nativepending."
-  - "FLTK1.4.5 globalglyphtexturecache lackscontextidentity, Hide destroyscontext: candidate only. Generic View.Hide proposal incomplete: failed SwitchEpisode can leave liveengine; teardown must be proven beforeHide/reset. Native reviewer caught this. Renderer production unchanged."
+  - "FLTK1.4.5 globalglyphtexturecache lackscontextidentity, Hide destroyscontext: candidate only. Generic View.Hide proposal incomplete: failed SwitchEpisode can leave liveengine; teardown must be proven beforeHide/reset. Native reviewer caught this. Renderer replaced with bounded CPU-only GDI mono bitmaps; first CI passes glyph tests."
   - "TypeSafe raw files retained under artifacts/evidence/loop29: mesa-verifier-v2, mesa-cache-repair-v2, mesa-tmp-repair judgments. Last temp-boundary confidence.25 remains uncertain; source/launcher evidence and human scope approvals are distinct. No semantic/human/native PASS."
 pending:
   - "CI37570998564 reached actual media: first actual-player glyphs absent, overlay-only second context glyphs absent; GLerrors0. New CPU-only bitmap patch retains original glyph oracle; exact final native CI pending."

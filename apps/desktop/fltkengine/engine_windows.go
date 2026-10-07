@@ -23,6 +23,7 @@ import (
 )
 
 var ErrClosed = errors.New("player is closed")
+var errSeekPending = errors.New("seek has not completed")
 
 var opengl = syscall.NewLazyDLL("opengl32.dll")
 var wglGetProcAddress = opengl.NewProc("wglGetProcAddress")
@@ -42,6 +43,8 @@ type Engine struct {
 	pending        bool
 	pendingStarted bool
 	failed         bool
+	seekPending    bool
+	seekStarted    bool
 	onState        func(time.Duration, time.Duration, bool, int)
 	onLoad         func(uint64)
 	onFailure      func(uint64)
@@ -195,6 +198,8 @@ func (engine *Engine) Load(ctx context.Context, url string, startAt time.Duratio
 		engine.pending = true
 		engine.pendingStarted = false
 		engine.failed = false
+		engine.seekPending = false
+		engine.seekStarted = false
 		onLoad := engine.onLoad
 		engine.mu.Unlock()
 		if onLoad != nil {
@@ -232,12 +237,41 @@ func (engine *Engine) FailedGeneration(generation uint64) bool {
 }
 
 func (engine *Engine) Snapshot(ctx context.Context) (core.PlaybackSnapshot, error) {
+	if ctx == nil {
+		return core.PlaybackSnapshot{}, context.Canceled
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	for {
+		snapshot, err := engine.snapshot(ctx)
+		if !errors.Is(err, errSeekPending) {
+			return snapshot, err
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return core.PlaybackSnapshot{}, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func (engine *Engine) snapshot(ctx context.Context) (core.PlaybackSnapshot, error) {
 	var snapshot core.PlaybackSnapshot
 	err := dispatch(ctx, func() error {
+		if engine.isClosed() {
+			return ErrClosed
+		}
+		engine.pollEvents()
 		engine.mu.Lock()
 		if engine.closed {
 			engine.mu.Unlock()
 			return ErrClosed
+		}
+		if engine.seekPending {
+			engine.mu.Unlock()
+			return errSeekPending
 		}
 		snapshot = core.PlaybackSnapshot{Position: engine.position, Duration: engine.duration, Paused: engine.paused}
 		engine.mu.Unlock()
@@ -275,10 +309,7 @@ func snapshotDuration(value string, fallback time.Duration) (time.Duration, erro
 	return time.Duration(seconds * float64(time.Second)), nil
 }
 
-func (engine *Engine) tick() {
-	if engine.isClosed() {
-		return
-	}
+func (engine *Engine) pollEvents() {
 	for index := 0; index < 128; index++ {
 		event := engine.core.WaitEvent(0)
 		if event == nil || event.EventID == mpv.EventNone {
@@ -288,6 +319,13 @@ func (engine *Engine) tick() {
 		generation := engine.generation
 		pending := engine.pending
 		started := engine.pendingStarted
+		if event.EventID == mpv.EventSeek && engine.seekPending {
+			engine.seekStarted = true
+		}
+		if (event.EventID == mpv.EventPlaybackRestart && engine.seekStarted) || event.EventID == mpv.EventEnd {
+			engine.seekPending = false
+			engine.seekStarted = false
+		}
 		if event.EventID == mpv.EventStart && pending {
 			engine.pendingStarted = true
 		}
@@ -326,6 +364,13 @@ func (engine *Engine) tick() {
 			fltk.Awake(func() { notifyFailure(generation) })
 		}
 	}
+}
+
+func (engine *Engine) tick() {
+	if engine.isClosed() {
+		return
+	}
+	engine.pollEvents()
 	engine.mu.Lock()
 	pending := engine.pending
 	failed := engine.failed
@@ -387,23 +432,38 @@ func (engine *Engine) Control(ctx context.Context, command string, value int) er
 		case "pause":
 			return engine.core.SetProperty("pause", mpv.FormatFlag, engine.core.GetPropertyString("pause") != "yes")
 		case "seek":
-			return engine.core.Command([]string{"seek", strconv.Itoa(value), "relative"})
+			return engine.seek(value, "relative")
 		case "seek_absolute":
 			if value < 0 {
 				value = 0
 			}
-			return engine.core.Command([]string{"seek", strconv.Itoa(value), "absolute"})
+			return engine.seek(value, "absolute")
 		case "stop":
 			if err := engine.core.SetProperty("pause", mpv.FormatFlag, true); err != nil {
 				return err
 			}
-			return engine.core.Command([]string{"seek", "0", "absolute"})
+			return engine.seek(0, "absolute")
 		case "volume":
 			return engine.core.SetProperty("volume", mpv.FormatDouble, float64(value))
 		default:
 			return libmpv.ErrPlayerFailed
 		}
 	})
+}
+
+func (engine *Engine) seek(value int, mode string) error {
+	engine.pollEvents()
+	engine.mu.Lock()
+	engine.seekPending = true
+	engine.seekStarted = false
+	engine.mu.Unlock()
+	if err := engine.core.Command([]string{"seek", strconv.Itoa(value), mode}); err != nil {
+		engine.mu.Lock()
+		engine.seekPending = false
+		engine.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 func (engine *Engine) Close() error {
