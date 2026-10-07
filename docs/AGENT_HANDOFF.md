@@ -11,8 +11,8 @@ status: NEEDS_HUMAN
 repository:
   branch: main
   verified_code_head: 54c5cc7
-  observed_head: 9950c80
-  working_tree: "Six Loop29 fltkhome Go files plus status/handoff ready for authorized commit/push to main. Preserve prior AGENTS.md instruction change and unrelated untracked .codex, .ignore, .slim, docs/CODEX_*, experiments. Release/workflow changes remain outside scope."
+  observed_head: 5d81763
+  working_tree: "Loop29 production committed/pushed5d81763. Owner-approved executable artifact workflow step plus evidence docs pending commit. Preserve prior AGENTS.md change and unrelated untracked files. No release authorization."
 active_loop:
   number: 29
   state: "Search implemented; final pure-Go checks and independent source reviews passed. Native Windows CI and human acceptance pending; not Loop PASS."
@@ -29,7 +29,7 @@ evidence:
   - "TypeSafe jev-1.13.0 final scope1.98/conf.97, lifecycle2/conf1, interaction1.99/conf.98, each /2; raw probabilities/confidence retained .slim/deepwork/loop29-typesafe-final.json. Positive/negative/missing-evidence rubric controls checked."
   - "Native baseline failed before tests: runtime/cgo cannot parse _cgo_.o as ELF/Mach-O/PE/XCOFF. One focused retry confirmed with temp-object unlink Access denied. Stop equivalent retries; classify ENVIRONMENT_BLOCKED, not repository test failure."
 pending:
-  - "Owner explicitly approved continuing with commit/push on 2026-10-06. Submit reviewed Loop29 change to main and verify existing Windows CI on that exact commit. No workflow edit required."
+  - "Owner approved code commit/push; main5d81763 Windows CI37557745117 is in progress. Owner separately approved SHA-pinned success-only upload of runner-temp animeportable.exe with seven-day retention, including commit/push. Proposal independent security/verifier review PASS_REVIEW and TypeSafe integrity1.93/conf.89, disclosure1.99/conf.99."
   - "Capable Windows verifier must run native widget/callback tests, full Go regression/race/vet/vulnerability and production build. Prior Loop28 CI and pure tests cannot certify new native code."
   - "Then prepare validated executable and simple human Search procedure from status: Chinese IME, shortcuts, Tab/arrows/Enter, preview/Back/Escape, mouse/paging, empty/error/cache, 760x480 light/dark. Record actual observations."
   - "Update durable evidence/handoff after CI/human results. Do not start Loop30 until Loop29 required gates pass."
