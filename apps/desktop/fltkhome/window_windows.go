@@ -54,6 +54,9 @@ type view struct {
 	selected           int
 	rows               []homeRow
 	loadFailed         bool
+	homeLoading        bool
+	homeRefreshPending bool
+	homeLoadGeneration uint64
 	searchModel        searchModel
 	searchPage         *fltk.Group
 	searchInput        *fltk.Input
@@ -108,7 +111,7 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 		return window, ui.showSection, showMessage
 	}
 	ui.start()
-	return window, ui.showSection, showMessage
+	return window, ui.navigate, showMessage
 }
 
 func (ui *view) build() {
@@ -375,15 +378,37 @@ func (ui *view) showSection(index int) {
 	ui.window.Redraw()
 }
 
+func (ui *view) navigate(index int) {
+	ui.showSection(index)
+	if index == 0 {
+		if ui.homeLoading {
+			ui.homeRefreshPending = true
+			ui.hideHomeContinue()
+		} else {
+			ui.loadHome()
+		}
+	}
+}
+
 func (ui *view) loadHome() {
+	if ui.homeLoading || ui.ctx.Err() != nil || ui.closing {
+		return
+	}
 	if ui.service == nil {
+		ui.hideHomeContinue()
 		ui.message.SetLabel(homeErrorMessage(fmt.Errorf("service unavailable")))
 		ui.loadingText.SetLabel("無法載入作品資料。")
+		ui.loadingText.Show()
 		ui.retryButton.Show()
 		return
 	}
+	ui.homeLoading = true
+	ui.homeLoadGeneration++
+	generation := ui.homeLoadGeneration
+	ui.hideHomeContinue()
 	ui.retryButton.Hide()
 	ui.loadingText.SetLabel("正在載入繼續觀看…")
+	ui.loadingText.Show()
 	var library []backend.Anime
 	var history []backend.History
 	var following []backend.Following
@@ -396,14 +421,22 @@ func (ui *view) loadHome() {
 	go func() {
 		wait.Wait()
 		fltk.Awake(func() {
-			if ui.ctx.Err() != nil || ui.closing {
+			if generation != ui.homeLoadGeneration || ui.ctx.Err() != nil || ui.closing {
+				return
+			}
+			ui.homeLoading = false
+			if ui.homeRefreshPending {
+				ui.homeRefreshPending = false
+				ui.loadHome()
 				return
 			}
 			if libraryErr != nil || historyErr != nil || followingErr != nil {
 				ui.loadFailed = true
 				ui.message.SetLabel(homeErrorMessage(firstError(libraryErr, historyErr, followingErr)))
 				ui.loadingText.SetLabel("無法載入作品資料。")
+				ui.loadingText.Show()
 				ui.retryButton.Show()
+				ui.window.Redraw()
 				return
 			}
 			ui.loadFailed = false
@@ -413,6 +446,26 @@ func (ui *view) loadHome() {
 			ui.window.Redraw()
 		})
 	}()
+}
+
+func (ui *view) hideHomeContinue() {
+	for _, button := range ui.cardButtons {
+		button.Deactivate()
+		button.Hide()
+	}
+	for index := 0; index < len(ui.rows) && index < len(ui.cards); index++ {
+		ui.cards[index].Hide()
+	}
+	labels := min(len(ui.rows)*2, len(ui.contentLabels)-ui.staticLabels)
+	for _, label := range ui.contentLabels[ui.staticLabels : ui.staticLabels+labels] {
+		label.widget.Hide()
+	}
+}
+
+func (ui *view) playHomeRow(item backend.History, generation uint64) {
+	if ui.onPlay != nil && ui.ctx.Err() == nil && !ui.closing && !ui.homeLoading && !ui.loadFailed && ui.selected == 0 && generation == ui.homeLoadGeneration {
+		ui.onPlay(playRequest(item))
+	}
 }
 
 func (ui *view) populateHome(library []backend.Anime, following []backend.Following) {
@@ -440,6 +493,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	}
 	for index, row := range ui.rows {
 		y := 318 + index*104
+		rowGeneration := ui.homeLoadGeneration
 		card := fltk.NewBox(fltk.NO_BOX, 250, y, 711, 92)
 		card.SetDrawHandler(func(func()) { roundedRect(card.X(), card.Y(), card.W(), card.H(), 16, ui.colors().surface) })
 		ui.cards = append(ui.cards, card)
@@ -449,11 +503,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		button := fltk.NewButton(813, y+28, 126, 36, "繼續播放")
 		ui.styleButton(button, func() bool { return true })
 		item := row.History
-		playRow := func() {
-			if ui.onPlay != nil && ui.ctx.Err() == nil && !ui.closing {
-				ui.onPlay(playRequest(item))
-			}
-		}
+		playRow := func() { ui.playHomeRow(item, rowGeneration) }
 		ui.bindButton(button, playRow)
 		ui.bindContentKeys(button, playRow, func() *fltk.Button {
 			if index > 0 {
@@ -592,8 +642,14 @@ func (ui *view) scrollTo(y int) {
 }
 
 func (ui *view) focusTarget(button *fltk.Button) {
-	if button == nil {
-		return
+	if button == nil || !button.Visible() || !button.IsActive() {
+		if ui.retryButton != nil && ui.retryButton.Visible() && ui.retryButton.IsActive() {
+			button = ui.retryButton
+		} else if ui.browseButton != nil && ui.browseButton.Visible() && ui.browseButton.IsActive() {
+			button = ui.browseButton
+		} else {
+			button = ui.themeToggle
+		}
 	}
 	if button == ui.browseButton || button == ui.retryButton {
 		ui.scrollTo(0)
@@ -717,6 +773,9 @@ func (ui *view) bindThemeKeys(action func()) {
 func (ui *view) cancel() {
 	ui.closeOnce.Do(func() {
 		ui.closing = true
+		ui.homeLoadGeneration++
+		ui.homeLoading = false
+		ui.homeRefreshPending = false
 		ui.searchModel.close()
 		ui.mainGroup.Deactivate()
 		ui.themeToggle.Deactivate()

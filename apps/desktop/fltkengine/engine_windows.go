@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -231,15 +232,47 @@ func (engine *Engine) FailedGeneration(generation uint64) bool {
 }
 
 func (engine *Engine) Snapshot(ctx context.Context) (core.PlaybackSnapshot, error) {
-	engine.mu.Lock()
-	defer engine.mu.Unlock()
-	if err := ctx.Err(); err != nil {
+	var snapshot core.PlaybackSnapshot
+	err := dispatch(ctx, func() error {
+		engine.mu.Lock()
+		if engine.closed {
+			engine.mu.Unlock()
+			return ErrClosed
+		}
+		snapshot = core.PlaybackSnapshot{Position: engine.position, Duration: engine.duration, Paused: engine.paused}
+		engine.mu.Unlock()
+		var err error
+		snapshot.Position, err = snapshotDuration(engine.core.GetPropertyString("time-pos"), snapshot.Position)
+		if err != nil {
+			return err
+		}
+		snapshot.Duration, err = snapshotDuration(engine.core.GetPropertyString("duration"), snapshot.Duration)
+		if err != nil {
+			return err
+		}
+		if paused := engine.core.GetPropertyString("pause"); paused != "" {
+			snapshot.Paused = paused == "yes"
+		}
+		engine.mu.Lock()
+		engine.position, engine.duration, engine.paused = snapshot.Position, snapshot.Duration, snapshot.Paused
+		engine.mu.Unlock()
+		return nil
+	})
+	if err != nil {
 		return core.PlaybackSnapshot{}, err
 	}
-	if engine.closed {
-		return core.PlaybackSnapshot{}, ErrClosed
+	return snapshot, nil
+}
+
+func snapshotDuration(value string, fallback time.Duration) (time.Duration, error) {
+	if value == "" {
+		return fallback, nil
 	}
-	return core.PlaybackSnapshot{Position: engine.position, Duration: engine.duration, Paused: engine.paused}, nil
+	seconds, err := strconv.ParseFloat(value, 64)
+	if err != nil || math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds < 0 || seconds >= float64(1<<63)/float64(time.Second) {
+		return 0, libmpv.ErrPlayerFailed
+	}
+	return time.Duration(seconds * float64(time.Second)), nil
 }
 
 func (engine *Engine) tick() {

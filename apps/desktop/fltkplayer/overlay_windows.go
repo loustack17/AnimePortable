@@ -4,7 +4,7 @@ package fltkplayer
 
 /*
 #include <stdlib.h>
-#cgo LDFLAGS: -lopengl32
+#cgo LDFLAGS: -lopengl32 -lgdi32
 void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int focus, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int resolution, int loading, int progress_hover, int scrubbing, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels);
 */
 import "C"

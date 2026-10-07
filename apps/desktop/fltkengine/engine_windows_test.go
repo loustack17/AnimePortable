@@ -7,10 +7,33 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"animeportable/apps/desktop/fltkengine/internal/mpvwin"
 	"animeportable/internal/runtimepin"
 )
+
+func TestSnapshotDurationPreservesMissingAndRejectsInvalidProperties(t *testing.T) {
+	for _, test := range []struct {
+		value   string
+		want    time.Duration
+		invalid bool
+	}{
+		{"", time.Second, false},
+		{"42.75", 42750 * time.Millisecond, false},
+		{"0", 0, false},
+		{"-1", 0, true},
+		{"NaN", 0, true},
+		{"Inf", 0, true},
+		{"1e30", 0, true},
+		{"bad", 0, true},
+	} {
+		got, err := snapshotDuration(test.value, time.Second)
+		if (err != nil) != test.invalid || got != test.want {
+			t.Fatalf("property %q: duration=%v, error=%v", test.value, got, err)
+		}
+	}
+}
 
 func TestLibraryLocation(t *testing.T) {
 	executable := filepath.Join(t.TempDir(), "animeportable.exe")

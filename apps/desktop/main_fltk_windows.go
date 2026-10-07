@@ -80,7 +80,7 @@ func main() {
 		expectedPlaybackGeneration.Store(0)
 		awaitingPlayback.Store(false)
 		playQueue.Enqueue(func() {
-			_ = service.StopPlayback(context.Background())
+			stopErr := service.StopPlayback(context.Background())
 			engineMu.Lock()
 			active = nil
 			engineMu.Unlock()
@@ -94,6 +94,9 @@ func main() {
 				home.Show()
 				if navigateHome != nil {
 					navigateHome(destination)
+				}
+				if stopErr != nil {
+					fltk.MessageBox("播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
 				}
 			})
 		})
@@ -134,7 +137,7 @@ func main() {
 		}
 		player.SetState(state)
 		playQueue.Enqueue(func() {
-			_ = service.StopPlayback(context.Background())
+			stopErr := service.StopPlayback(context.Background())
 			if generation == viewGeneration.Load() {
 				awaitingPlayback.Store(false)
 			}
@@ -144,6 +147,9 @@ func main() {
 			fltk.Awake(func() {
 				if generation == viewGeneration.Load() {
 					player.SetRenderHook(nil)
+					if stopErr != nil {
+						fltk.MessageBox("播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
+					}
 				}
 			})
 		})

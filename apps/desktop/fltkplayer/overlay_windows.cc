@@ -5,16 +5,15 @@
 #include <cstring>
 #include <string>
 
-extern void gl_font(int fontid, int size);
-extern void gl_draw(const char* value, int x, int y);
+extern void ap_overlay_text(const char* value, int x, int y, int size, bool symbol);
 
 static void ink(float r, float g, float b, float a = 1.0f) { glColor4f(r, g, b, a); }
 static void box(float x, float y, float w, float h) { glRectf(x, y, x + w, y + h); }
 static void line(float x1, float y1, float x2, float y2) {
     glBegin(GL_LINES); glVertex2f(x1, y1); glVertex2f(x2, y2); glEnd();
 }
-static void label(const char* value, int x, int y, int size) { gl_font(1, size); gl_draw(value, x, y); }
-static void icon(const char* value, int x, int y, int size) { gl_font(4, size); gl_draw(value, x, y); }
+static void label(const char* value, int x, int y, int size) { ap_overlay_text(value, x, y, size, false); }
+static void icon(const char* value, int x, int y, int size) { ap_overlay_text(value, x, y, size, true); }
 #if defined(__cpp_char8_t)
 static void icon(const char8_t* value, int x, int y, int size) { icon(reinterpret_cast<const char*>(value), x, y, size); }
 #endif
