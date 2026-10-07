@@ -24,6 +24,7 @@ import (
 	"unsafe"
 
 	"animeportable/apps/desktop/fltkengine"
+	mpv "animeportable/apps/desktop/fltkengine/internal/mpvwin"
 	"animeportable/apps/desktop/fltkplayer"
 	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
@@ -87,7 +88,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 		})
 		cancelNew()
 		if err != nil {
-			t.Fatalf("pass%d: create engine: %v; %s", pass+1, err, diagnostic())
+			t.Fatalf("pass%d: create engine: %v; %s; %s", pass+1, err, diagnostic(), diagnoseEngineCreation(view.Video()))
 		}
 		t.Cleanup(func() {
 			if engine != nil {
@@ -175,6 +176,59 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 	if seekPosition < 1500*time.Millisecond || seekPosition > 2500*time.Millisecond {
 		t.Fatalf("immediate seek checkpoint position=%s, want near2s", seekPosition)
 	}
+}
+
+func diagnoseEngineCreation(video *fltk.GlWindow) string {
+	video.MakeCurrent()
+	version := callGL("glGetString", 0x1F02)
+	var versionText []byte
+	if version != 0 {
+		for index := uintptr(0); index < 256; index++ {
+			value := *(*byte)(unsafe.Pointer(version + index))
+			if value == 0 {
+				break
+			}
+			versionText = append(versionText, value)
+		}
+	}
+	prefix := fmt.Sprintf("GL version=%q context=%#x", versionText, currentGLContext())
+	library, err := mpv.Open(os.Getenv("ANIMEPORTABLE_LIBMPV_OVERRIDE"), pinnedDLLHash)
+	if err != nil {
+		return fmt.Sprintf("%s library load: %v", prefix, err)
+	}
+	defer library.Close()
+	player, err := library.New()
+	if err != nil {
+		return fmt.Sprintf("%s mpv create: %v", prefix, err)
+	}
+	defer player.TerminateDestroy()
+	for _, option := range [][2]string{{"config", "no"}, {"vo", "libmpv"}, {"hwdec", "auto"}, {"demuxer-max-bytes", "16MiB"}, {"cache-secs", "5"}} {
+		if err := player.SetOptionString(option[0], option[1]); err != nil {
+			return fmt.Sprintf("%s option %s: %v", prefix, option[0], err)
+		}
+	}
+	if err := player.Initialize(); err != nil {
+		return fmt.Sprintf("%s mpv initialize: %v", prefix, err)
+	}
+	render, err := player.NewRenderContextGL(func(name string) uintptr {
+		value, _ := syscall.BytePtrFromString(name)
+		address, _, _ := playerReentryGL.NewProc("wglGetProcAddress").Call(uintptr(unsafe.Pointer(value)))
+		if address > 3 && address != ^uintptr(0) {
+			return address
+		}
+		proc := playerReentryGL.NewProc(name)
+		if proc.Find() != nil {
+			return 0
+		}
+		return proc.Addr()
+	})
+	if err != nil {
+		return fmt.Sprintf("%s mpv render context: %v", prefix, err)
+	}
+	if err := render.Free(); err != nil {
+		return fmt.Sprintf("%s render cleanup: %v", prefix, err)
+	}
+	return prefix + " independent creation succeeded"
 }
 
 func preparePinnedRuntime(t *testing.T) {

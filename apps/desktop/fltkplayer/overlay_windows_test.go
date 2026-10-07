@@ -20,7 +20,7 @@ func TestOverlayRendersAcrossReentryWithInheritedViewportAndClip(t *testing.T) {
 	t.Cleanup(func() { fltk.Unlock(); runtime.UnlockOSThread() })
 	view := NewWindow(Callbacks{})
 	t.Cleanup(func() { view.Close(); view.window.Hide(); view.window.Destroy() })
-	view.SetEpisodes([]string{"第一集", "第二集"}, 0)
+	view.SetEpisodes([]string{"TEST EPISODE", "SECOND EPISODE"}, 0)
 	gl := syscall.NewLazyDLL("opengl32.dll")
 	call := func(name string, args ...uintptr) { t.Helper(); _, _, _ = gl.NewProc(name).Call(args...) }
 	for pass := 0; pass < 2; pass++ {
@@ -55,6 +55,18 @@ func TestOverlayRendersAcrossReentryWithInheritedViewportAndClip(t *testing.T) {
 		call("glReadPixels", 200, uintptr(view.video.H()-20), 1, 1, 0x1908, 0x1401, uintptr(unsafe.Pointer(&pixel[0])))
 		if pixel[2] < 10 {
 			t.Fatalf("pass%d: control bar did not render outside inherited 1px clip: %v", pass, pixel)
+		}
+		width, height := 90, 32
+		pixels := make([]byte, width*height*4)
+		call("glReadPixels", uintptr(view.video.W()-185), uintptr(view.video.H()-48), uintptr(width), uintptr(height), 0x1908, 0x1401, uintptr(unsafe.Pointer(&pixels[0])))
+		bright := 0
+		for index := 0; index < len(pixels); index += 4 {
+			if pixels[index] >= 180 && pixels[index+1] >= 180 && pixels[index+2] >= 180 {
+				bright++
+			}
+		}
+		if bright < 4 {
+			t.Fatalf("pass%d: episode text missing after context reentry: %d bright pixels", pass, bright)
 		}
 		call("glDisable", 0x0C11)
 		view.window.Hide()
