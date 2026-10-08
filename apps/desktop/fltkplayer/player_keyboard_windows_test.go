@@ -168,6 +168,7 @@ func TestHoverOnlyMenuDoesNotStealProgressOrVolumeArrows(t *testing.T) {
 		Volume:   func(percent int) { volumes = append(volumes, percent) },
 		Navigate: func(int) { navigations++ },
 	})
+	view.menuItems = []string{"Home", "Search"}
 	view.menuHover = true
 	for _, key := range []int{0xff51, 0xff53} {
 		keyDown(view, key, 0)

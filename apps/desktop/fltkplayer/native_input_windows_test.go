@@ -117,17 +117,21 @@ func TestShownPlayerWindowRoutesNativeSpaceAndEnterToFocusedPlayPause(t *testing
 	hwnd := view.window.RawHandle()
 	for _, key := range []uintptr{0x20, 0x0D} {
 		baseline := plays
-		sendNativeMessage(hwnd, 0x0100, key, 0)
-		sendNativeMessage(hwnd, 0x0100, key, 0)
+		scanCode, _, _ := nativeTestUser32.NewProc("MapVirtualKeyW").Call(key, 0)
+		down := uintptr(1) | scanCode<<16
+		repeat := down | 1<<30
+		up := repeat | 1<<31
+		sendNativeMessage(hwnd, 0x0100, key, down)
+		sendNativeMessage(hwnd, 0x0100, key, repeat)
 		if plays != baseline+1 {
 			t.Fatalf("held native key %#x invoked Play/Pause %d times, want %d", key, plays-baseline, 1)
 		}
-		sendNativeMessage(hwnd, 0x0101, key, 0)
-		sendNativeMessage(hwnd, 0x0100, key, 0)
+		sendNativeMessage(hwnd, 0x0101, key, up)
+		sendNativeMessage(hwnd, 0x0100, key, down)
 		if plays != baseline+2 {
 			t.Fatalf("released native key %#x invoked Play/Pause %d times, want 2", key, plays-baseline)
 		}
-		sendNativeMessage(hwnd, 0x0101, key, 0)
+		sendNativeMessage(hwnd, 0x0101, key, up)
 	}
 }
 
