@@ -475,6 +475,7 @@ func (ui *view) playHomeRow(item backend.History, generation uint64) {
 }
 
 func (ui *view) populateHome(library []backend.Anime, following []backend.Following) {
+	ui.scroll.ScrollTo(ui.scroll.XPosition()+ui.browseButton.X()-278, ui.scroll.YPosition()+ui.browseButton.Y()-205)
 	for _, button := range ui.cardButtons {
 		ui.scroll.Remove(button)
 		button.Destroy()
