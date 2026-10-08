@@ -128,6 +128,16 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 			contexts = append(contexts, drawContext)
 			t.Fatalf("pass%d: mediaReady=%t, readyDraws=%d; timed out waiting for actual media rendering; %s", pass+1, mediaReady, readyDraws, diagnostic())
 		}
+		focusedDrawCount := drawCount
+		focusedReadyDraws := readyDraws
+		view.SetFocus(1)
+		if !pumpUntil(t, 5*time.Second, func() bool {
+			return drawCount > focusedDrawCount && readyDraws > focusedReadyDraws
+		}) {
+			drawCounts = append(drawCounts, drawCount)
+			contexts = append(contexts, drawContext)
+			t.Fatalf("pass%d: timed out waiting for a complete post-focus media draw; %s", pass+1, diagnostic())
+		}
 		drawCounts = append(drawCounts, drawCount)
 		contexts = append(contexts, drawContext)
 		view.Video().MakeCurrent()

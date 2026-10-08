@@ -34,6 +34,7 @@ type trackingRawSession struct {
 	loads       []PlayRequest
 	loadErr     error
 	closeCount  int
+	closeNotify chan struct{}
 	closeErr    error
 	closed      bool
 	onSnapshot  func(PlaybackSnapshot)
@@ -41,7 +42,10 @@ type trackingRawSession struct {
 }
 
 func newTrackingRawSession() *trackingRawSession {
-	return &trackingRawSession{events: make(chan PlaybackEvent, 256)}
+	return &trackingRawSession{
+		events:      make(chan PlaybackEvent, 256),
+		closeNotify: make(chan struct{}),
+	}
 }
 
 func (session *trackingRawSession) Load(ctx context.Context, request PlayRequest) error {
@@ -89,6 +93,7 @@ func (session *trackingRawSession) Close() error {
 	if !session.closed {
 		session.closed = true
 		session.closeCount++
+		close(session.closeNotify)
 	}
 	return session.closeErr
 }
@@ -685,6 +690,13 @@ func TestTrackedCloseWaitsForOwnedRunAfterCheckpointTimeout(t *testing.T) {
 	}
 	closeDone := make(chan error, 1)
 	go func() { closeDone <- started.Close() }()
+	select {
+	case err := <-closeDone:
+		t.Fatalf("close returned before owned run stopped: %v", err)
+	case <-raw.closeNotify:
+	case <-time.After(time.Second):
+		t.Fatal("raw close did not start")
+	}
 	select {
 	case err := <-closeDone:
 		t.Fatalf("close returned before owned run stopped: %v", err)
