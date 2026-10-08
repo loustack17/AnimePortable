@@ -6,37 +6,40 @@
 schema_version: 1
 protocol_version: v2.4.1
 instruction_version: v2.4.1
-updated_at_utc: "2026-10-07T05:00:00Z"
-status: VERIFYING
+updated_at_utc: "2026-10-08T01:58:03Z"
+status: NEEDS_HUMAN
 repository:
   branch: main
-  observed_head: b4afd2ffaa3d6eb07969898821a48caca105b9a2
-  verified_code_head: 2013fce6af2d593d2e0c60b6b4eec259b51768b8
-  working_tree: "Production fixes committed63e4f1f; narrow exact-seek/native-fixture follow-up and checkpoint docs pending. Preserve unrelated AGENTS.md/.codex and user DB. No release authorization."
+  observed_head: 57782c8c1459181bd27df312e6001235f81e2142
+  working_tree: "Preserve unrelated AGENTS.md and .codex/. No pending implementation changes; old executable ZIP retained."
 active_loop:
   number: 29
-  state: "Owner requested direct fix after budget stop, authorizing scoped resumption for controls and stale Continue. Apply bounded CPU glyph bitmap renderer and reviewed Home/liveSnapshot fixes; no further verifier environment work. CI37572285446 passes both actual glyph rounds and overlay reentry; immediate seek Snapshot1s versus2s and hidden Home fixture fail. Follow-up waits bounded3s outside UI for mpv seek/restart events before Snapshot and shows fixture; CI37573212734 samefailure diagnosed: pinnedruntime GIF duration1s clampsseek2; H264 fixture3s/seek2 independently demonstrated as diagnosis, notPASS. Test fixture corrected and Home readiness predicate latched; no furtherproduction/environment change. Rerun and owner acceptance pending."
-  goal: "Every playback has visible controls; closing saves latest position; Home refreshes and Continue/restart use it. Retain accepted Search/theme/startup/keyboard/spacing."
-  criteria: "Phase23/FUNC-003; Search UX-002/003/005..010; QUAL-001..012; native lifecycle, isolated verification, actual owner tests. Full detail and Following later."
-decisions:
-  - "Owner approved BWS key/necessary TypeSafe snippets, main commit/push, exe upload. Subsequently approved exact CI Mesa proposal+commit/push. Those scope approvals do not raise the explicit additional3 correction ceiling."
-  - "Native local cgo breaker closed: _cgo_.o cannot parse ELF/Mach-O/PE/XCOFF +unlinkAccessDenied. No retries/hostPASS/FullAccess/host installs."
-  - "Pinned libmpv reused; Mesa is isolated CI verifier only. Native softwareGL cannot certify ownerGPU. No required assertions/gates weakened."
-evidence:
-  - "Actual owner overlay gate FAILED despite2013fce CI37564544887 SUCCESS. Current artifacts/loop29/AnimePortable.exe is old2013fce SHA7bfb7e9e894ce3a415e7da079be31395a46140281c5142274dc123e5f7262b17; do not call it a new fix."
-  - "d0a5ea6/CI37568395204 +diagnostic86f4a67/CI37568870448: firstEngine.New fails beforemedia. CurrentGL1.1; pinnedDLL/core/options/init succeed, mpv rendercontext fails. Existing episode-text overlay hide/show passes legacyGL, notactualengine. Logs recovery-baseline-ci.log/recovery-diagnostic-ci.log."
-  - "Repair1 f687e11 CI37569796206/job112625602152: signedMesa installed but setup-msys2 pacman-Scc removesarchivecache; hashcheckmissingfile beforetest. Repair2 56c875f CI37570486512/job112627751588: exactarchive/version/installedDLL hashes pass; launcher temp-root guard rejectsall beforetests."
-  - "Repair3 81810be CI37570998564/job112629360207 FAILED actual glyph oracle: explicitGOTMPDIR underRUNNER_TEMP; strictguard retained. Local pure launcher probe reproducesdistinctTMP/TEMP rejection andpasses with explicitapprovedroot (noGLclaim). Read-only independentreview PASS_REVIEW allworkflowrepairs."
-  - "CI uses official signed MSYS2 Mesa26.2.4-1, archiveSHA10b2497b17d7554ea9d758b7db2ebf648f6ece10d19e239f63ecce978a331980; HTTPS curl>=8.4 streaming20MiB/60s; hash beforefixed2DLLextract, installedDLLhashmatch; temp.test.exe-onlyDLLs/llvmpipe; samefull/race tests; productPE Mesa/Gallium/LLVM rejection."
-  - "Pure actualSQLite finalcheckpoint42.75s/reopen/Continue PASS after10s seed. Source-confirmed staleHome callbacks and cachednativeSnapshot; preparedreload/coalescing/stalecard/error/liveproperty fixes sourceQUAL PASS_REVIEW, nativepending."
-  - "FLTK1.4.5 globalglyphtexturecache lackscontextidentity, Hide destroyscontext: candidate only. Generic View.Hide proposal incomplete: failed SwitchEpisode can leave liveengine; teardown must be proven beforeHide/reset. Native reviewer caught this. Renderer replaced with bounded CPU-only GDI mono bitmaps; first CI passes glyph tests."
-  - "TypeSafe raw files retained under artifacts/evidence/loop29: mesa-verifier-v2, mesa-cache-repair-v2, mesa-tmp-repair judgments. Last temp-boundary confidence.25 remains uncertain; source/launcher evidence and human scope approvals are distinct. No semantic/human/native PASS."
-pending:
-  - "CI37570998564 reached actual media: first actual-player glyphs absent, overlay-only second context glyphs absent; GLerrors0. New CPU-only bitmap patch retains original glyph oracle; exact final native CI pending."
-  - "Complete one final independent review and batched TypeSafe review, then authorized commit/push and exact WindowsCI. Local C++11 syntax and pure core/libmpv/backend/architecture tests pass; no native local retry."
-  - "Afterauthorizedfinalfix: exactnative/fullCI+freshquality/platformsecurity+TypeSafe; downloadexactCIexe; preserve artifacts/loop29/data hashes; versionedZIP viaexistingtool withpinnedDLL/notices; update docs/LOOP29_HUMAN_CHECK.md exactobject. Owner repeats A-close-B controls, advance/seek-close-Continue/restartposition."
+  state: "Deterministic gates PASS at 57782c8/CI37714489095; exact executable and ZIP delivered. Await owner playback acceptance; not Loop29 PASS."
+  goal: "Visible controls on every playback; close saves current timestamp; Home/Continue/restart use latest history."
+  criteria: "Phase23/FUNC-003; Search UX-002/003/005..010; QUAL-001..012; native Windows/libmpv and owner acceptance."
+completed:
+  - "63e4f1f: bounded CPU bitmap glyph cache replaces FLTK GL textures; live Snapshot; Home reload/coalescing/generation guards and error prompt."
+  - "b4afd2f: bounded3s/context Snapshot wait outside UI for seek/restart; nil-context regression."
+  - "c0f2713: supported3s H264 fixture replaces GIF interpreted as1s; Home test notification latched. Original assertions retained."
+  - "f0f6d9d: test-only fixes for player auto-hide before glyph sample and core raw-close fixed30ms scheduling assumption; original glyph and blocked-close assertions retained."
+  - "57782c8: removed unsafe GL-version pointer dereference from optional test diagnostic; independent review no MUST_FIX; glyph oracle untouched."
+verification:
+  - "Prior failures/diagnosis: docs/LOOP29_TAKEOVER.md and docs/IMPLEMENTATION_STATUS.md. Independent production/platform/test reviews found no MUST_FIX."
+  - "Local CGO0 core focused count20 and core/libmpv/backend PASS; gofmt/diff check PASS. Native cgo CI-only."
+  - "CI37714489095/job113107735442 exact57782c8: format, module, full native, repeat20, Anime1, race, vet, govulncheck, dependency closure, build, startup, clean worktree and artifact upload ALL PASS. Artifact11523097731."
+  - "Exact exe matches artifact; data hash unchanged. ZIP SHA62d2250698118aee76f5b25fb4017e2e7058449f7a5d2476e3c488eeccdcc7e7, five entries and no data."
+object:
+  path: artifacts/loop29/AnimePortable.exe
+  state: "Exact CI57782c8 artifact delivered; owner hardware check pending."
+  sha256: e7949ea7b7bfac3737300cff32b28eb34b78d1cfa6d52421f241847926112534
+boundaries:
+  - "Owner requires direct project bug/performance work; no unrelated configuration/environment expansion. Preserve data and user instruction changes."
+  - "Prior BWS/TypeSafe snippets/main commit-push/exact exe-upload and Mesa approvals persist; no release. Original5+approved3 exhausted, then explicit scoped direct-fix resumption and owner Loop29 takeover request."
+  - "Native local cgo breaker closed: cannot parse _cgo_.o +unlinkAccessDenied. No equivalent retries, hostPASS, FullAccess, host installs. Mesa CI-test-only."
+next:
+  - "Owner checks A-close-B controls and advance/seek-close-Continue/restart position using docs/LOOP29_HUMAN_CHECK.md before Loop29PASS."
+  - "Record owner results; if PASS, close Loop29 after final status/handoff evidence. If FAIL, classify exact reproduction without broadening scope."
 references:
-  - "docs/IMPLEMENTATION_STATUS.md; docs/05_LOOP_ENGINEERING_RUNBOOK.md11/12.1; docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md; docs/10_DURABLE_AGENT_STATE.md"
-  - "artifacts/evidence/loop29/mesa-ci-*.log; mesa-verifier-proposal.md; glyph-lifecycle-candidate.md; recovery-proposal.md"
-  - "apps/desktop/fltkengine/player_reentry_windows_test.go; backend/resume_checkpoint_test.go; untracked fltkhome/home_refresh_windows_test.go"
+  - "docs/LOOP29_TAKEOVER.md (historical); docs/IMPLEMENTATION_STATUS.md; docs/LOOP29_HUMAN_CHECK.md."
+  - "docs/05_LOOP_ENGINEERING_RUNBOOK.md11/12.1; docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md; docs/10_DURABLE_AGENT_STATE.md."
 ```
