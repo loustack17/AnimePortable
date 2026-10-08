@@ -6,15 +6,15 @@
 schema_version: 1
 protocol_version: v2.4.1
 instruction_version: v2.4.1
-updated_at_utc: "2026-10-08T04:08:03Z"
-status: NEEDS_HUMAN
+updated_at_utc: "2026-10-08T04:18:41Z"
+status: PASS
 repository:
   branch: main
-  observed_head: 2d4bf4892b7f2fe52887db8a8ba82a49d53bf20c
+  observed_head: f17f076
   working_tree: "Preserve unrelated AGENTS.md and .codex/. No pending production change; old executable ZIP retained."
 active_loop:
   number: 29
-  state: "Owner accepted episode-caption features, then reported Home-return spacing. Fix2d4bf48 passed all CI37725390481 gates; exact exe/ZIP delivered. Spacing owner check pending; not Loop29 PASS."
+  state: "Owner accepted final spacing build and explicitly approved Loop29 PASS on2026-10-08. Exact2d4bf48 CI/exe/ZIP plus independent review and owner gates complete."
   goal: "Visible controls on every playback; close saves current timestamp; Home/Continue/restart use latest history and identify the episode."
   criteria: "Phase23/FUNC-003; Search UX-002/003/005..010; QUAL-001..012; native Windows/libmpv and owner acceptance."
 completed:
@@ -37,8 +37,8 @@ boundaries:
   - "Prior BWS/TypeSafe snippets/main commit-push/exact exe-upload and Mesa approvals persist; no release. Original5+approved3 exhausted, then explicit scoped direct-fix resumption and owner Loop29 takeover request."
   - "Native local cgo breaker closed: cannot parse _cgo_.o +unlinkAccessDenied. No equivalent retries, hostPASS, FullAccess, host installs. Mesa CI-test-only."
 next:
-  - "Owner checks scrolling/playback/return Home keeps12px heading gap using docs/LOOP29_HUMAN_CHECK.md."
-  - "If owner PASS, update final status/handoff and close Loop29. If FAIL, classify the precise reproduction within this slice."
+  - "Owner suggests YouTube/Netflix-style player keyboard behavior; inspect current mapping and prepare bounded proposal before implementation."
+  - "Planned Loop30 remains Phase24 detail/episode UI; do not silently change numbering or begin it without its contract/bootstrap."
 references:
   - "docs/LOOP29_TAKEOVER.md (historical); docs/IMPLEMENTATION_STATUS.md; docs/LOOP29_HUMAN_CHECK.md."
   - "docs/05_LOOP_ENGINEERING_RUNBOOK.md11/12.1; docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md; docs/10_DURABLE_AGENT_STATE.md."

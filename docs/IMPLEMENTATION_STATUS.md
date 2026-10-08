@@ -4,6 +4,12 @@
 
 ## Current loop
 
+### 2026-10-08 Loop 29 — PASS
+
+The owner reported "perfect!!! loop 29 can be passed" after testing the final `2d4bf48` executable. This closes the Home-return spacing gate and completes Loop 29. Earlier owner acceptance covers Search/keyboard flow, controls across playback reentry, current resume position, and episode captions. Final production-state Windows CI37725390481/job113142273267 passed all required deterministic gates; independent quality and handoff reviews returned `PASS_REVIEW`. Executable/package hashes and preserved-data evidence are recorded below. The historical race-mode seek failure remains documented rather than reclassified as PASS; the unchanged assertion passed the final required CI run.
+
+The owner suggested making player keyboard behavior closer to YouTube/Netflix. This is a follow-up proposal, not a reopened Loop 29 gate or a change to the phase numbering. The planned Loop 30 remains Phase 24 anime detail and episode UI. Inspect current player shortcuts and define the proposed focus/modifier/seek behavior before implementation.
+
 ### 2026-10-08 Loop 29 Home return spacing delivered — NEEDS_HUMAN
 
 The owner accepted the episode-caption feature, then reported a large gap between the Continue heading and cards after returning Home. FLTK scrolling translates existing child coordinates; `populateHome` kept the translated static heading but recreated cards at fixed coordinates. Commit `2d4bf4892b7f2fe52887db8a8ba82a49d53bf20c` restores the static content coordinates from the retained browse button's actual displacement before rebuilding rows. Acceptance requires the first card to remain 12 pixels below the heading after scrolling and returning from playback, with aligned text/actions, intact episode captions, and unchanged saved playback data.
