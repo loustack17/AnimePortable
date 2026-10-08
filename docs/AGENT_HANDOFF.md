@@ -10,7 +10,7 @@ updated_at_utc: "2026-10-08T04:43:00Z"
 status: VERIFYING
 repository:
   branch: main
-  observed_head: 924b1e8
+  observed_head: 0ed404b
   working_tree: "Preserve unrelated AGENTS.md and .codex/. Contextual-focus correction integrated; independent final review no MUST_FIX, gofmt/diff PASS."
 active_loop:
   number: 29
@@ -38,7 +38,7 @@ boundaries:
   - "Native local cgo breaker closed: cannot parse _cgo_.o +unlinkAccessDenied. No equivalent retries, hostPASS, FullAccess, host installs. Mesa CI-test-only."
 next:
   - "Latest owner correction supersedes924b1e8 global arrows: default progress focus; Tab selects target; contextual arrows; preserve focus across auto-hide/pointer/seek/state. See active contract. Seek path has no loadfile; reload-like visual unverified."
-  - "Commit/push corrected contract; exact Windows CI/exe/ZIP preserving data, owner gate. Clarified-contract corrections0/5. Superseded CI37728311086 failed erroneous Tab expectation; corrected sequence now reviewed. Do not deliver old artifact."
+  - "CI37730409008: native/keyboard/repeat PASS, race seek checkpoint2.6s FAIL. Test-only correction pauses verified fixture before same seek/unchanged bounds; independent review then final CI/exe/ZIP/data/owner gate. Corrections1/5. Details in status."
   - "Planned Loop30 remains Phase24 detail/episode UI; do not silently change numbering or begin it without its contract/bootstrap."
 references:
   - "docs/PLAYER_KEYBOARD_FOLLOWUP.md (active contract); apps/desktop/fltkplayer/player_windows.go and scoped keyboard tests."

@@ -157,6 +157,22 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 			t.Fatalf("pass%d: render hook had no current GL context; %s", pass+1, diagnostic())
 		}
 		if pass == 0 {
+			pausedSnapshot, err := pumpFLTKResult(t, 10*time.Second, func() (core.PlaybackSnapshot, error) { return engine.Snapshot(context.Background()) })
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !pausedSnapshot.Paused {
+				if err := pumpFLTKError(t, 10*time.Second, func() error { return engine.Control(context.Background(), "pause", 0) }); err != nil {
+					t.Fatal(err)
+				}
+				pausedSnapshot, err = pumpFLTKResult(t, 10*time.Second, func() (core.PlaybackSnapshot, error) { return engine.Snapshot(context.Background()) })
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if !pausedSnapshot.Paused {
+				t.Fatal("seek checkpoint fixture did not pause playback")
+			}
 			if err := pumpFLTKError(t, 10*time.Second, func() error { return engine.Control(context.Background(), "seek_absolute", 2) }); err != nil {
 				t.Fatal(err)
 			}
