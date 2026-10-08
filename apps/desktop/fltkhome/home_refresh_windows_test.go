@@ -177,16 +177,19 @@ func TestNativeHomeEpisodeLookupIsImmediate(t *testing.T) {
 	defer unblock()
 	ui := newHomeRefreshFixture(t, service)
 	ui.loadHome()
+	lookupEntered := false
 	pumpSearchEvents(t, func() bool {
 		if len(ui.rows) == 0 || len(ui.homeCaptionLabels) == 0 {
 			return false
 		}
-		select {
-		case <-entered:
-			return true
-		default:
-			return false
+		if !lookupEntered {
+			select {
+			case <-entered:
+				lookupEntered = true
+			default:
+			}
 		}
+		return lookupEntered
 	})
 	if got := ui.homeCaptionLabels[0].Label(); got != "集數：未知 · 上次播放位置 2:05" {
 		t.Fatalf("immediate Continue caption = %q", got)
@@ -231,16 +234,19 @@ func TestNativeHomeEpisodeLookupUpdatesWhileSearchIsVisible(t *testing.T) {
 	defer unblock()
 	ui := newHomeRefreshFixture(t, service)
 	ui.loadHome()
+	lookupEntered := false
 	pumpSearchEvents(t, func() bool {
 		if len(ui.homeCaptionLabels) == 0 {
 			return false
 		}
-		select {
-		case <-entered:
-			return true
-		default:
-			return false
+		if !lookupEntered {
+			select {
+			case <-entered:
+				lookupEntered = true
+			default:
+			}
 		}
+		return lookupEntered
 	})
 	ui.showSection(4)
 	unblock()
