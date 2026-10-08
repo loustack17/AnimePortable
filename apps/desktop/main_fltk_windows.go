@@ -90,7 +90,7 @@ func main() {
 				}
 				player.SetRenderHook(nil)
 				player.Window().Hide()
-				player.SetState(fltkplayer.State{Volume: 100, Focus: 1})
+				player.SetState(fltkplayer.State{Volume: 100, Focus: fltkplayer.FocusProgress})
 				home.Show()
 				if navigateHome != nil {
 					navigateHome(destination)
@@ -295,9 +295,9 @@ func main() {
 		setSelection(request)
 		episodes = nil
 		player.SetEpisodes(nil, 0)
-		player.SetState(fltkplayer.State{Volume: 100, Focus: 1, Loading: true})
+		player.SetState(fltkplayer.State{Volume: 100, Focus: fltkplayer.FocusProgress, Loading: true})
 		player.Window().Show()
-		player.SetFocus(1)
+		player.SetFocus(fltkplayer.FocusProgress)
 		home.Hide()
 		playQueue.Enqueue(func() {
 			defer cancelOperation()

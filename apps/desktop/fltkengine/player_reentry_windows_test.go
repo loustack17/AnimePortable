@@ -59,7 +59,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 
 	view := fltkplayer.NewWindow(fltkplayer.Callbacks{})
 	view.SetEpisodes([]string{"TEST EPISODE"}, 0)
-	view.SetState(fltkplayer.State{Playing: true, Volume: 100, Episode: 0, Focus: -1})
+	view.SetState(fltkplayer.State{Playing: true, Volume: 100, Episode: 0, Focus: fltkplayer.FocusProgress})
 	view.Window().Show()
 	t.Cleanup(func() {
 		view.SetRenderHook(nil)
@@ -112,8 +112,8 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 				readyDraws++
 			}
 		})
-		view.SetState(fltkplayer.State{Playing: true, Volume: 100, Episode: 0, Focus: 1})
-		view.SetFocus(1)
+		view.SetState(fltkplayer.State{Playing: true, Volume: 100, Episode: 0, Focus: fltkplayer.FocusProgress})
+		view.SetFocus(fltkplayer.FocusProgress)
 		loadContext, cancelLoad := context.WithTimeout(context.Background(), 8*time.Second)
 		if err := pumpFLTKError(t, 10*time.Second, func() error {
 			return engine.Load(loadContext, media[pass], 0, uint64(pass+1))
@@ -130,7 +130,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 		}
 		focusedDrawCount := drawCount
 		focusedReadyDraws := readyDraws
-		view.SetFocus(1)
+		view.SetFocus(fltkplayer.FocusProgress)
 		if !pumpUntil(t, 5*time.Second, func() bool {
 			return drawCount > focusedDrawCount && readyDraws > focusedReadyDraws
 		}) {
@@ -165,6 +165,9 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 				t.Fatal(err)
 			}
 			seekPosition = snapshot.Position
+			if view.State().Focus != fltkplayer.FocusProgress {
+				t.Fatalf("seek changed progress focus to %d", view.State().Focus)
+			}
 		}
 
 		if err := pumpFLTKError(t, 15*time.Second, engine.Close); err != nil {
@@ -178,6 +181,9 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 		view.Video().Redraw()
 		if !pumpUntil(t, 5*time.Second, func() bool { return view.Window().IsShown() }) {
 			t.Fatalf("pass%d: player parent did not show again; %s", pass+1, diagnostic())
+		}
+		if view.State().Focus != fltkplayer.FocusProgress {
+			t.Fatalf("pass%d: player reentry changed progress focus to %d", pass+1, view.State().Focus)
 		}
 	}
 	if seekPosition < 1500*time.Millisecond || seekPosition > 2500*time.Millisecond {

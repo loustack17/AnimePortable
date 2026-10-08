@@ -4,14 +4,14 @@
 
 The owner accepted Loop 29 and selected five-second arrow seeks plus ten-second J/L seeks on 2026-10-08. This bounded Windows player correction does not change the planned Loop 30 / Phase 24 detail and episode UI scope.
 
-The owner clarified that focus-independent seeking is the primary defect: arrow keys sometimes select controls instead of seeking, and after a reload-like interruption they default to the Play button and stop seeking. Outside open lists, seek keys must invoke only the existing seek callback and remain usable after auto-hide, focus resets and playback state updates. They must not activate Play, select an episode, navigate or move focus between controls. A reload-like observation is not yet classified as an actual reload; trace the production seek path before changing playback lifecycle code.
+The owner's latest clarification supersedes the initial global-arrow proposal: default focus is the progress bar; Tab/Shift+Tab selects the control target; arrows operate that target without switching focus. New playback and reentry start on progress. Auto-hide, pointer movement, seek completion and ordinary playback state updates retain the selected target. A missing focus falls back to progress. A reload-like observation is not classified as an actual reload; production seek traces to MPV relative seek without `loadfile`.
 
 | Input | Required behavior |
 | --- | --- |
 | Space / K | Play/pause outside an open menu or episode list; Space retains selection inside an open list. K remains a direct playback shortcut. |
-| Left / Right | Relative seek by -5 / +5 seconds outside open lists, regardless of focused playback control. |
+| Left / Right | Progress focus: relative seek -5 / +5 seconds. Volume focus: volume -5 / +5 percent. Other buttons: consume without moving focus or invoking an action. |
 | J / L | Relative seek by -10 / +10 seconds. |
-| Up / Down | Volume +5 / -5 percent outside open lists, clamped to 0..100. |
+| Up / Down | Volume focus: volume +5 / -5 percent, clamped to 0..100. Open lists: navigate the active list. Other controls: consume without moving focus or invoking an action. |
 | M | Mute by setting volume to zero; unmute restores the last nonzero volume, defaulting to 100. |
 | F | Toggle fullscreen. |
 | Escape | Dismiss an open episode list/menu first; otherwise exit fullscreen. |
@@ -23,8 +23,17 @@ Mouse controls, playback action serialization, saved progress, episode selection
 
 ## Verification and boundaries
 
-Deterministic native tests cover shortcut dispatch across focused controls, exact seek increments, volume bounds/mute restoration, list priority, modifier rejection, repeat/release/focus-loss behavior, and existing Tab traversal. Independent code-quality and input/lifecycle review is required. Final-state Windows CI verifies the production build, native regression, race detector and existing player checks. The known local native cgo failure remains closed; no host run counts as PASS.
+Deterministic native tests cover default progress focus, contextual arrows after Tab, retained focus after auto-hide/pointer movement/state updates, exact seek increments, volume bounds/mute restoration, list priority, modifier rejection, repeat/release/focus-loss behavior, and existing Tab traversal. Independent code-quality and input/lifecycle review is required. Final-state Windows CI verifies the production build, native regression, race detector and existing player checks. The known local native cgo failure remains closed; no host run counts as PASS.
 
 Deliver the exact green-CI executable and a versioned portable ZIP before requesting owner acceptance. The user checks visible play/pause, seek, volume/mute, fullscreen/Escape, Tab/Enter and episode-list arrows on actual playback. The follow-up remains `NEEDS_HUMAN` until that check passes. Loop 29 remains `PASS`.
 
-Limit correction to five causal iterations; stop repeated identical failure without progress. Preserve unrelated `AGENTS.md`, `.codex/` and portable data. Prior repository-scoped main commit/push and exact executable/package delivery authorizations apply; no release or workflow mutation is authorized.
+## Owner playback check
+
+1. Start an episode. Without clicking a control, Left/Right should seek on the progress bar. Wait for controls to hide, move the mouse, and seek again; the target should remain progress. Repeated seeks must not switch to Play or another button.
+2. Press Tab once to select Play/Pause. Arrows should keep that selection and leave playback/progress unchanged; Enter should play/pause. Shift+Tab returns to progress and Left/Right seeks again.
+3. Use Tab to select volume. Arrows should change volume without seeking. Hide/reveal the controls and confirm volume stays selected. M restores the prior volume after mute; Space/K play/pause; J/L seek; F/Escape enter/leave fullscreen.
+4. Open the episode list. Up/Down selects rows and Enter/Space plays the selected episode. The new episode starts with progress focus. Return Home and Continue; progress focus should again be the default, with saved history intact.
+
+If a reload-like interruption remains, report whether the episode/time resets or the picture only pauses briefly, and whether the selected target changes. The visual cause remains unverified until actual playback confirms it.
+
+The owner corrected the contract after commit `924b1e8`; that global-arrow build is superseded and must not be delivered. The clarified contract starts a new five-iteration causal correction budget; stop repeated identical failure without progress. Preserve unrelated `AGENTS.md`, `.codex/` and portable data. Prior repository-scoped main commit/push and exact executable/package delivery authorizations apply; no release or workflow mutation is authorized.

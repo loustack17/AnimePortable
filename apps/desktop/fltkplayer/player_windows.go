@@ -24,6 +24,8 @@ const (
 	focusFullscreen
 )
 
+const FocusProgress = focusProgress
+
 type Callbacks struct {
 	PlayPause     func()
 	Seek          func(seconds int)
@@ -82,7 +84,7 @@ type View struct {
 func NewWindow(callbacks Callbacks) *View {
 	view := &View{
 		callbacks:  callbacks,
-		state:      State{Volume: 100, Focus: -1},
+		state:      State{Volume: 100, Focus: focusProgress},
 		lastVolume: 100,
 		visible:    true,
 		lastMove:   time.Now(),
@@ -180,6 +182,9 @@ func (view *View) SetState(state State) {
 	if state.Volume > 0 {
 		view.lastVolume = state.Volume
 	}
+	if state.Focus < 0 || state.Focus > focusFullscreen {
+		state.Focus = focusProgress
+	}
 	if state.Episode < 0 || state.Episode >= len(view.episodes) {
 		state.Episode = 0
 	}
@@ -191,8 +196,8 @@ func (view *View) SetState(state State) {
 }
 
 func (view *View) SetFocus(index int) {
-	if index < -1 || index > focusFullscreen {
-		index = -1
+	if index < 0 || index > focusFullscreen {
+		index = focusProgress
 	}
 	view.state.Focus = index
 	if index >= 0 {
@@ -217,23 +222,29 @@ func (view *View) tick() {
 		return
 	}
 	if view.state.Playing && !view.state.Paused && !view.state.Loading && !view.hoverControls && !view.scrubbing && !view.menuVisible() && !view.episodesOpen && time.Since(view.lastMove) > 2500*time.Millisecond {
-		view.visible = false
-		view.state.Focus = -1
-		view.menuHover = false
-		view.volumeOpen = false
-		view.Redraw()
+		view.hideControls()
 	}
 	fltk.RepeatTimeout(0.5, view.tick)
 }
 
 func (view *View) showAt(x, y int) {
+	view.showAtSize(x, y, view.video.W(), view.video.H())
+}
+
+func (view *View) showAtSize(x, y, width, height int) {
 	view.lastMove = time.Now()
 	view.visible = true
-	view.state.Focus = -1
-	view.hoverControls = y < 62 || y >= view.video.H()-84
-	view.menuHover = x < 18 || view.menuHover && x < 180 && y < view.video.H()-54
-	view.volumeOpen = x >= 232 && x <= 395 && y >= view.video.H()-60 || view.state.Focus == focusVolume
-	view.progressHover = y >= view.video.H()-82 && y < view.video.H()-54 && x >= 24 && x <= view.video.W()-24
+	view.hoverControls = y < 62 || y >= height-84
+	view.menuHover = x < 18 || view.menuHover && x < 180 && y < height-54
+	view.volumeOpen = x >= 232 && x <= 395 && y >= height-60 || view.state.Focus == focusVolume
+	view.progressHover = y >= height-82 && y < height-54 && x >= 24 && x <= width-24
+	view.Redraw()
+}
+
+func (view *View) hideControls() {
+	view.visible = false
+	view.menuHover = false
+	view.volumeOpen = false
 	view.Redraw()
 }
 
@@ -374,7 +385,6 @@ func (view *View) handle(event fltk.Event) bool {
 		if view.scrubbing {
 			view.setScrubAt(x)
 			view.scrubbing = false
-			view.state.Focus = -1
 			if view.callbacks.SeekTo != nil {
 				view.callbacks.SeekTo(int(math.Round(view.scrubPosition)))
 			}
@@ -415,6 +425,7 @@ func (view *View) handle(event fltk.Event) bool {
 		}
 		if view.actionAt(x, y) == focusProgress {
 			view.scrubbing = true
+			view.state.Focus = focusProgress
 			view.setScrubAt(x)
 			return true
 		}
@@ -484,6 +495,9 @@ func normalizeLetterKey(key int) int {
 
 func (view *View) handleKey(key, modifiers int) bool {
 	key = normalizeLetterKey(key)
+	if view.state.Focus < 0 || view.state.Focus > focusFullscreen {
+		view.state.Focus = focusProgress
+	}
 	if key == 9 || key == 0xff09 {
 		view.moveTabFocus(modifiers&fltk.SHIFT != 0)
 		return true
@@ -516,6 +530,17 @@ func (view *View) handleKey(key, modifiers int) bool {
 	if key == 'f' && !view.menuVisible() && !view.episodesOpen {
 		if view.callbacks.Fullscreen != nil {
 			view.callbacks.Fullscreen()
+		}
+		view.showControls()
+		return true
+	}
+	if (key == 'j' || key == 'l') && !view.menuVisible() && !view.episodesOpen {
+		step := -10
+		if key == 'l' {
+			step = 10
+		}
+		if view.callbacks.Seek != nil {
+			view.callbacks.Seek(step)
 		}
 		view.showControls()
 		return true
@@ -555,75 +580,58 @@ func (view *View) handleKey(key, modifiers int) bool {
 			view.Redraw()
 			return true
 		}
-		if view.state.Focus < 0 {
-			view.state.Focus = focusPlayPause
-		}
 		if view.state.Focus == focusProgress {
 			return true
 		}
 		view.activate(view.state.Focus)
 		return true
 	}
-	if view.episodesOpen && (key == 0xff52 || key == 0xff54) {
-		if key == 0xff52 && view.episodeCursor > 0 {
-			view.episodeCursor--
+	if key == 0xff51 || key == 0xff53 || key == 0xff52 || key == 0xff54 {
+		if view.episodesOpen {
+			if key == 0xff52 && view.episodeCursor > 0 {
+				view.episodeCursor--
+			}
+			if key == 0xff54 && view.episodeCursor < len(view.episodes)-1 {
+				view.episodeCursor++
+			}
+			if view.episodeCursor < view.episodeStart {
+				view.episodeStart = view.episodeCursor
+			}
+			if view.episodeCursor >= view.episodeStart+8 {
+				view.episodeStart = view.episodeCursor - 7
+			}
+			view.Redraw()
+			return true
 		}
-		if key == 0xff54 && view.episodeCursor < len(view.episodes)-1 {
-			view.episodeCursor++
+		if view.menuVisible() {
+			if key == 0xff52 && view.menuCursor > 0 {
+				view.menuCursor--
+			}
+			if key == 0xff54 && view.menuCursor < len(view.menuItems)-1 {
+				view.menuCursor++
+			}
+			view.Redraw()
+			return true
 		}
-		if view.episodeCursor < view.episodeStart {
-			view.episodeStart = view.episodeCursor
+		switch view.state.Focus {
+		case focusProgress:
+			if key == 0xff51 || key == 0xff53 {
+				step := -5
+				if key == 0xff53 {
+					step = 5
+				}
+				if view.callbacks.Seek != nil {
+					view.callbacks.Seek(step)
+				}
+				view.showControls()
+			}
+		case focusVolume:
+			step := 5
+			if key == 0xff51 || key == 0xff54 {
+				step = -5
+			}
+			view.setVolume(view.state.Volume + step)
 		}
-		if view.episodeCursor >= view.episodeStart+8 {
-			view.episodeStart = view.episodeCursor - 7
-		}
-		view.Redraw()
-		return true
-	}
-	if view.menuVisible() && (key == 0xff52 || key == 0xff54) {
-		if key == 0xff52 && view.menuCursor > 0 {
-			view.menuCursor--
-		}
-		if key == 0xff54 && view.menuCursor < len(view.menuItems)-1 {
-			view.menuCursor++
-		}
-		view.Redraw()
-		return true
-	}
-	if view.episodesOpen {
-		return true
-	}
-	if view.menuVisible() {
-		return true
-	}
-	if key == 0xff51 || key == 0xff53 {
-		step := -5
-		if key == 0xff53 {
-			step = 5
-		}
-		if view.callbacks.Seek != nil {
-			view.callbacks.Seek(step)
-		}
-		view.showControls()
-		return true
-	}
-	if key == 0xff52 || key == 0xff54 {
-		step := 5
-		if key == 0xff54 {
-			step = -5
-		}
-		view.setVolume(view.state.Volume + step)
-		return true
-	}
-	if key == 'j' || key == 'l' {
-		step := -10
-		if key == 'l' {
-			step = 10
-		}
-		if view.callbacks.Seek != nil {
-			view.callbacks.Seek(step)
-		}
-		view.showControls()
 		return true
 	}
 	return false

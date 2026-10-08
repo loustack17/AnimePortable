@@ -4,6 +4,7 @@ package fltkplayer
 
 import (
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 func keyboardTestView(callbacks Callbacks) *View {
 	return &View{
 		callbacks:  callbacks,
-		state:      State{Volume: 100, Focus: -1},
+		state:      State{Volume: 100, Focus: focusProgress},
 		lastVolume: 100,
 	}
 }
@@ -26,34 +27,136 @@ func keyUp(view *View, key int) bool {
 	return view.handleKeyEvent(fltk.KEYUP, key, 0)
 }
 
-func TestPlayerShortcutsSeekRegardlessOfControlFocus(t *testing.T) {
-	var seeks []int
-	plays, selections, navigations := 0, 0, 0
+func TestPlayerContextualArrowsAfterTab(t *testing.T) {
+	var seeks, volumes []int
+	plays, stops, selections, navigations := 0, 0, 0, 0
 	view := keyboardTestView(Callbacks{
 		Seek:          func(seconds int) { seeks = append(seeks, seconds) },
+		Volume:        func(percent int) { volumes = append(volumes, percent) },
 		PlayPause:     func() { plays++ },
+		Stop:          func() { stops++ },
 		SelectEpisode: func(int) { selections++ },
 		Navigate:      func(int) { navigations++ },
 	})
-	focuses := []int{-1, focusMenu, focusEpisodes, focusProgress, focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusFullscreen}
-	want := make([]int, 0, len(focuses)*4)
-	for _, focus := range focuses {
-		view.SetState(State{Playing: true, Focus: focus, Volume: 100})
-		view.SetState(State{Playing: true, Loading: true, Focus: focus, Volume: 100})
-		view.SetState(State{Playing: true, Loading: false, Focus: focus, Volume: 100})
-		want = append(want, -5, 5, -10, 10)
-		for _, key := range []int{0xff51, 0xff53, 'j', 'L'} {
-			if !keyDown(view, key, 0) {
-				t.Fatalf("focus %d did not handle key %d", focus, key)
-			}
-			keyUp(view, key)
+	if view.State().Focus != FocusProgress {
+		t.Fatalf("default focus = %d, want progress %d", view.State().Focus, FocusProgress)
+	}
+	keyDown(view, 0xff51, 0)
+	keyUp(view, 0xff51)
+	keyDown(view, 0xff53, 0)
+	keyUp(view, 0xff53)
+	if !reflect.DeepEqual(seeks, []int{-5, 5}) {
+		t.Fatalf("progress arrows seeks = %v, want [-5 5]", seeks)
+	}
+	if view.State().Focus != focusProgress {
+		t.Fatalf("progress arrows changed focus to %d", view.State().Focus)
+	}
+	pressTab := func(modifiers int) {
+		t.Helper()
+		keyDown(view, 9, modifiers)
+		keyUp(view, 9)
+	}
+	pressTab(0)
+	if view.State().Focus != focusPlayPause {
+		t.Fatalf("first Tab focus = %d, want play/pause", view.State().Focus)
+	}
+	for _, key := range []int{0xff51, 0xff53, 0xff52, 0xff54} {
+		if !keyDown(view, key, 0) {
+			t.Fatalf("button focus did not consume arrow %d", key)
 		}
+		keyUp(view, key)
 	}
-	if !reflect.DeepEqual(seeks, want) {
-		t.Fatalf("seek callbacks = %v, want %v", seeks, want)
+	if view.State().Focus != focusPlayPause || !reflect.DeepEqual(seeks, []int{-5, 5}) || plays != 0 {
+		t.Fatalf("play focus arrows changed target/actions: focus=%d seeks=%v plays=%d", view.State().Focus, seeks, plays)
 	}
-	if plays != 0 || selections != 0 || navigations != 0 {
-		t.Fatalf("directional seeks invoked other actions: play=%d select=%d navigate=%d", plays, selections, navigations)
+	pressTab(0)
+	pressTab(0)
+	pressTab(0)
+	pressTab(0)
+	if view.State().Focus != focusVolume {
+		t.Fatalf("Tab traversal focus = %d, want volume", view.State().Focus)
+	}
+	for _, key := range []int{0xff51, 0xff53, 0xff52, 0xff54} {
+		keyDown(view, key, 0)
+		keyUp(view, key)
+	}
+	if !reflect.DeepEqual(volumes, []int{95, 100, 100, 95}) || !reflect.DeepEqual(seeks, []int{-5, 5}) || view.State().Focus != focusVolume {
+		t.Fatalf("volume focus arrows: volumes=%v seeks=%v focus=%d", volumes, seeks, view.State().Focus)
+	}
+	pressTab(fltk.SHIFT)
+	if view.State().Focus != focusStop {
+		t.Fatalf("Shift+Tab from volume focus = %d, want stop", view.State().Focus)
+	}
+	for _, key := range []int{0xff51, 0xff53, 0xff52, 0xff54} {
+		keyDown(view, key, 0)
+		keyUp(view, key)
+	}
+	if view.State().Focus != focusStop || stops != 0 || selections != 0 || navigations != 0 {
+		t.Fatalf("stop focus arrows changed target/actions: focus=%d stop=%d select=%d navigate=%d", view.State().Focus, stops, selections, navigations)
+	}
+	keyDown(view, 'j', 0)
+	keyUp(view, 'j')
+	keyDown(view, 'L', 0)
+	keyUp(view, 'L')
+	if !reflect.DeepEqual(seeks, []int{-5, 5, -10, 10}) || view.State().Focus != focusStop {
+		t.Fatalf("J/L independent seek = %v, focus=%d", seeks, view.State().Focus)
+	}
+}
+
+func TestNewWindowDefaultsToProgressFocus(t *testing.T) {
+	runtime.LockOSThread()
+	if !fltk.Lock() {
+		runtime.UnlockOSThread()
+		t.Fatal("FLTK threading initialization failed")
+	}
+	t.Cleanup(func() { fltk.Unlock(); runtime.UnlockOSThread() })
+	view := NewWindow(Callbacks{})
+	t.Cleanup(func() { view.Close(); view.window.Hide(); view.window.Destroy() })
+	if view.State().Focus != FocusProgress {
+		t.Fatalf("NewWindow focus = %d, want progress %d", view.State().Focus, FocusProgress)
+	}
+}
+
+func TestMissingFocusFallsBackToProgressForArrows(t *testing.T) {
+	var seeks []int
+	view := keyboardTestView(Callbacks{Seek: func(seconds int) { seeks = append(seeks, seconds) }})
+	view.SetState(State{Volume: 80, Focus: -1})
+	if view.State().Focus != focusProgress {
+		t.Fatalf("missing focus = %d, want progress", view.State().Focus)
+	}
+	keyDown(view, 0xff51, 0)
+	if !reflect.DeepEqual(seeks, []int{-5}) || view.State().Focus != focusProgress {
+		t.Fatalf("fallback arrow seeks=%v focus=%d", seeks, view.State().Focus)
+	}
+}
+
+func TestPlayerFocusSurvivesAutoHidePointerAndStateUpdates(t *testing.T) {
+	view := keyboardTestView(Callbacks{})
+	view.SetFocus(focusVolume)
+	state := view.State()
+	state.Playing = true
+	state.Volume = 80
+	view.SetState(state)
+	view.hideControls()
+	if view.visible || view.State().Focus != focusVolume {
+		t.Fatalf("auto-hide state visible=%v focus=%d", view.visible, view.State().Focus)
+	}
+	view.showAtSize(500, 200, 1000, 618)
+	if !view.visible || view.State().Focus != focusVolume || !view.volumeOpen {
+		t.Fatalf("pointer movement state visible=%v focus=%d volumeOpen=%v", view.visible, view.State().Focus, view.volumeOpen)
+	}
+	state = view.State()
+	state.Loading = true
+	view.SetState(state)
+	state = view.State()
+	state.Loading = false
+	view.SetState(state)
+	if view.State().Focus != focusVolume {
+		t.Fatalf("state updates changed selected focus to %d", view.State().Focus)
+	}
+	view.SetFocus(-1)
+	if view.State().Focus != focusProgress {
+		t.Fatalf("missing focus fallback = %d, want progress", view.State().Focus)
 	}
 }
 
@@ -69,6 +172,7 @@ func TestPlayerHeldSeekAndVolumeKeysRepeat(t *testing.T) {
 	if !reflect.DeepEqual(seeks, []int{5, 5}) {
 		t.Fatalf("held Right seeks = %v, want [5 5]", seeks)
 	}
+	view.SetFocus(focusVolume)
 	keyDown(view, 0xff54, 0)
 	keyDown(view, 0xff54, 0)
 	keyUp(view, 0xff54)
@@ -80,6 +184,7 @@ func TestPlayerHeldSeekAndVolumeKeysRepeat(t *testing.T) {
 func TestPlayerVolumeBoundsAndMuteRestoresLastNonzero(t *testing.T) {
 	var volumes []int
 	view := keyboardTestView(Callbacks{Volume: func(percent int) { volumes = append(volumes, percent) }})
+	view.SetFocus(focusVolume)
 	view.state.Volume = 98
 	wantVolumes := []int{100, 100}
 	keyDown(view, 0xff52, 0)
@@ -293,6 +398,9 @@ func TestPlayerMediaShortcutsRevealHiddenControls(t *testing.T) {
 				Volume:     func(int) { calls++ },
 				Fullscreen: func() { calls++ },
 			})
+			if test.key == 0xff52 {
+				view.SetFocus(focusVolume)
+			}
 			view.visible = false
 			view.lastMove = time.Unix(1, 0)
 			if !keyDown(view, test.key, 0) {
@@ -331,12 +439,16 @@ func TestPlayerEscapeDismissesListAndMenuBeforeFullscreen(t *testing.T) {
 func TestPlayerTabTraversalAndEnterRemainAvailable(t *testing.T) {
 	plays := 0
 	view := keyboardTestView(Callbacks{PlayPause: func() { plays++ }})
-	if !keyDown(view, 9, 0) || view.state.Focus != focusMenu {
-		t.Fatalf("Tab focus = %d, want menu", view.state.Focus)
+	if !keyDown(view, 9, fltk.SHIFT) || view.state.Focus != focusEpisodes {
+		t.Fatalf("initial Shift+Tab focus = %d, want episodes", view.state.Focus)
 	}
 	keyUp(view, 9)
-	if !keyDown(view, 9, fltk.SHIFT) || view.state.Focus != focusFullscreen {
-		t.Fatalf("Shift+Tab focus = %d, want fullscreen", view.state.Focus)
+	if !keyDown(view, 9, 0) || view.state.Focus != focusProgress {
+		t.Fatalf("Tab from episodes focus = %d, want progress", view.state.Focus)
+	}
+	keyUp(view, 9)
+	if !keyDown(view, 9, 0) || view.state.Focus != focusPlayPause {
+		t.Fatalf("Tab from progress focus = %d, want play/pause", view.state.Focus)
 	}
 	keyUp(view, 9)
 	view.state.Focus = focusPlayPause
