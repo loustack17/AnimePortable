@@ -9,7 +9,7 @@ instruction_version: v2.4.1
 status: IN_PROGRESS
 repository:
   branch: main
-  observed_head: 0b203af
+  observed_head: 64beef0
   working_tree: "Scoped input/startup fixes and evidence docs; preserve unrelated AGENTS.md and .codex/."
 active_loop:
   number: 29
@@ -23,12 +23,12 @@ completed:
   - "Worker added scoped WM_APPCOMMAND subclass parent/video HWND lifecycle; Space/Enter SHORTCUT dispatch; fixed pinned/hover menu priority and cached native procedures."
 verification:
   - "gofmt/diff PASS; CGO0 go test ./apps/desktop PASS with sandbox temp GOCACHE. Default host cache denied, classified environment."
-  - "Independent platform/input review completed; final root startup/concurrency review pending with native_input_review."
+  - "Independent platform/input review completed; final startup/concurrency review no MUST_FIX. CI37734182237 stalled: t.Run cross-thread SendMessage test deadlock; corrected same cases onto HWND owner thread, review pending."
   - "Native local cgo breaker closed: parse_cgo_.o +unlinkAccessDenied. No equivalent retry or hostPASS. Windows CI authoritative."
 budget:
-  corrections_used: 3
+  corrections_used: 4
   corrections_max: 5
-  remaining: 2
+  remaining: 1
 boundaries:
   - "Prior scoped main commit/push/exact exe/package authorization applies; no workflow/release mutation. Planned Loop30 remains Phase24."
   - "Do not claim network failure fixed without owner playback. No speculative decoder/cache/retry changes."

@@ -83,11 +83,9 @@ func TestShownPlayerWindowHandlesMediaAppCommandsOnce(t *testing.T) {
 		{"mute", windowHandle, appCommandMute, 0xA},
 		{"unmute", videoHandle, appCommandMute, 0x4},
 	} {
-		t.Run(test.name, func(t *testing.T) {
-			if got := sendNativeMessage(test.hwnd, wmAppCommand, test.hwnd, nativeAppCommandLParam(test.command, test.device)); got != 1 {
-				t.Fatalf("WM_APPCOMMAND result = %d, want handled TRUE", got)
-			}
-		})
+		if got := sendNativeMessage(test.hwnd, wmAppCommand, test.hwnd, nativeAppCommandLParam(test.command, test.device)); got != 1 {
+			t.Fatalf("%s: WM_APPCOMMAND result = %d, want handled TRUE", test.name, got)
+		}
 	}
 	if plays != 1 || view.state.Volume != 100 || len(volumes) != 4 || volumes[0] != 95 || volumes[1] != 100 || volumes[2] != 0 || volumes[3] != 100 {
 		t.Fatalf("media callback results plays=%d volume=%d callbacks=%v", plays, view.state.Volume, volumes)
