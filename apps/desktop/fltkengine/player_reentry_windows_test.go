@@ -188,17 +188,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 func diagnoseEngineCreation(video *fltk.GlWindow) string {
 	video.MakeCurrent()
 	version := callGL("glGetString", 0x1F02)
-	var versionText []byte
-	if version != 0 {
-		for index := uintptr(0); index < 256; index++ {
-			value := *(*byte)(unsafe.Pointer(version + index))
-			if value == 0 {
-				break
-			}
-			versionText = append(versionText, value)
-		}
-	}
-	prefix := fmt.Sprintf("GL version=%q context=%#x", versionText, currentGLContext())
+	prefix := fmt.Sprintf("GL version available=%t context=%#x", version != 0, currentGLContext())
 	library, err := mpv.Open(os.Getenv("ANIMEPORTABLE_LIBMPV_OVERRIDE"), pinnedDLLHash)
 	if err != nil {
 		return fmt.Sprintf("%s library load: %v", prefix, err)
