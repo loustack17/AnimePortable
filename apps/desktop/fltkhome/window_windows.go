@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"animeportable/apps/desktop/backend"
 	fltk "github.com/pwiecz/go-fltk"
@@ -23,6 +24,8 @@ type Service interface {
 	History(context.Context) ([]backend.History, error)
 	Following(context.Context) ([]backend.Following, error)
 }
+
+const homeEpisodeLookupTimeout = 3 * time.Second
 
 type view struct {
 	window        *fltk.Window
@@ -53,6 +56,8 @@ type view struct {
 	navigation         []*fltk.Button
 	selected           int
 	rows               []homeRow
+	homeCaptionLabels  []*fltk.Box
+	homeLookupCancel   context.CancelFunc
 	loadFailed         bool
 	homeLoading        bool
 	homeRefreshPending bool
@@ -394,6 +399,7 @@ func (ui *view) loadHome() {
 	if ui.homeLoading || ui.ctx.Err() != nil || ui.closing {
 		return
 	}
+	ui.cancelHomeEpisodeLookup()
 	if ui.service == nil {
 		ui.hideHomeContinue()
 		ui.message.SetLabel(homeErrorMessage(fmt.Errorf("service unavailable")))
@@ -483,6 +489,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	}
 	ui.cardButtons = nil
 	ui.cards = nil
+	ui.homeCaptionLabels = nil
 	ui.contentLabels = ui.contentLabels[:ui.staticLabels]
 	ui.loadingText.Show()
 	ui.scroll.Begin()
@@ -498,8 +505,8 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		card.SetDrawHandler(func(func()) { roundedRect(card.X(), card.Y(), card.W(), card.H(), 16, ui.colors().surface) })
 		ui.cards = append(ui.cards, card)
 		ui.contentText(273, y+14, 450, 25, row.Title, 15, false, true)
-		caption := fmt.Sprintf("上次播放位置 %s", formatPosition(row.History.Position))
-		ui.contentText(273, y+48, 450, 20, caption, 12, true, false)
+		caption := ui.contentText(273, y+48, 450, 20, homeCaption(row), 12, true, false)
+		ui.homeCaptionLabels = append(ui.homeCaptionLabels, caption)
 		button := fltk.NewButton(813, y+28, 126, 36, "繼續播放")
 		ui.styleButton(button, func() bool { return true })
 		item := row.History
@@ -543,6 +550,49 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	ui.contentText(270, updateY+117, 620, 22, "目前沒有本機播出資料。", 12, true, false)
 	ui.scroll.End()
 	ui.applyTheme()
+	ui.resolveHomeEpisodes(ui.homeLoadGeneration)
+}
+
+func (ui *view) cancelHomeEpisodeLookup() {
+	if ui.homeLookupCancel != nil {
+		ui.homeLookupCancel()
+		ui.homeLookupCancel = nil
+	}
+}
+
+func (ui *view) resolveHomeEpisodes(generation uint64) {
+	ui.cancelHomeEpisodeLookup()
+	if ui.service == nil || len(ui.rows) == 0 {
+		return
+	}
+	lookupContext, cancel := context.WithCancel(ui.ctx)
+	ui.homeLookupCancel = cancel
+	rows := append([]homeRow(nil), ui.rows[:min(len(ui.rows), rowLimit)]...)
+	for index, row := range rows {
+		go func(index int, row homeRow) {
+			ctx, cancel := context.WithTimeout(lookupContext, homeEpisodeLookupTimeout)
+			defer cancel()
+			episodes, err := ui.service.Episodes(ctx, row.History.AnimeID)
+			number := episodeNumber(episodes, row.History.EpisodeID, err)
+			fltk.Awake(func() {
+				ui.applyHomeEpisodeResult(generation, index, row, number)
+			})
+		}(index, row)
+	}
+}
+
+func (ui *view) applyHomeEpisodeResult(generation uint64, index int, row homeRow, number string) {
+	if generation != ui.homeLoadGeneration || ui.ctx.Err() != nil || ui.closing || ui.homeLoading || index < 0 || index >= len(ui.rows) || index >= len(ui.homeCaptionLabels) {
+		return
+	}
+	current := ui.rows[index]
+	if current.History.AnimeID != row.History.AnimeID || current.History.EpisodeID != row.History.EpisodeID {
+		return
+	}
+	current.EpisodeNumber = number
+	ui.rows[index] = current
+	ui.homeCaptionLabels[index].SetLabel(homeCaption(current))
+	ui.window.Redraw()
 }
 
 func (ui *view) bindButton(button *fltk.Button, action func()) {
@@ -773,6 +823,7 @@ func (ui *view) bindThemeKeys(action func()) {
 func (ui *view) cancel() {
 	ui.closeOnce.Do(func() {
 		ui.closing = true
+		ui.cancelHomeEpisodeLookup()
 		ui.homeLoadGeneration++
 		ui.homeLoading = false
 		ui.homeRefreshPending = false

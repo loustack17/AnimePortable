@@ -88,3 +88,31 @@ func TestHomeSelectionPreservesOpaqueIDsAndResumePosition(t *testing.T) {
 		t.Fatalf("negative resume position = %d, want clamped to zero", got)
 	}
 }
+
+func TestEpisodeNumberUsesExactIDAndSafeFallback(t *testing.T) {
+	episodes := []backend.Episode{
+		{ID: "provider:episode-4", Number: "04"},
+		{ID: "provider:episode-40", Number: "40"},
+	}
+	if got := episodeNumber(episodes, "provider:episode-4", nil); got != "04" {
+		t.Fatalf("exact episode number = %q, want 04", got)
+	}
+	for _, test := range []struct {
+		name string
+		id   string
+		err  error
+	}{
+		{name: "no match", id: "provider:missing"},
+		{name: "failed lookup", id: "provider:episode-4", err: errors.New("source unavailable")},
+		{name: "empty id"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := episodeNumber(episodes, test.id, test.err); got != "未知" {
+				t.Fatalf("episode fallback = %q, want 未知", got)
+			}
+		})
+	}
+	if got := homeCaption(homeRow{History: backend.History{Position: 754000}}); got != "集數：未知 · 上次播放位置 12:34" {
+		t.Fatalf("fallback caption = %q", got)
+	}
+}

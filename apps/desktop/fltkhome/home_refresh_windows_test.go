@@ -16,13 +16,18 @@ import (
 )
 
 type homeRefreshTestService struct {
-	mu          sync.Mutex
-	history     []backend.History
-	historyErr  error
-	historyCall int
-	blockCall   int
-	entered     chan struct{}
-	release     chan struct{}
+	mu               sync.Mutex
+	history          []backend.History
+	historyErr       error
+	historyCall      int
+	episodes         map[string][]backend.Episode
+	episodeCall      int
+	blockEpisodeCall int
+	episodeEntered   chan struct{}
+	episodeRelease   chan struct{}
+	blockCall        int
+	entered          chan struct{}
+	release          chan struct{}
 }
 
 func (service *homeRefreshTestService) Start(context.Context) error { return nil }
@@ -41,8 +46,19 @@ func (service *homeRefreshTestService) Search(context.Context, string) ([]backen
 func (service *homeRefreshTestService) Detail(context.Context, string) (backend.Detail, error) {
 	return backend.Detail{}, nil
 }
-func (service *homeRefreshTestService) Episodes(context.Context, string) ([]backend.Episode, error) {
-	return nil, nil
+func (service *homeRefreshTestService) Episodes(_ context.Context, animeID string) ([]backend.Episode, error) {
+	service.mu.Lock()
+	service.episodeCall++
+	call := service.episodeCall
+	episodes := append([]backend.Episode(nil), service.episodes[animeID]...)
+	block := call == service.blockEpisodeCall
+	entered, release := service.episodeEntered, service.episodeRelease
+	service.mu.Unlock()
+	if block {
+		entered <- struct{}{}
+		<-release
+	}
+	return episodes, nil
 }
 func (service *homeRefreshTestService) History(context.Context) ([]backend.History, error) {
 	service.mu.Lock()
@@ -70,6 +86,15 @@ func (service *homeRefreshTestService) setHistory(history []backend.History, err
 	service.historyErr = err
 }
 
+func (service *homeRefreshTestService) setEpisodes(animeID string, episodes []backend.Episode) {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if service.episodes == nil {
+		service.episodes = make(map[string][]backend.Episode)
+	}
+	service.episodes[animeID] = append([]backend.Episode(nil), episodes...)
+}
+
 func (service *homeRefreshTestService) historyCalls() int {
 	service.mu.Lock()
 	defer service.mu.Unlock()
@@ -83,6 +108,15 @@ func (service *homeRefreshTestService) blockHistoryCall(call int) (<-chan struct
 	service.entered = make(chan struct{}, 1)
 	service.release = make(chan struct{})
 	return service.entered, service.release
+}
+
+func (service *homeRefreshTestService) blockEpisodeLookup(call int) (<-chan struct{}, chan<- struct{}) {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	service.blockEpisodeCall = call
+	service.episodeEntered = make(chan struct{}, 1)
+	service.episodeRelease = make(chan struct{})
+	return service.episodeEntered, service.episodeRelease
 }
 
 func newHomeRefreshFixture(t *testing.T, service Service) *view {
@@ -125,12 +159,98 @@ func TestNativeReturningHomeRefreshesContinuePosition(t *testing.T) {
 	service.setHistory([]backend.History{{AnimeID: "anime", EpisodeID: "episode", Position: 42750, LastPlayed: "2026-10-06T10:05:00Z"}}, nil)
 	ui.navigate(0)
 	pumpSearchEvents(t, func() bool { return !ui.homeLoading && len(ui.rows) == 1 && ui.rows[0].History.Position == 42750 })
-	if got := ui.contentLabels[ui.staticLabels+1].widget.Label(); got != "上次播放位置 0:42" {
+	if got := ui.contentLabels[ui.staticLabels+1].widget.Label(); got != "集數：未知 · 上次播放位置 0:42" {
 		t.Fatalf("refreshed Continue label = %q", got)
 	}
 	ui.playHomeRow(ui.rows[0].History, ui.homeLoadGeneration)
 	if continued.AnimeID != "anime" || continued.EpisodeID != "episode" || continued.StartAt != 42750 {
 		t.Fatalf("refreshed Continue request = %#v, want current position 42750", continued)
+	}
+}
+
+func TestNativeHomeEpisodeLookupIsImmediate(t *testing.T) {
+	service := &homeRefreshTestService{history: []backend.History{{AnimeID: "anime", EpisodeID: "opaque-4", Position: 125000, LastPlayed: "2026-10-06T10:05:00Z"}}}
+	service.setEpisodes("anime", []backend.Episode{{ID: "opaque-4", Number: "04"}})
+	entered, release := service.blockEpisodeLookup(1)
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
+	ui := newHomeRefreshFixture(t, service)
+	ui.loadHome()
+	pumpSearchEvents(t, func() bool {
+		if len(ui.rows) == 0 || len(ui.homeCaptionLabels) == 0 {
+			return false
+		}
+		select {
+		case <-entered:
+			return true
+		default:
+			return false
+		}
+	})
+	if got := ui.homeCaptionLabels[0].Label(); got != "集數：未知 · 上次播放位置 2:05" {
+		t.Fatalf("immediate Continue caption = %q", got)
+	}
+	unblock()
+	pumpSearchEvents(t, func() bool { return ui.homeCaptionLabels[0].Label() == "集數：04 · 上次播放位置 2:05" })
+}
+
+func TestNativeHomeEpisodeLookupRejectsStaleResult(t *testing.T) {
+	service := &homeRefreshTestService{history: []backend.History{{AnimeID: "anime", EpisodeID: "opaque-4", Position: 125000, LastPlayed: "2026-10-06T10:05:00Z"}}}
+	service.setEpisodes("anime", []backend.Episode{{ID: "opaque-4", Number: "04"}})
+	ui := newHomeRefreshFixture(t, service)
+	ui.loadHome()
+	pumpSearchEvents(t, func() bool {
+		return len(ui.rows) == 1 && ui.homeCaptionLabels[0].Label() == "集數：04 · 上次播放位置 2:05"
+	})
+	staleGeneration := ui.homeLoadGeneration
+	staleRow := ui.rows[0]
+
+	service.setHistory([]backend.History{{AnimeID: "anime", EpisodeID: "opaque-4", Position: 42750, LastPlayed: "2026-10-06T10:06:00Z"}}, nil)
+	service.setEpisodes("anime", []backend.Episode{{ID: "opaque-4", Number: "05"}})
+	ui.navigate(0)
+	pumpSearchEvents(t, func() bool {
+		return !ui.homeLoading && len(ui.rows) == 1 && ui.homeCaptionLabels[0].Label() == "集數：05 · 上次播放位置 0:42"
+	})
+	ui.applyHomeEpisodeResult(staleGeneration, 0, staleRow, "04")
+	if got := ui.homeCaptionLabels[0].Label(); got != "集數：05 · 上次播放位置 0:42" {
+		t.Fatalf("stale lookup changed refreshed Continue caption to %q", got)
+	}
+	request := playRequest(ui.rows[0].History)
+	if request.AnimeID != "anime" || request.EpisodeID != "opaque-4" || request.StartAt != 42750 {
+		t.Fatalf("refreshed Continue request = %#v, want exact episode and resume position", request)
+	}
+}
+
+func TestNativeHomeEpisodeLookupUpdatesWhileSearchIsVisible(t *testing.T) {
+	service := &homeRefreshTestService{history: []backend.History{{AnimeID: "anime", EpisodeID: "opaque-4", Position: 125000, LastPlayed: "2026-10-06T10:05:00Z"}}}
+	service.setEpisodes("anime", []backend.Episode{{ID: "opaque-4", Number: "04"}})
+	entered, release := service.blockEpisodeLookup(1)
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
+	ui := newHomeRefreshFixture(t, service)
+	ui.loadHome()
+	pumpSearchEvents(t, func() bool {
+		if len(ui.homeCaptionLabels) == 0 {
+			return false
+		}
+		select {
+		case <-entered:
+			return true
+		default:
+			return false
+		}
+	})
+	ui.showSection(4)
+	unblock()
+	pumpSearchEvents(t, func() bool { return ui.homeCaptionLabels[0].Label() == "集數：04 · 上次播放位置 2:05" })
+	if ui.selected != 4 {
+		t.Fatal("episode lookup test left Search before the result was applied")
+	}
+	ui.showSection(0)
+	if got := ui.homeCaptionLabels[0].Label(); got != "集數：04 · 上次播放位置 2:05" {
+		t.Fatalf("Continue caption after returning from Search = %q", got)
 	}
 }
 

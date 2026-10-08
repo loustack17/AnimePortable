@@ -29,8 +29,32 @@ func navigationPosition(section int) int {
 }
 
 type homeRow struct {
-	History backend.History
-	Title   string
+	History       backend.History
+	Title         string
+	EpisodeNumber string
+}
+
+func episodeNumber(episodes []backend.Episode, episodeID string, err error) string {
+	if err != nil || strings.TrimSpace(episodeID) == "" {
+		return "未知"
+	}
+	for _, episode := range episodes {
+		if episode.ID == episodeID {
+			if number := strings.TrimSpace(episode.Number); number != "" {
+				return number
+			}
+			return "未知"
+		}
+	}
+	return "未知"
+}
+
+func homeCaption(row homeRow) string {
+	number := strings.TrimSpace(row.EpisodeNumber)
+	if number == "" {
+		number = "未知"
+	}
+	return fmt.Sprintf("集數：%s · 上次播放位置 %s", number, formatPosition(row.History.Position))
 }
 
 func selectHomeRows(history []backend.History, library []backend.Anime, limit int) []homeRow {
