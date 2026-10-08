@@ -29,6 +29,8 @@ Deliver the exact green-CI executable and a versioned portable ZIP before reques
 
 ## Owner playback check
 
+State: `NEEDS_HUMAN`. Final Windows CI37730888867/job113159504236 passed all gates for `dc2e361`; artifact11530280438 is delivered at `artifacts/loop29/AnimePortable.exe` and `artifacts/loop29/AnimePortable-player-keyboard-dc2e361.zip`. Hashes/data preservation and historical failures are in `docs/IMPLEMENTATION_STATUS.md` and `artifacts/evidence/player-keyboard/dc2e361-test-object.json`. Independent final reviews found no MUST_FIX. Local native cgo remains blocked; Windows CI provided deterministic verification. Rollback uses the retained `AnimePortable-loop29-2d4bf48.zip`. One test-fixture correction was needed; original seek bounds remain unchanged.
+
 1. Start an episode. Without clicking a control, Left/Right should seek on the progress bar. Wait for controls to hide, move the mouse, and seek again; the target should remain progress. Repeated seeks must not switch to Play or another button.
 2. Press Tab once to select Play/Pause. Arrows should keep that selection and leave playback/progress unchanged; Enter should play/pause. Shift+Tab returns to progress and Left/Right seeks again.
 3. Use Tab to select volume. Arrows should change volume without seeking. Hide/reveal the controls and confirm volume stays selected. M restores the prior volume after mute; Space/K play/pause; J/L seek; F/Escape enter/leave fullscreen.
