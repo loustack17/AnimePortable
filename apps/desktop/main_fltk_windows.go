@@ -296,17 +296,29 @@ func main() {
 		episodes = nil
 		player.SetEpisodes(nil, 0)
 		player.SetState(fltkplayer.State{Volume: 100, Focus: fltkplayer.FocusProgress, Loading: true})
-		player.Window().Show()
+		player.Show()
 		player.SetFocus(fltkplayer.FocusProgress)
 		home.Hide()
 		playQueue.Enqueue(func() {
-			defer cancelOperation()
 			if generation != viewGeneration.Load() {
+				cancelOperation()
 				return
 			}
 			actionGeneration.Store(generation)
-			items, err := service.Episodes(operationCtx, request.AnimeID)
-			if err == nil {
+			err := startPlayback(operationCtx, cancelOperation, func(playCtx context.Context) error {
+				if err := service.Play(playCtx, request); err != nil {
+					return err
+				}
+				if generation == viewGeneration.Load() {
+					awaitingPlayback.Store(false)
+					setSelection(request)
+				}
+				return nil
+			}, func(episodeCtx context.Context) {
+				items, err := service.Episodes(episodeCtx, request.AnimeID)
+				if err != nil || episodeCtx.Err() != nil {
+					return
+				}
 				labels := make([]string, len(items))
 				current := 0
 				for index, item := range items {
@@ -324,11 +336,8 @@ func main() {
 						player.SetEpisodes(labels, current)
 					}
 				})
-			}
-			if generation != viewGeneration.Load() {
-				return
-			}
-			if err := service.Play(operationCtx, request); err != nil {
+			})
+			if err != nil {
 				if generation == viewGeneration.Load() {
 					awaitingPlayback.Store(false)
 				}
@@ -340,11 +349,6 @@ func main() {
 					player.Window().Hide()
 					home.Show()
 				})
-			} else {
-				if generation == viewGeneration.Load() {
-					awaitingPlayback.Store(false)
-					setSelection(request)
-				}
 			}
 		})
 	}

@@ -160,6 +160,34 @@ func TestPlayerFocusSurvivesAutoHidePointerAndStateUpdates(t *testing.T) {
 	}
 }
 
+func TestHoverOnlyMenuDoesNotStealProgressOrVolumeArrows(t *testing.T) {
+	var seeks, volumes []int
+	navigations := 0
+	view := keyboardTestView(Callbacks{
+		Seek:     func(seconds int) { seeks = append(seeks, seconds) },
+		Volume:   func(percent int) { volumes = append(volumes, percent) },
+		Navigate: func(int) { navigations++ },
+	})
+	view.menuHover = true
+	for _, key := range []int{0xff51, 0xff53} {
+		keyDown(view, key, 0)
+		keyUp(view, key)
+	}
+	view.state.Focus = focusVolume
+	for _, key := range []int{0xff51, 0xff53, 0xff52, 0xff54} {
+		keyDown(view, key, 0)
+		keyUp(view, key)
+	}
+	if !reflect.DeepEqual(seeks, []int{-5, 5}) || !reflect.DeepEqual(volumes, []int{95, 100, 100, 95}) || navigations != 0 || view.menuCursor != 0 {
+		t.Fatalf("hover menu stole arrows: seeks=%v volumes=%v navigations=%d cursor=%d", seeks, volumes, navigations, view.menuCursor)
+	}
+	view.menuPinned = true
+	keyDown(view, 0xff54, 0)
+	if view.menuCursor != 1 {
+		t.Fatalf("pinned menu Down cursor=%d, want 1", view.menuCursor)
+	}
+}
+
 func TestPlayerHeldSeekAndVolumeKeysRepeat(t *testing.T) {
 	var seeks, volumes []int
 	view := keyboardTestView(Callbacks{
@@ -265,6 +293,76 @@ func TestPlayerOpenEpisodeListKeepsArrowAndSpaceSelection(t *testing.T) {
 	}
 	if view.episodesOpen || selected != 2 || len(seeks) != 0 {
 		t.Fatalf("list state open=%v selected=%d seeks=%v", view.episodesOpen, selected, seeks)
+	}
+}
+
+func TestPlayerSpaceUsesFocusedControlUnlessAnOpenListOwnsSelection(t *testing.T) {
+	plays, navigations, selections := 0, 0, 0
+	view := keyboardTestView(Callbacks{
+		PlayPause:     func() { plays++ },
+		Navigate:      func(int) { navigations++ },
+		SelectEpisode: func(int) { selections++ },
+	})
+	view.state.Focus = focusPlayPause
+	view.menuHover = true
+	if !view.handleKeyEvent(fltk.SHORTCUT, ' ', 0) {
+		t.Fatal("focused Play/Pause did not handle native Space shortcut")
+	}
+	if plays != 1 || navigations != 0 {
+		t.Fatalf("hover menu stole focused Play/Pause Space: plays=%d navigations=%d", plays, navigations)
+	}
+	if !keyUp(view, ' ') || !view.handleKeyEvent(fltk.SHORTCUT, ' ', 0) {
+		t.Fatal("Space press after release was not handled")
+	}
+	if plays != 2 || navigations != 0 {
+		t.Fatalf("second focused Space: plays=%d navigations=%d", plays, navigations)
+	}
+	keyUp(view, ' ')
+	keyDown(view, fltk.ENTER_KEY, 0)
+	if plays != 3 || navigations != 0 {
+		t.Fatalf("hover menu stole focused Play/Pause Enter: plays=%d navigations=%d", plays, navigations)
+	}
+	keyUp(view, fltk.ENTER_KEY)
+	view.menuHover = false
+	view.menuPinned = true
+	view.state.Focus = focusMenu
+	keyDown(view, ' ', 0)
+	if navigations != 1 || plays != 3 {
+		t.Fatalf("focused pinned menu Space: plays=%d navigations=%d", plays, navigations)
+	}
+	keyUp(view, ' ')
+	view.episodes = []string{"one", "two"}
+	view.episodeCursor = 1
+	view.episodesOpen = true
+	keyDown(view, ' ', 0)
+	if selections != 1 || view.episodesOpen || plays != 3 {
+		t.Fatalf("open episode list Space: selections=%d open=%v plays=%d", selections, view.episodesOpen, plays)
+	}
+}
+
+func TestPinnedMenuOwnsSpaceAndEnterAfterMouseActivation(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		key  int
+	}{{"space", ' '}, {"enter", fltk.ENTER_KEY}} {
+		t.Run(test.name, func(t *testing.T) {
+			plays, navigations := 0, 0
+			view := keyboardTestView(Callbacks{
+				PlayPause: func() { plays++ },
+				Navigate:  func(int) { navigations++ },
+			})
+			view.state.Focus = focusPlayPause
+			view.activate(focusMenu)
+			if !view.menuPinned || view.state.Focus != focusPlayPause {
+				t.Fatalf("menu activation state pinned=%v focus=%d", view.menuPinned, view.state.Focus)
+			}
+			if !keyDown(view, test.key, 0) {
+				t.Fatalf("pinned menu did not handle key %d", test.key)
+			}
+			if navigations != 1 || plays != 0 {
+				t.Fatalf("pinned menu key %d invoked navigate=%d play=%d", test.key, navigations, plays)
+			}
+		})
 	}
 }
 

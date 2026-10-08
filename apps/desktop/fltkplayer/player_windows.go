@@ -71,6 +71,7 @@ type View struct {
 	progressHover bool
 	hoverControls bool
 	closed        bool
+	nativeHandles map[uintptr]struct{}
 	episodeStart  int
 	episodeCursor int
 	menuCursor    int
@@ -123,9 +124,12 @@ func (view *View) handleWindowEvent(event fltk.Event) bool {
 	}
 	if event == fltk.DEACTIVATE || event == fltk.HIDE {
 		view.pressedKeys = nil
+		if event == fltk.HIDE {
+			view.removeNativeInput()
+		}
 		return false
 	}
-	if event == fltk.KEYDOWN || event == fltk.KEYUP {
+	if event == fltk.KEYDOWN || event == fltk.KEYUP || event == fltk.SHORTCUT {
 		return view.handle(event)
 	}
 	return false
@@ -134,6 +138,14 @@ func (view *View) handleWindowEvent(event fltk.Event) bool {
 func (view *View) Window() *fltk.Window { return view.window }
 
 func (view *View) Video() *fltk.GlWindow { return view.video }
+
+func (view *View) Show() {
+	if view.closed || view.window == nil {
+		return
+	}
+	view.window.Show()
+	view.syncNativeInput()
+}
 
 func (view *View) State() State { return view.state }
 
@@ -169,10 +181,12 @@ func (view *View) Close() {
 		return
 	}
 	view.closed = true
+	view.removeNativeInput()
 	view.freeLabelBuffers()
 }
 
 func (view *View) SetState(state State) {
+	fullscreenChanged := state.Fullscreen != view.state.Fullscreen
 	if state.Volume < 0 {
 		state.Volume = 0
 	}
@@ -192,6 +206,9 @@ func (view *View) SetState(state State) {
 		view.episodeCursor = state.Episode
 	}
 	view.state = state
+	if fullscreenChanged {
+		view.syncNativeInput()
+	}
 	view.Redraw()
 }
 
@@ -221,6 +238,7 @@ func (view *View) tick() {
 	if view.closed {
 		return
 	}
+	view.syncNativeInput()
 	if view.state.Playing && !view.state.Paused && !view.state.Loading && !view.hoverControls && !view.scrubbing && !view.menuVisible() && !view.episodesOpen && time.Since(view.lastMove) > 2500*time.Millisecond {
 		view.hideControls()
 	}
@@ -351,12 +369,17 @@ func (view *View) handle(event fltk.Event) bool {
 	switch event {
 	case fltk.KEYDOWN, fltk.KEYUP:
 		return view.handleKeyEvent(event, fltk.EventKey(), fltk.EventState())
+	case fltk.SHORTCUT:
+		return view.handleKeyEvent(fltk.KEYDOWN, fltk.EventKey(), fltk.EventState())
 	case fltk.FOCUS:
 		return true
 	case fltk.UNFOCUS:
 		return view.handleUnfocus(fltk.EventKey())
 	case fltk.DEACTIVATE, fltk.HIDE:
 		view.pressedKeys = nil
+		if event == fltk.HIDE {
+			view.removeNativeInput()
+		}
 		return false
 	}
 	x, y := fltk.EventX()-view.video.X(), fltk.EventY()-view.video.Y()
@@ -451,6 +474,9 @@ func (view *View) handleUnfocus(key int) bool {
 }
 
 func (view *View) handleKeyEvent(event fltk.Event, key, modifiers int) bool {
+	if event == fltk.SHORTCUT {
+		event = fltk.KEYDOWN
+	}
 	key = normalizeLetterKey(key)
 	if event == fltk.KEYUP {
 		if view.pressedKeys == nil || !view.pressedKeys[key] {
@@ -552,7 +578,7 @@ func (view *View) handleKey(key, modifiers int) bool {
 			view.Redraw()
 			return true
 		}
-		if view.menuVisible() {
+		if view.menuPinned {
 			if view.callbacks.Navigate != nil {
 				view.callbacks.Navigate(view.menuCursor)
 			}
@@ -571,7 +597,7 @@ func (view *View) handleKey(key, modifiers int) bool {
 			view.Redraw()
 			return true
 		}
-		if view.menuVisible() {
+		if view.menuPinned {
 			if view.callbacks.Navigate != nil {
 				view.callbacks.Navigate(view.menuCursor)
 			}
@@ -603,7 +629,7 @@ func (view *View) handleKey(key, modifiers int) bool {
 			view.Redraw()
 			return true
 		}
-		if view.menuVisible() {
+		if view.menuPinned {
 			if key == 0xff52 && view.menuCursor > 0 {
 				view.menuCursor--
 			}
