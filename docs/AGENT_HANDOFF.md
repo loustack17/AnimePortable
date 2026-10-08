@@ -6,12 +6,12 @@
 schema_version: 1
 protocol_version: v2.4.1
 instruction_version: v2.4.1
-updated_at_utc: "2026-10-08T04:18:41Z"
-status: PASS
+updated_at_utc: "2026-10-08T04:38:00Z"
+status: VERIFYING
 repository:
   branch: main
-  observed_head: f17f076
-  working_tree: "Preserve unrelated AGENTS.md and .codex/. No pending production change; old executable ZIP retained."
+  observed_head: 0b727f9
+  working_tree: "Preserve unrelated AGENTS.md and .codex/. Keyboard code/tests integrated and independently reviewed; root owns docs."
 active_loop:
   number: 29
   state: "Owner accepted final spacing build and explicitly approved Loop29 PASS on2026-10-08. Exact2d4bf48 CI/exe/ZIP plus independent review and owner gates complete."
@@ -37,9 +37,11 @@ boundaries:
   - "Prior BWS/TypeSafe snippets/main commit-push/exact exe-upload and Mesa approvals persist; no release. Original5+approved3 exhausted, then explicit scoped direct-fix resumption and owner Loop29 takeover request."
   - "Native local cgo breaker closed: cannot parse _cgo_.o +unlinkAccessDenied. No equivalent retries, hostPASS, FullAccess, host installs. Mesa CI-test-only."
 next:
-  - "Owner suggests YouTube/Netflix-style player keyboard behavior; inspect current mapping and prepare bounded proposal before implementation."
+  - "Keyboard code/tests ready: focus-independent relative seeks; list priority/repeat/modifier guards. Final independent review no MUST_FIX; gofmt/diff PASS. Seek path has no loadfile; reload-like visual unverified."
+  - "Commit/push scoped follow-up under prior authorization; final-state Windows CI, exact exe/ZIP preserving data, then owner keyboard gate. Review corrections3/5; local cgo breaker closed."
   - "Planned Loop30 remains Phase24 detail/episode UI; do not silently change numbering or begin it without its contract/bootstrap."
 references:
+  - "docs/PLAYER_KEYBOARD_FOLLOWUP.md (active contract); apps/desktop/fltkplayer/player_windows.go and scoped keyboard tests."
   - "docs/LOOP29_TAKEOVER.md (historical); docs/IMPLEMENTATION_STATUS.md; docs/LOOP29_HUMAN_CHECK.md."
   - "docs/05_LOOP_ENGINEERING_RUNBOOK.md11/12.1; docs/13_VERIFICATION_EXECUTION_ENVIRONMENTS.md; docs/10_DURABLE_AGENT_STATE.md."
 ```

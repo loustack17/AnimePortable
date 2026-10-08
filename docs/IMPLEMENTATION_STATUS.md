@@ -4,6 +4,12 @@
 
 ## Current loop
 
+### 2026-10-08 Player keyboard follow-up — IMPLEMENTING
+
+After approving Loop 29, the owner selected five-second arrow seeks and ten-second J/L seeks from the proposed YouTube-style keyboard map. The finite scope, menu/focus priority, modifier and repeat behavior, verification gates and correction budget are defined in `docs/PLAYER_KEYBOARD_FOLLOWUP.md`. The implementation stays in the Windows FLTK player and uses existing typed callbacks. Loop 29 remains `PASS`; planned Loop 30 remains the Phase 24 detail and episode UI slice.
+
+The owner clarified that shortcut duration is secondary: arrows must seek rather than select buttons, including after a reload-like interruption resets focus to Play. Existing control auto-hide clears focus, and new playback initializes Play focus. The follow-up removes focus as a seek prerequisite. Source tracing confirms the arrow callback uses the serialized control queue, `Engine.Control("seek")`, and MPV relative `seek`; it does not invoke `loadfile` or initialize playback. A reload-like visual interruption remains an unverified runtime observation, not proof of an actual reload.
+
 ### 2026-10-08 Loop 29 — PASS
 
 The owner reported "perfect!!! loop 29 can be passed" after testing the final `2d4bf48` executable. This closes the Home-return spacing gate and completes Loop 29. Earlier owner acceptance covers Search/keyboard flow, controls across playback reentry, current resume position, and episode captions. Final production-state Windows CI37725390481/job113142273267 passed all required deterministic gates; independent quality and handoff reviews returned `PASS_REVIEW`. Executable/package hashes and preserved-data evidence are recorded below. The historical race-mode seek failure remains documented rather than reclassified as PASS; the unchanged assertion passed the final required CI run.

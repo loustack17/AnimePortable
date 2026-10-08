@@ -61,6 +61,8 @@ type View struct {
 	menuHover     bool
 	episodesOpen  bool
 	volumeOpen    bool
+	pressedKeys   map[int]bool
+	lastVolume    int
 	dragging      bool
 	scrubbing     bool
 	scrubPosition float64
@@ -79,11 +81,12 @@ type View struct {
 
 func NewWindow(callbacks Callbacks) *View {
 	view := &View{
-		callbacks: callbacks,
-		state:     State{Volume: 100, Focus: -1},
-		visible:   true,
-		lastMove:  time.Now(),
-		menuItems: []string{"首頁", "時間表", "追蹤", "歷史紀錄", "搜尋", "設定"},
+		callbacks:  callbacks,
+		state:      State{Volume: 100, Focus: -1},
+		lastVolume: 100,
+		visible:    true,
+		lastMove:   time.Now(),
+		menuItems:  []string{"首頁", "時間表", "追蹤", "歷史紀錄", "搜尋", "設定"},
 	}
 	view.updateLabelBuffers()
 	fltk.SetFont(fltk.HELVETICA, "Microsoft JhengHei UI")
@@ -104,17 +107,26 @@ func NewWindow(callbacks Callbacks) *View {
 		drawPlayerOverlay(view.video.W(), view.video.H(), view)
 	})
 	view.video.SetEventHandler(view.handle)
-	view.window.SetEventHandler(func(event fltk.Event) bool {
-		if event == fltk.KEYDOWN || event == fltk.KEYUP {
-			return view.handle(event)
-		}
-		return false
-	})
+	view.window.SetEventHandler(view.handleWindowEvent)
 	view.window.Resizable(view.video)
 	view.window.End()
 	view.video.SetResizeHandler(view.video.Redraw)
 	fltk.AddTimeout(0.5, view.tick)
 	return view
+}
+
+func (view *View) handleWindowEvent(event fltk.Event) bool {
+	if event == fltk.UNFOCUS {
+		return view.handleUnfocus(fltk.EventKey())
+	}
+	if event == fltk.DEACTIVATE || event == fltk.HIDE {
+		view.pressedKeys = nil
+		return false
+	}
+	if event == fltk.KEYDOWN || event == fltk.KEYUP {
+		return view.handle(event)
+	}
+	return false
 }
 
 func (view *View) Window() *fltk.Window { return view.window }
@@ -165,6 +177,9 @@ func (view *View) SetState(state State) {
 	if state.Volume > 100 {
 		state.Volume = 100
 	}
+	if state.Volume > 0 {
+		view.lastVolume = state.Volume
+	}
 	if state.Episode < 0 || state.Episode >= len(view.episodes) {
 		state.Episode = 0
 	}
@@ -184,7 +199,9 @@ func (view *View) SetFocus(index int) {
 		view.visible = true
 		view.lastMove = time.Now()
 		view.volumeOpen = index == focusVolume
-		view.keyboardFocus.TakeFocus()
+		if view.keyboardFocus != nil {
+			view.keyboardFocus.TakeFocus()
+		}
 	}
 	view.Redraw()
 }
@@ -291,9 +308,7 @@ func (view *View) activate(index int) {
 			view.callbacks.Fullscreen()
 		}
 	}
-	view.visible = true
-	view.lastMove = time.Now()
-	view.Redraw()
+	view.showControls()
 }
 
 func (view *View) setVolumeAt(x int) {
@@ -304,11 +319,7 @@ func (view *View) setVolumeAt(x int) {
 	if value > 100 {
 		value = 100
 	}
-	view.state.Volume = value
-	if view.callbacks.Volume != nil {
-		view.callbacks.Volume(value)
-	}
-	view.Redraw()
+	view.setVolume(value)
 }
 
 func progressPosition(x, width int, duration float64) float64 {
@@ -326,6 +337,17 @@ func (view *View) setScrubAt(x int) {
 }
 
 func (view *View) handle(event fltk.Event) bool {
+	switch event {
+	case fltk.KEYDOWN, fltk.KEYUP:
+		return view.handleKeyEvent(event, fltk.EventKey(), fltk.EventState())
+	case fltk.FOCUS:
+		return true
+	case fltk.UNFOCUS:
+		return view.handleUnfocus(fltk.EventKey())
+	case fltk.DEACTIVATE, fltk.HIDE:
+		view.pressedKeys = nil
+		return false
+	}
 	x, y := fltk.EventX()-view.video.X(), fltk.EventY()-view.video.Y()
 	switch event {
 	case fltk.MOVE, fltk.ENTER:
@@ -405,36 +427,126 @@ func (view *View) handle(event fltk.Event) bool {
 			view.Redraw()
 		}
 		return true
-	case fltk.KEYDOWN:
-		return view.handleKey(fltk.EventKey())
 	}
 	return false
 }
 
-func (view *View) handleKey(key int) bool {
+func (view *View) handleUnfocus(key int) bool {
+	// Key zero marks window-manager focus loss; key-bearing transfers can happen while a shortcut is held.
+	if key == 0 {
+		view.pressedKeys = nil
+	}
+	return true
+}
+
+func (view *View) handleKeyEvent(event fltk.Event, key, modifiers int) bool {
+	key = normalizeLetterKey(key)
+	if event == fltk.KEYUP {
+		if view.pressedKeys == nil || !view.pressedKeys[key] {
+			return false
+		}
+		delete(view.pressedKeys, key)
+		return true
+	}
+	if event != fltk.KEYDOWN {
+		return false
+	}
+	if modifiers&(fltk.CTRL|fltk.ALT|fltk.META) != 0 {
+		return false
+	}
+	if isOneShotKey(key) {
+		if view.pressedKeys == nil {
+			view.pressedKeys = make(map[int]bool)
+		}
+		if view.pressedKeys[key] {
+			return true
+		}
+		view.pressedKeys[key] = true
+	}
+	return view.handleKey(key, modifiers)
+}
+
+func isOneShotKey(key int) bool {
+	switch key {
+	case 9, 0xff09, 27, 0xff1b, fltk.ENTER_KEY, 13, 0xff8d, ' ', 'k', 'm', 'f':
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeLetterKey(key int) int {
+	if key >= 'A' && key <= 'Z' {
+		return key + 'a' - 'A'
+	}
+	return key
+}
+
+func (view *View) handleKey(key, modifiers int) bool {
+	key = normalizeLetterKey(key)
 	if key == 9 || key == 0xff09 {
-		view.moveTabFocus(fltk.EventState()&fltk.SHIFT != 0)
+		view.moveTabFocus(modifiers&fltk.SHIFT != 0)
 		return true
 	}
 	if key == 27 || key == 0xff1b {
 		if view.episodesOpen {
 			view.episodesOpen = false
-		} else if view.menuPinned {
+		} else if view.menuVisible() {
 			view.menuPinned = false
+			view.menuHover = false
 		} else if view.state.Fullscreen && view.callbacks.Fullscreen != nil {
 			view.callbacks.Fullscreen()
 		}
 		view.Redraw()
 		return true
 	}
-	if key == fltk.ENTER_KEY || key == 13 || key == 0xff8d || key == int(' ') {
-		if view.state.Focus == focusEpisodes && view.episodesOpen {
+	if key == 'k' {
+		view.activate(focusPlayPause)
+		return true
+	}
+	if key == 'm' && !view.menuVisible() && !view.episodesOpen {
+		if view.state.Volume == 0 {
+			view.setVolume(view.lastVolume)
+		} else {
+			view.lastVolume = view.state.Volume
+			view.setVolume(0)
+		}
+		return true
+	}
+	if key == 'f' && !view.menuVisible() && !view.episodesOpen {
+		if view.callbacks.Fullscreen != nil {
+			view.callbacks.Fullscreen()
+		}
+		view.showControls()
+		return true
+	}
+	if key == int(' ') {
+		if view.episodesOpen {
 			view.selectEpisode(view.episodeCursor)
 			view.episodesOpen = false
 			view.Redraw()
 			return true
 		}
-		if view.state.Focus == focusMenu && view.menuVisible() {
+		if view.menuVisible() {
+			if view.callbacks.Navigate != nil {
+				view.callbacks.Navigate(view.menuCursor)
+			}
+			view.menuPinned = false
+			view.menuHover = false
+			view.Redraw()
+			return true
+		}
+		view.activate(focusPlayPause)
+		return true
+	}
+	if key == fltk.ENTER_KEY || key == 13 || key == 0xff8d {
+		if view.episodesOpen {
+			view.selectEpisode(view.episodeCursor)
+			view.episodesOpen = false
+			view.Redraw()
+			return true
+		}
+		if view.menuVisible() {
 			if view.callbacks.Navigate != nil {
 				view.callbacks.Navigate(view.menuCursor)
 			}
@@ -452,35 +564,7 @@ func (view *View) handleKey(key int) bool {
 		view.activate(view.state.Focus)
 		return true
 	}
-	if view.state.Focus == focusMenu && view.menuVisible() && (key == 0xff52 || key == 0xff54) {
-		if key == 0xff52 && view.menuCursor > 0 {
-			view.menuCursor--
-		}
-		if key == 0xff54 && view.menuCursor < len(view.menuItems)-1 {
-			view.menuCursor++
-		}
-		view.Redraw()
-		return true
-	}
-	if view.state.Focus == focusVolume && (key == 0xff51 || key == 0xff53) {
-		step := -5
-		if key == 0xff53 {
-			step = 5
-		}
-		view.state.Volume += step
-		if view.state.Volume < 0 {
-			view.state.Volume = 0
-		}
-		if view.state.Volume > 100 {
-			view.state.Volume = 100
-		}
-		if view.callbacks.Volume != nil {
-			view.callbacks.Volume(view.state.Volume)
-		}
-		view.Redraw()
-		return true
-	}
-	if view.state.Focus == focusEpisodes && view.episodesOpen && (key == 0xff52 || key == 0xff54) {
+	if view.episodesOpen && (key == 0xff52 || key == 0xff54) {
 		if key == 0xff52 && view.episodeCursor > 0 {
 			view.episodeCursor--
 		}
@@ -496,20 +580,76 @@ func (view *View) handleKey(key int) bool {
 		view.Redraw()
 		return true
 	}
-	if view.state.Focus == focusProgress && (key == 0xff51 || key == 0xff53) {
-		if view.callbacks.SeekTo != nil && view.state.Duration > 0 {
-			step := -5.0
-			if key == 0xff53 {
-				step = 5
-			}
-			view.callbacks.SeekTo(int(math.Round(math.Max(0, math.Min(view.state.Duration, view.state.Position+step)))))
+	if view.menuVisible() && (key == 0xff52 || key == 0xff54) {
+		if key == 0xff52 && view.menuCursor > 0 {
+			view.menuCursor--
 		}
+		if key == 0xff54 && view.menuCursor < len(view.menuItems)-1 {
+			view.menuCursor++
+		}
+		view.Redraw()
 		return true
 	}
-	if key == 0xff51 || key == 0xff53 || key == 0xff52 || key == 0xff54 {
-		return view.moveDirectionalFocus(key)
+	if view.episodesOpen {
+		return true
+	}
+	if view.menuVisible() {
+		return true
+	}
+	if key == 0xff51 || key == 0xff53 {
+		step := -5
+		if key == 0xff53 {
+			step = 5
+		}
+		if view.callbacks.Seek != nil {
+			view.callbacks.Seek(step)
+		}
+		view.showControls()
+		return true
+	}
+	if key == 0xff52 || key == 0xff54 {
+		step := 5
+		if key == 0xff54 {
+			step = -5
+		}
+		view.setVolume(view.state.Volume + step)
+		return true
+	}
+	if key == 'j' || key == 'l' {
+		step := -10
+		if key == 'l' {
+			step = 10
+		}
+		if view.callbacks.Seek != nil {
+			view.callbacks.Seek(step)
+		}
+		view.showControls()
+		return true
 	}
 	return false
+}
+
+func (view *View) setVolume(volume int) {
+	if volume < 0 {
+		volume = 0
+	}
+	if volume > 100 {
+		volume = 100
+	}
+	view.state.Volume = volume
+	if volume > 0 {
+		view.lastVolume = volume
+	}
+	if view.callbacks.Volume != nil {
+		view.callbacks.Volume(volume)
+	}
+	view.showControls()
+}
+
+func (view *View) showControls() {
+	view.visible = true
+	view.lastMove = time.Now()
+	view.Redraw()
 }
 
 var tabFocusOrder = [...]int{focusMenu, focusEpisodes, focusProgress, focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusFullscreen}
@@ -535,59 +675,6 @@ func nextTabFocus(current int, reverse bool) int {
 		index = min(len(tabFocusOrder)-1, index+1)
 	}
 	return tabFocusOrder[index]
-}
-
-func (view *View) moveDirectionalFocus(key int) bool {
-	current := view.state.Focus
-	var next int
-	switch key {
-	case 0xff52:
-		if current == focusMenu || current == focusEpisodes {
-			return true
-		}
-		if current == focusProgress {
-			next = focusEpisodes
-		} else {
-			next = focusProgress
-		}
-	case 0xff54:
-		if current == focusMenu || current == focusEpisodes {
-			next = focusProgress
-		} else if current == focusProgress || current < 0 {
-			next = focusPlayPause
-		} else {
-			return true
-		}
-	case 0xff51, 0xff53:
-		if current == focusMenu || current == focusEpisodes {
-			if key == 0xff51 {
-				next = focusMenu
-			} else {
-				next = focusEpisodes
-			}
-		} else if current == focusProgress {
-			return true
-		} else {
-			order := [...]int{focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusFullscreen}
-			index := 0
-			for position, focus := range order {
-				if current == focus {
-					index = position
-					break
-				}
-			}
-			if key == 0xff51 {
-				index = max(0, index-1)
-			} else {
-				index = min(len(order)-1, index+1)
-			}
-			next = order[index]
-		}
-	default:
-		return false
-	}
-	view.SetFocus(next)
-	return true
 }
 
 func (view *View) menuVisible() bool { return view.menuPinned || view.menuHover }
