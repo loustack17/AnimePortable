@@ -2,20 +2,23 @@
 
 ## 狀態
 
-你已確認3022551隱藏／重現正常；影像仍不順但聲音正常。目前為 IN_PROGRESS，正在準備本機播放量測，新版診斷入口與操作步驟會在精確 CI 完成後更新。下方3022551是已確認控制項的版本，不是卡頓修正版。
+CHECKPOINT / IN_PROGRESS。你已完成3d58b0d實測且仍卡頓，報告已保存。TypeSafe支持先修正過早回報畫面已交換的通知；兩檔修正已完成，尚待新的精確CI及同片段實測。下列3d58b0d為基準量測版，不能拿來驗收新修正。
 
-CI_VERIFIED / NEEDS_HUMAN。新版 `3022551d8b2fae1b0aeeef285a41d15e16a6fb61` 的 [Windows CI](https://github.com/loustack17/AnimePortable/actions/runs/38438012680) 全部通過。已修正原生繪圖因保留焦點而忽略隱藏狀態的缺陷，framebuffer 測試確認隱藏／重現與焦點保留。使用者仍需確認實際閒置控制項是否消失。影像不順但聲音正常的原因尚未量測確認，不能宣稱已解決。Loop30 未結案。
 
-- [新版 AnimePortable.exe](../artifacts/loop30/3022551/AnimePortable.exe)，保留同資料夾播放器 DLL。
-- [完整 ZIP](../artifacts/loop30/3022551/AnimePortable-loop30-3022551.zip)。
-- EXE SHA-256：`3979b36c9eb4baee45efc5d1277ba02ab9f6af0f6d4d726ac2ba723d9dc77e5e`。
-- ZIP SHA-256：`6dc55d4dade0e0f5118afffeb838227c1d61ae5edf8a3e31c8eb3f70272b6272`。
+DIAGNOSTIC_READY / NEEDS_HUMAN。你已確認控制項隱藏／重現正常；影像不順但聲音正常仍待實際數據定位。新版 `3d58b0d` 的 [Windows CI](https://github.com/loustack17/AnimePortable/actions/runs/38441971359) 全部通過，含原生診斷取樣／關閉輸出及關閉診斷無輸出、race、vet、安全、建置與啟動驗證。這是量測版，尚未宣稱修好卡頓。
 
-舊執行檔／套件／快取已清理，播放資料與必要驗證紀錄保留。ZIP 五項程式與授權檔，不含個人資料。證據：`artifacts/evidence/loop30/3022551-test-object.json`、清理 manifests。
+## 本次操作
 
-## 本次確認
+1. 雙擊 [播放診斷入口](../artifacts/loop30/3d58b0d/DiagnosePlayback.cmd)。
+2. 播放會卡頓的片段約30–60秒。
+3. 正常關閉整個 app，回覆已完成即可；不需要找內部資料或上傳檔案。
 
-播放後停止操作約3秒，控制項應完全隱藏；滑鼠移動或按鍵應再顯示，焦點與操作正常。請在同段影片觀察控制項隱藏後影像是否仍不順，以及聲音是否正常；這是原因查核，不是已完成的效能改善。
+本機報告會存於新版同資料夾，只有固定數值與有限GPU廠商／renderer／解碼方式，不含作品、網址、憑證、個人資料庫，不送API。直接開 [AnimePortable.exe](../artifacts/loop30/3d58b0d/AnimePortable.exe) 是正常模式，診斷預設關閉。
+
+- [完整 ZIP](../artifacts/loop30/3d58b0d/AnimePortable-loop30-3d58b0d.zip)，六項程式／runtime授權／診斷入口檔，不含個人資料。
+- EXE SHA-256：`7cdf1c5b41326789b2d72b6620a336f474a407508f75de25443ab60d02fce212`。
+- ZIP SHA-256：`cb24f48fd2b98ccd4de2b860e11247b2e2707c5c6708825c23341d109b55a1f5`。
+- 證據：`artifacts/evidence/loop30/3d58b0d-test-object.json`。舊二進位與快取已清理，舊播放資料／必要紀錄保留。
 
 ## 驗收項目
 

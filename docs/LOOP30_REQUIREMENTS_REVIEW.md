@@ -4,7 +4,7 @@ Date: 2026-10-13. Baseline: main `90a7fc9985bd5ab17b1198333567324fd69d2e8a`.
 
 ## Result
 
-IN_PROGRESS: owner confirms3022551 hide/reveal works; video stutter with audio normal remains unresolved. A temporary default-off bounded local engine diagnostic is being prepared, not a causal playback fix. Required opt-in/privacy/aggregation/lifecycle review and exact native CI pending, then owner sample. Only whitelisted numeric playback/render counters and bounded GPU strings; no content identifiers,URLs,credentials,DB,logs or remote telemetry. No performancePASS or Loop30PASS before actual evidence.
+CHECKPOINT / IN_PROGRESS, not Loop30 PASS. Owner3d58b0d report archived locally as owner-stutter-baseline.json; derived-local stats: render8.0103/s, outputdrops308, decoderDrops0, GLerrors0, meanRender9.1887ms,maxRender42.3879ms,maxInterval876.8368ms. Rawreport/hardwareidentity never APIuploaded. TypeSafe deidentifiedconditions+callerfacts supports output-scheduling investigation and isolated removal of premature optional ReportSwap, not provenperformancefix. Two-file patch frozen: remove Engine.Render ReportSwap before FLTKflip, add native RenderUpdateFrames>=2; allsettings/targettiming/callback/lifecycle/prior assertions preserved. Simplify-first independent caller/header facts corroborated; finalTypeSafe scope1.99/conf1,lifecycle1.98/.98,verification1.91/.88 support. Format/diffPASS; localnativecgo breaker closed/localGo1.27 stdissue not retried. Exact newCI + comparable owner sample required. No newdiagnosticfeature/tuning/workflow/globalconfiguration. Budgetcheckpoint now; do not broaden, replayhistory or pollunchangedCI.
 
 ## Historical review order and verification before repair
 

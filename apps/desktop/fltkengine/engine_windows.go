@@ -491,7 +491,6 @@ func (engine *Engine) Render(width, height int) error {
 	if err != nil {
 		return libmpv.ErrPlayerFailed
 	}
-	engine.render.ReportSwap()
 	return nil
 }
 

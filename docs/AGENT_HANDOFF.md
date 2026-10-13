@@ -7,29 +7,33 @@ instruction_version: v2.4.1
 status: IN_PROGRESS
 repository:
   branch: main
-  observed_head: 07851b10d158209b751310a05671467cb1398fad
-  working_tree: "07851b1 opt-in diagnostics fully pushed; exact CI38440836069 pending. Preserve AGENTS/.codex/data."
+  observed_head: 3d58b0dd2270e9b14ab29ad3c2d587fe4d2dc584
+  working_tree: "Two-file render-feedback fix and checkpoint docs local; exclude AGENTS/.codex/data. Scoped commit/push already authorized."
 active_loop:
   number: 30
-  state: "Owner confirms3022551 hide/show works; video stutter audio normal persists. Opt-in local numeric playback diagnostic in progress; root cause unknown, not PASS."
-  goal: "Phase24 detail/episodes; click episode immediately plays; Continue visible only with same-series resumable progress; Enter/Space plays focused row; controls hide on playback idle and reveal on input."
+  state: "Owner controls PASS; video stutter remains; TypeSafe-approved isolated swap-feedback fix frozen, native CI/owner comparison pending. Not LoopPASS."
 completed:
-  - "Owner-reported UX correction committed/pushed as dbb191f; six UI/test files, canonical contract clarified."
-  - "bca387a simplify-first independent code/platform/lifecycle review PASS; TypeSafe uncertainty adjudicated."
+  - "Episode click/Enter/Space and conditional Continue implemented; actual overlay hide/show owner PASS."
+  - "3d58b0d default-off diagnostic source fully pushed, exact CI38441971359 allchecks PASS; latestpackage ready."
+  - "Owner completed diagnostic and stillstutters; rawreport archivedlocal, derivedstats saved."
+  - "Two-file isolatedfix: remove premature optional Engine.Render ReportSwap; nativeoracle requires>=2newframe updates, allpreviousassertions retained."
 verification:
-  - "Exact CI38438012680/job115436981765 ALL STEPS SUCCESS, including framebufferhidden/show/focus. Native tests,20repeat,Anime1,race,vet,security,dependency/build/startup/clean-tree/artifact PASS."
-  - "GitHub main matches local/origin/main3022551. Artifact11834375690 headSHA exact; Go1.26.9/windows-amd64/CGO1/production BuildInfo. Existing buildvcs=false acknowledged."
-  - "Exact exe/ZIP under artifacts/loop30/3022551; matching packaged exe hash,5entries,pinned DLL,no personal data. Existing data untouched."
-  - "TypeSafe scope/verification support review; lifecycle low confidence independently adjudicated from actual generation/cancellation guards."
-  - "Local native cgo breaker closed; no retries/host-native PASS. Owner confirmed mouse episode playback works."
-  - "Task caches and verified duplicate download cleaned; source/evidence/rollback packages/data preserved."
+  - "Baseline render8.0103/s, outputdrop308, decoderdrop0, GLerrors0; aggregate walltime alone does not identify GPU bottleneck."
+  - "TypeSafe assessment outputpath2/conf1,swapcontract1.99/conf1,narrowfix1.99/conf1. Rawreport/numericvalues/GPUidentity excluded from API; only anonymousconditions/code."
+  - "Independent tools verified Renderhook then overlay then FLTKflip; optionalReportSwap formerlyinsideRender falsely reported completedflip."
+  - "Final repair TypeSafe scope1.99/conf1,lifecycle1.98/.98,verification1.91/.88 supports; simplify-first fact review andformat/diffPASS."
+  - "Exact newnativeCI and comparable owner30–60s sample required. No performanceimprovement or LoopPASS claimed."
 boundaries:
-  - "Only current Loop30; scoped commit/push approved. No release/Loop31. Exclude AGENTS/.codex/artifacts/data."
-  - "Necessary TypeSafe uploads/BWS memory-only key authorized. No new runtime AI feature."
+  - "ALL judgment/evaluation/analysis via BWS memory-only key and TypeSafe; tools execute/test. No independent speculative tuning."
+  - "No workflow/globalSDK/config/release/Loop31 changes. Localnativecgo closed; localGo1.27 stdresolution issue recorded, no retries/globalrepair."
+  - "User requests usage-saving durablecheckpoint now: do not broaden or reconstructhistory."
 next:
-  - "FirstCI38440836069 glyphoracle failed because5swait preceded3shide visibilitycheck; two-file reviewed typedpointer/wait-order repair saved. Exact newCI needed; localGo1.27.2 pure rerun environmentblocked. Await runtime report before any playback tuning. Latest-only cleanup after each download remains required."
-  - "Only actual human PASS permits final closure docs/approved push; otherwise correct only reported criterion."
+  - "Commit/push exactly2source+5checkpointdocs ifnotalreadydone; reconcile Git first. Wait exact newCI only when continuing, not blindreruns."
+  - "On greenCI deliver newexe/launcher, delete oldbinaries/caches preservingdata/evidence, ask sameclip comparison once."
+  - "Read actualnewreport and useTypeSafe with deidentifiedconditions before anynextcausalchange. Ifimprovement absent, recordthat; no claims fromCI alone."
 references:
-  - "docs/LOOP30_HUMAN_CHECK.md; LOOP30_DETAIL.md; LOOP30_REQUIREMENTS_REVIEW.md."
-  - "artifacts/evidence/loop30/3022551-test-object.json; ci-38438012680-{run,jobs,artifacts}.json; focused-overlay-{state,judgments}.json; owner/new-download-cleanup-manifests."
+  - "docs/LOOP30_DETAIL.md; LOOP30_REQUIREMENTS_REVIEW.md; LOOP30_HUMAN_CHECK.md."
+  - "artifacts/evidence/loop30/owner-stutter-baseline.json; stutter-derived-local.json (localonly)."
+  - "artifacts/evidence/loop30/stutter-{assessment,repair}-{state,judgments}.json."
+  - "artifacts/loop30/3d58b0d/DiagnosePlayback.cmd; baselineCI38441971359 proof/testobject."
 ```

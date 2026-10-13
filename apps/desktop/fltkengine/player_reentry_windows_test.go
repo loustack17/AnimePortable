@@ -230,6 +230,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 				MPVUpdateCallbacks uint64                     `json:"mpv_update_callbacks"`
 				FLTKAwakeCallbacks uint64                     `json:"fltk_awake_callbacks"`
 				RenderCalls        uint64                     `json:"render_calls"`
+				RenderUpdateFrames uint64                     `json:"render_update_frames"`
 				RenderSpanNanos    uint64                     `json:"render_span_nanos"`
 				MPVPropertySamples uint64                     `json:"mpv_property_samples"`
 				MPV                map[string]json.RawMessage `json:"mpv"`
@@ -237,7 +238,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 			if err := json.Unmarshal(data, &report); err != nil {
 				t.Fatalf("decode opt-in playback diagnostics: %v", err)
 			}
-			if report.MPVUpdateCallbacks == 0 || report.FLTKAwakeCallbacks == 0 || report.RenderCalls < 2 || report.RenderSpanNanos == 0 || report.MPVPropertySamples == 0 || report.MPV["frame_drop_count"] == nil || report.MPV["display_fps"] == nil {
+			if report.MPVUpdateCallbacks == 0 || report.FLTKAwakeCallbacks == 0 || report.RenderCalls < 2 || report.RenderUpdateFrames < 2 || report.RenderSpanNanos == 0 || report.MPVPropertySamples == 0 || report.MPV["frame_drop_count"] == nil || report.MPV["display_fps"] == nil {
 				t.Fatalf("playback diagnostics missing measured values: %+v", report)
 			}
 			if strings.Contains(string(data), media[0]) || strings.Contains(string(data), "TEST EPISODE") {

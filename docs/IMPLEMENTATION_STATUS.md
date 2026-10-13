@@ -4,7 +4,7 @@
 
 ## Current loop
 
-Loop30 IN_PROGRESS. Owner confirmed3022551 rendered control hide/reveal PASS; video-only stutter remains. Prepare default-off, local, privacy-bounded playback diagnostic to measure real render/drop data before causal fix; no speculative settings. Required source/nativeCI/privacy/review checks and owner sample pending. Preserve user data and latest-only binaries after download.
+CHECKPOINT / IN_PROGRESS, not Loop30 PASS. Owner3d58b0d report archived locally as owner-stutter-baseline.json; derived-local stats: render8.0103/s, outputdrops308, decoderDrops0, GLerrors0, meanRender9.1887ms,maxRender42.3879ms,maxInterval876.8368ms. Rawreport/hardwareidentity never APIuploaded. TypeSafe deidentifiedconditions+callerfacts supports output-scheduling investigation and isolated removal of premature optional ReportSwap, not provenperformancefix. Two-file patch frozen: remove Engine.Render ReportSwap before FLTKflip, add native RenderUpdateFrames>=2; allsettings/targettiming/callback/lifecycle/prior assertions preserved. Simplify-first independent caller/header facts corroborated; finalTypeSafe scope1.99/conf1,lifecycle1.98/.98,verification1.91/.88 support. Format/diffPASS; localnativecgo breaker closed/localGo1.27 stdissue not retried. Exact newCI + comparable owner sample required. No newdiagnosticfeature/tuning/workflow/globalconfiguration. Budgetcheckpoint now; do not broaden, replayhistory or pollunchangedCI.
 
 ### Historical dbb191f checkpoint — CI_VERIFIED / NEEDS_HUMAN
 
