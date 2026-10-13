@@ -167,9 +167,6 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 			contexts = append(contexts, drawContext)
 			t.Fatalf("pass%d: timed out waiting for a complete post-focus media draw; %s", pass+1, diagnostic())
 		}
-		if pass == 0 && !pumpUntil(t, 7*time.Second, func() bool { return stateCallbacks >= 10 }) {
-			t.Fatalf("timed out waiting for diagnostic property sampling; %s", diagnostic())
-		}
 		drawCounts = append(drawCounts, drawCount)
 		contexts = append(contexts, drawContext)
 		view.Video().MakeCurrent()
@@ -216,6 +213,9 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 			if view.State().Focus != fltkplayer.FocusProgress {
 				t.Fatalf("seek changed progress focus to %d", view.State().Focus)
 			}
+		}
+		if pass == 0 && !pumpUntil(t, 7*time.Second, func() bool { return stateCallbacks >= 10 }) {
+			t.Fatalf("timed out waiting for diagnostic property sampling; %s", diagnostic())
 		}
 
 		if err := pumpFLTKError(t, 15*time.Second, engine.Close); err != nil {

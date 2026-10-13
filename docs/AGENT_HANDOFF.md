@@ -7,8 +7,8 @@ instruction_version: v2.4.1
 status: IN_PROGRESS
 repository:
   branch: main
-  observed_head: 3022551d8b2fae1b0aeeef285a41d15e16a6fb61
-  working_tree: "3022551 fully pushed/exact CI38438012680 PASS. Local final evidence/human docs pending owner result. Preserve AGENTS/.codex/data."
+  observed_head: 07851b10d158209b751310a05671467cb1398fad
+  working_tree: "07851b1 opt-in diagnostics fully pushed; exact CI38440836069 pending. Preserve AGENTS/.codex/data."
 active_loop:
   number: 30
   state: "Owner confirms3022551 hide/show works; video stutter audio normal persists. Opt-in local numeric playback diagnostic in progress; root cause unknown, not PASS."
@@ -27,7 +27,7 @@ boundaries:
   - "Only current Loop30; scoped commit/push approved. No release/Loop31. Exclude AGENTS/.codex/artifacts/data."
   - "Necessary TypeSafe uploads/BWS memory-only key authorized. No new runtime AI feature."
 next:
-  - "Worker owns fltkengine-only default-off local diagnostics; root owns privacy/scope/review/docs/push/CI and one-click diagnostic launcher. Await actual runtime metrics before any playback tuning. Latest-only cleanup after each download remains required."
+  - "FirstCI38440836069 glyphoracle failed because5swait preceded3shide visibilitycheck; two-file reviewed typedpointer/wait-order repair saved. Exact newCI needed; localGo1.27.2 pure rerun environmentblocked. Await runtime report before any playback tuning. Latest-only cleanup after each download remains required."
   - "Only actual human PASS permits final closure docs/approved push; otherwise correct only reported criterion."
 references:
   - "docs/LOOP30_HUMAN_CHECK.md; LOOP30_DETAIL.md; LOOP30_REQUIREMENTS_REVIEW.md."

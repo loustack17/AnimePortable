@@ -19,6 +19,7 @@ import (
 	mpv "animeportable/apps/desktop/fltkengine/internal/mpvwin"
 	"animeportable/core"
 	"animeportable/internal/runtimepin"
+	"github.com/ebitengine/purego"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
@@ -27,6 +28,9 @@ var errSeekPending = errors.New("seek has not completed")
 
 var opengl = syscall.NewLazyDLL("opengl32.dll")
 var wglGetProcAddress = opengl.NewProc("wglGetProcAddress")
+var glGetStringProc = opengl.NewProc("glGetString")
+var glGetStringOnce sync.Once
+var glGetStringFunc func(uint32) *byte
 
 type Engine struct {
 	video            *fltk.GlWindow
@@ -154,14 +158,22 @@ func glProc(name string) uintptr {
 	return proc.Addr()
 }
 
-func openGLString(name uintptr) string {
-	address, _, _ := opengl.NewProc("glGetString").Call(name)
-	if address == 0 {
+func openGLString(name uint32) string {
+	glGetStringOnce.Do(func() {
+		if glGetStringProc.Find() == nil {
+			purego.RegisterFunc(&glGetStringFunc, glGetStringProc.Addr())
+		}
+	})
+	if glGetStringFunc == nil {
+		return ""
+	}
+	address := glGetStringFunc(name)
+	if address == nil {
 		return ""
 	}
 	bytes := make([]byte, 0, 128)
-	for index := uintptr(0); index < 128; index++ {
-		value := *(*byte)(unsafe.Add(unsafe.Pointer(address), index))
+	for index := 0; index < 128; index++ {
+		value := *(*byte)(unsafe.Add(unsafe.Pointer(address), uintptr(index)))
 		if value == 0 {
 			break
 		}
