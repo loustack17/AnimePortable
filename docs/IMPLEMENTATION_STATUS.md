@@ -4,7 +4,57 @@
 
 ## Current loop
 
-### 2026-10-08 Player owner regressions — implementation, CI pending
+### 2026-10-13 Loop 30 — cover repair LOCAL_VERIFIED / NEEDS_HUMAN
+
+Both strict cover findings are resolved in the owner-authorized docs-only bounded pass. Proportional letterboxing preserves source aspect; absent cover uses the existing not-found sentinel and neutral UI, genuine failures remain retryable. Fresh simplify, scoped independent PASS_REVIEW and root corroboration leave zero unresolved MUST_FIX. CGO0 desktop/backend/architecture/contracts, backendvet, format and diff PASS. Native/build/race and owner NOT_RUN; no commit/push. Owner subsequently authorized final verification/review then scoped commit/push. Current evidence: artifacts/evidence/loop30/cover-repair-final-evidence.json. The prior failed review below is historical and superseded.
+
+### 2026-10-13 Loop 30 — historical strict review FAIL_REVIEW
+
+The owner required a fresh simplify-first gate before strict requirements review and any CI permission question. Simplify completed without edits; eight source/test hashes still match the saved local PASS evidence. A fresh independent reviewer and root source verification confirmed two P2/MUST_FIX findings: fixed-size cover decoding distorts original aspect, and missing optional cover metadata is shown as a transient load failure with Retry. This supersedes the earlier zero-MUST_FIX conclusion. Findings, requirement mapping, tests and limitations are recorded in `docs/LOOP30_REQUIREMENTS_REVIEW.md`.
+
+No new source edits, commit, push, native execution or CI occurred. Pure verification evidence remains hash-bound; native/build/race and owner gates remain NOT_RUN. Corrective rounds remain5/5, requiring renewed bounded repair scope. Do not ask CI permission until the confirmed findings are repaired, simplified, verified and independently reviewed.
+
+### 2026-10-13 Loop 30 — historical local checkpoint (superseded by strict review)
+
+The Phase24 detail and episode UI is implemented within eight `apps/desktop/fltkhome/` source/test files. Final pure Home/Search/appearance/play-entry/detail tests and vet, desktop/backend/architecture/contract regression, formatting and diff checks pass. Simplify and independent final source review are complete with no unresolved MUST_FIX. Current exact hashes/results are in `artifacts/evidence/loop30/final-local-verification.json` and `final-independent-review.json`.
+
+Five bounded correction rounds resolved keyboard selection/focus, playback failure recovery, cover loading/scaling and minimum-window geometry/scroll visibility. Final TypeSafe lifecycle supports review; scope/verification uncertainty was adjudicated independently with no scope violation or false-PASS finding. Raw judgments are retained in `final-reviewed-judgments.json`.
+
+Loop30 native Windows CI/build/race and owner acceptance remain NOT_RUN. The local native cgo breaker remains closed; no host execution counts as PASS. Commit/push permission is pending. The final current scope, gates and budget are in `docs/LOOP30_DETAIL.md`; the exact executable/package is not yet prepared, and `docs/LOOP30_HUMAN_CHECK.md` explicitly waits for it. Loop30 is not PASS.
+
+### 2026-10-13 Loop 30 — historical saved recovery checkpoint
+
+Local detail model/cover/view implementation and native regressions are saved. Pure Home/Search/appearance/play-entry/detail model tests and vet, plus backend/architecture/contract tests, passed. Independent review identified two remaining keyboard fixes: arrows must start from the focused row; asynchronous episode/history rerender must retain row focus. Agents hit their usage limit before final code sign-off. Exact files, resolved/open findings and next gates are recorded in `docs/LOOP30_DETAIL.md` recovery checkpoint. Loop30 native CI/build and owner acceptance remain NOT_RUN; no completion or push is claimed.
+
+### 2026-10-12 Loop 30 — historical startup checkpoint
+
+The owner requested Phase24 detail/episode UI strictly from the docs, within the remaining 18% five-hour usage, using OMO and TypeSafe with BWS. The contract is `docs/LOOP30_DETAIL.md`. Baseline90a7fc9 remains unchanged in Git; Loop29 and its player follow-up are PASS with closure documentation retained locally.
+
+A read-only explorer mapped FUNC-004/005 and UX/QUAL gates to existing backend Detail/Episodes/History/GetCover actions. A single implementation worker owns the scoped `apps/desktop/fltkhome/` changes; root owns integration, tests, evidence and handoff. No provider/core/schema/dependency/workflow/release changes are in scope. No commit/push is authorized. Final native Windows CI/build and owner acceptance are not yet run; Loop30 is not PASS.
+
+TypeSafe skill/current API/Score/citation-check guidance was read. The initial BWS/API escalation was rejected because private payload upload authorization was not explicit; the owner then explicitly authorized necessary Loop30 requirements/plan/code uploads. BWS key retrieval and TypeSafe evaluation succeeded with the key memory-only. Plan judgments (`plan-judgments.json`, jev1.13.0): scope1.42/confidence0.37 and lifecycle1.56/0.34 require independent review because code evidence is not present; verification1.93/0.90 supports truthful pending-gate status. Raw probabilities/confidence are retained. Baseline sandbox CGO0 backend/architecture/contract tests passed.
+
+## Latest completed loop
+
+### 2026-10-12 Loop 29 and player follow-up — PASS
+
+Original Loop 29 remains PASS by the owner's 2026-10-08 acceptance of `2d4bf48`. On 2026-10-12 the owner replied "四項皆通過" to the current `90a7fc9985bd5ab17b1198333567324fd69d2e8a` request covering Search/Continue/different-title/restart playback, focus/Space/Enter, physical media keys/fullscreen, episode selection and Home spacing. Together with exact final Windows CI and independent reviews, this closes the later player follow-up as PASS. No commit, push, workflow control or release mutation was performed in this reconciliation.
+
+GitHub `main`, local `main` and existing `origin/main` resolve to that exact commit; the local and remote committed tree is `ad35ca1f1f6ed41fb2b61eecc23c254701454ed0`. All 31 commits since Loop 28 completion `9950c80` are on GitHub. The unrelated local `AGENTS.md` edit and four untracked `.codex/` files are preserved. Generated `artifacts/` are intentionally ignored.
+
+[Windows CI37735609430](https://github.com/loustack17/AnimePortable/actions/runs/37735609430), job113174310707, passed every required step for exact `90a7fc9`: formatting, module verification, full native tests, 20-repeat lifecycle checks, Anime1 acceptance, full race detector, vet, vulnerability scan, dependency closure/build, portable startup, clean worktree and artifact upload. The scan found no reachable vulnerabilities and one advisory in a required module not called by this code. Earlier CI37734182237 (`64beef0`) and CI37735227917 (`c2a7fef`) remain FAIL; the corrected native fixtures passed without weakened assertions or workflow changes. Fresh independent read-only reviews found no confirmed MUST_FIX in Search/Home or startup/native-input changes. Local native cgo remains unavailable under the recorded circuit breaker; no host run counts as PASS.
+
+Artifact11531134639, `windows-desktop-90a7fc9985bd5ab17b1198333567324fd69d2e8a`, was freshly downloaded. Its archive SHA-256 matches GitHub's digest `568a45e9b6083bbe2f62eedbb652ffc10a11d422e9d96d080689e48ffff9f7fe`. Its sole executable matches the delivered `artifacts/loop29/AnimePortable.exe`, retained download and executable inside `AnimePortable-player-input-90a7fc9.zip`: SHA-256 `be4d9961c6d8c97d6d5fcc7aa470034ce6e433b9c949f13f3f1e43db9464e011`. Portable ZIP SHA-256: `cd788512fc0220f55e8fe3801c1eba070a6a0cc6d3cb50c7ddf0908273ceee85`. Its five entries contain the exact executable, pinned DLL, license and full notices, with no personal data. The database matches the retained replacement-before hash `2cf4b278ae224f393e1242e6631636b1c4bde5f1a43c312547576e5541fdd718`; this reconciliation does not replace the executable or open/mutate portable data. Raw verification is retained in `artifacts/evidence/player-keyboard/90a7fc9-test-object.json` and `90a7fc9-ci.log`.
+
+The handoff and current test-object references are corrected. The accepted `artifacts/loop29/AnimePortable-loop29-2d4bf48.zip` remains the rollback package; no schema migration is involved. The four current checks in `docs/LOOP29_HUMAN_CHECK.md` and the related `docs/PLAYER_KEYBOARD_FOLLOWUP.md` contract are owner-accepted on `90a7fc9`. This records the tested behaviors, not a guarantee against all future provider/network failures. Loop 29 and its bounded follow-up are closed; Loop 30 was not started. Local documentation remains uncommitted until explicitly requested.
+
+Fresh local sandbox verification passed `CGO_ENABLED=0 go test -count=20 ./apps/desktop -run '^TestPlayback(EpisodeLookupDoesNotBlockControls|FailureSkipsEpisodeLookup|EpisodeLookupCompletionReleasesContext)$'` using Go1.27.2, disposable repository cache/temp and disabled module downloads. Documentation links, package entry hashes, handoff size and `git diff --check` passed. No production code, tests, dependency or workflow changed; exact `90a7fc9` Windows CI remains the native verifier. TypeSafe guidance separates these deterministic facts from independent review and actual human judgment; no document-upload API call or runtime AI integration was added.
+
+Final independent documentation review returned PASS_REVIEW after corroborating the retained CI log/job JSON and the separation of automated verification from owner acceptance. Task-created duplicate CI archive and disposable Go cache/temp were removed after path checks; source, evidence, existing packages and rollback were retained. Unrelated instruction/config hashes are unchanged. The data hashes matched before the owner acceptance request. After the owner closed the app, final repeated hash reads confirmed the main database still matches the baseline; playback-created WAL/SHM files were recorded and preserved. No process was terminated and no portable data was changed by this task.
+
+## Verification history
+
+### 2026-10-08 Player owner regressions — historical implementation/CI-pending checkpoint
 
 The owner reports random Search/Continue loading followed by Home after about 20 seconds, no error screen and no specific episode; hardware keyboard media keys and focused Space also fail. Loop 29 stays PASS, this bounded follow-up is reopened. Source tracing identifies only synchronous Service.Play failure as the Home-return path. No configured 20-second deadline or seek loadfile was found. Three live source/proxy probes and three saved-Continue backend probes succeeded; one episode-list lookup took 5.351 seconds. Exact dc2e361 played saved Continue in a disposable native portable copy. These host/network diagnostics do not count as native verifier PASS and do not prove the intermittent failure fixed. Diagnostic app exited normally; original portable data was not used for playback.
 

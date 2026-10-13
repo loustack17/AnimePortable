@@ -1,0 +1,136 @@
+// SPDX-License-Identifier: MPL-2.0
+
+package fltkhome
+
+import "animeportable/apps/desktop/backend"
+
+const detailEpisodePageSize = 8
+
+type detailModel struct {
+	animeID  string
+	episodes []backend.Episode
+	history  map[string]backend.History
+	selected int
+	page     int
+}
+
+func (model *detailModel) open(animeID string) {
+	model.animeID = animeID
+	model.episodes = nil
+	model.history = nil
+	model.selected = 0
+	model.page = 0
+}
+
+func (model *detailModel) close() {
+	model.open("")
+}
+
+func (model *detailModel) setEpisodes(episodes []backend.Episode) {
+	selectedID := model.selectedEpisodeID()
+	model.episodes = append(model.episodes[:0], episodes...)
+	model.selected = 0
+	if selectedID != "" {
+		for index, episode := range model.episodes {
+			if episode.ID == selectedID {
+				model.selected = index
+				break
+			}
+		}
+	}
+	model.page = model.selected / detailEpisodePageSize
+}
+
+func (model *detailModel) setHistory(history []backend.History) {
+	model.history = make(map[string]backend.History)
+	for _, item := range history {
+		if item.AnimeID == model.animeID && item.EpisodeID != "" {
+			model.history[item.EpisodeID] = item
+		}
+	}
+}
+
+func (model *detailModel) visibleEpisodes() []backend.Episode {
+	start := model.page * detailEpisodePageSize
+	if start >= len(model.episodes) {
+		return nil
+	}
+	return model.episodes[start:min(len(model.episodes), start+detailEpisodePageSize)]
+}
+
+func (model *detailModel) selectedEpisodeID() string {
+	if model.selected < 0 || model.selected >= len(model.episodes) {
+		return ""
+	}
+	return model.episodes[model.selected].ID
+}
+
+func (model *detailModel) selectEpisode(index int) {
+	if len(model.episodes) == 0 {
+		model.selected = 0
+		model.page = 0
+		return
+	}
+	model.selected = max(0, min(len(model.episodes)-1, index))
+	model.page = model.selected / detailEpisodePageSize
+}
+
+func (model *detailModel) moveSelection(delta int) {
+	model.selectEpisode(model.selected + delta)
+}
+
+func (model *detailModel) movePage(delta int) {
+	if len(model.episodes) == 0 || delta == 0 {
+		return
+	}
+	lastPage := (len(model.episodes) - 1) / detailEpisodePageSize
+	model.page = max(0, min(lastPage, model.page+delta))
+	model.selected = model.page * detailEpisodePageSize
+}
+
+func (model *detailModel) playRequest() (backend.PlayRequest, bool) {
+	if model.animeID == "" || model.selected < 0 || model.selected >= len(model.episodes) {
+		return backend.PlayRequest{}, false
+	}
+	episode := model.episodes[model.selected]
+	if episode.ID == "" || episode.AnimeID != "" && episode.AnimeID != model.animeID {
+		return backend.PlayRequest{}, false
+	}
+	return backend.PlayRequest{AnimeID: model.animeID, EpisodeID: episode.ID}, true
+}
+
+func (model *detailModel) continueRequest() (backend.PlayRequest, bool) {
+	var selected backend.History
+	found := false
+	for _, episode := range model.episodes {
+		history, ok := model.history[episode.ID]
+		if !ok || episode.ID == "" || episode.AnimeID != "" && episode.AnimeID != model.animeID || history.Completed || history.Position <= 0 {
+			continue
+		}
+		if !found || historyOrder(history) > historyOrder(selected) {
+			selected = history
+			found = true
+		}
+	}
+	if !found || model.animeID == "" {
+		return backend.PlayRequest{}, false
+	}
+	return backend.PlayRequest{AnimeID: model.animeID, EpisodeID: selected.EpisodeID, StartAt: selected.Position}, true
+}
+
+func (model *detailModel) episodeHistory(episode backend.Episode) (backend.History, bool) {
+	history, ok := model.historyEntry(episode)
+	return history, ok && episode.ID != "" && !history.Completed && history.Position > 0
+}
+
+func (model *detailModel) historyEntry(episode backend.Episode) (backend.History, bool) {
+	history, ok := model.history[episode.ID]
+	return history, ok && episode.ID != "" && history.AnimeID == model.animeID
+}
+
+func historyOrder(item backend.History) string {
+	if item.UpdatedAt != "" {
+		return item.UpdatedAt
+	}
+	return item.LastPlayed
+}

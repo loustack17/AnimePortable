@@ -526,6 +526,9 @@ func (service *Service) GetCover(ctx context.Context, animeID string) (Cover, er
 	if err != nil {
 		return Cover{}, safeError(err)
 	}
+	if metadataValue.CoverURL == "" {
+		return Cover{}, core.ErrNotFound
+	}
 	result, err := loader.Load(operationCtx, metadataValue.CoverURL)
 	if err != nil {
 		return Cover{}, safeError(err)

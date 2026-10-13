@@ -63,6 +63,13 @@ type view struct {
 	homeRefreshPending bool
 	homeLoadGeneration uint64
 	searchModel        searchModel
+	detailModel        detailModel
+	detailCancel       context.CancelFunc
+	detailGeneration   uint64
+	detailEpisodesDone bool
+	detailEpisodesErr  bool
+	detailHistoryErr   bool
+	detailCoverErr     bool
 	searchPage         *fltk.Group
 	searchInput        *fltk.Input
 	searchButton       *fltk.Button
@@ -79,6 +86,18 @@ type view struct {
 	previewTitle       *fltk.Box
 	previewNative      *fltk.Box
 	previewDescription *fltk.Box
+	previewMeta        *fltk.Box
+	previewCover       *fltk.Box
+	previewEpisodes    *fltk.Scroll
+	previewEpisodeRows []*fltk.Button
+	previewEpisodeIDs  []string
+	previewEpisodeText *fltk.Box
+	previewPrevious    *fltk.Button
+	previewNext        *fltk.Button
+	previewContinue    *fltk.Button
+	previewRetry       *fltk.Button
+	previewStatus      *fltk.Box
+	previewCoverImage  *fltk.RgbImage
 	searchPreview      bool
 	pageGeneration     uint64
 	searchInputVersion uint64
@@ -349,10 +368,12 @@ func (ui *view) showSection(index int) {
 	}
 	if index == 4 && ui.searchPreview {
 		ui.pageGeneration++
+		ui.stopDetailLoad()
 		ui.searchModel.cancel()
 		ui.searchPreview = false
 	}
 	if ui.selected == 4 && index != 4 {
+		ui.stopDetailLoad()
 		ui.searchModel.cancel()
 		ui.searchPreview = false
 	}
@@ -829,6 +850,7 @@ func (ui *view) cancel() {
 		ui.homeLoading = false
 		ui.homeRefreshPending = false
 		ui.searchModel.close()
+		ui.stopDetailLoad()
 		ui.mainGroup.Deactivate()
 		ui.themeToggle.Deactivate()
 		go func() {

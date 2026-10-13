@@ -71,19 +71,62 @@ func (ui *view) buildSearchView() {
 	ui.previewBack = fltk.NewButton(252, 118, 113, 38, "返回結果")
 	ui.styleButton(ui.previewBack, nil)
 	ui.bindSearchButton(ui.previewBack, ui.backToSearchResults)
-	ui.previewPlay = fltk.NewButton(385, 118, 165, 38, "播放第一集")
+	ui.previewPlay = fltk.NewButton(385, 118, 142, 38, "播放選取集數")
 	ui.styleButton(ui.previewPlay, nil)
-	ui.bindSearchButton(ui.previewPlay, ui.playSearchPreview)
-	ui.previewTitle = fltk.NewBox(fltk.NO_BOX, 252, 174, 705, 46, "")
+	ui.bindSearchButton(ui.previewPlay, ui.playSelectedDetailEpisode)
+	ui.previewContinue = fltk.NewButton(539, 118, 126, 38, "繼續觀看")
+	ui.styleButton(ui.previewContinue, nil)
+	ui.bindSearchButton(ui.previewContinue, ui.continueDetailEpisode)
+	ui.previewRetry = fltk.NewButton(677, 118, 96, 38, "重試載入")
+	ui.styleButton(ui.previewRetry, nil)
+	ui.bindSearchButton(ui.previewRetry, ui.retryDetailLoad)
+	ui.previewRetry.Hide()
+	ui.previewTitle = fltk.NewBox(fltk.NO_BOX, 252, 166, 408, 42, "")
 	ui.previewTitle.SetLabelFont(fltk.HELVETICA_BOLD)
-	ui.previewTitle.SetLabelSize(22)
+	ui.previewTitle.SetLabelSize(20)
 	ui.previewTitle.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
-	ui.previewNative = fltk.NewBox(fltk.NO_BOX, 252, 226, 705, 38, "")
-	ui.previewNative.SetLabelSize(15)
+	ui.previewCover = fltk.NewBox(fltk.NO_BOX, 252, 215, 166, 248, "封面載入中…")
+	ui.previewCover.SetAlign(fltk.ALIGN_CENTER | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
+	ui.previewCover.SetDrawHandler(func(defaultDraw func()) {
+		if ui.previewCoverImage != nil {
+			imageWidth, imageHeight := ui.previewCoverImage.DataW(), ui.previewCoverImage.DataH()
+			drawWidth, drawHeight := ui.previewCover.W(), ui.previewCover.H()
+			if drawWidth*imageHeight > drawHeight*imageWidth {
+				drawWidth = drawHeight * imageWidth / imageHeight
+			} else {
+				drawHeight = drawWidth * imageHeight / imageWidth
+			}
+			ui.previewCoverImage.Scale(drawWidth, drawHeight, true, false)
+			ui.previewCoverImage.Draw(ui.previewCover.X()+(ui.previewCover.W()-drawWidth)/2, ui.previewCover.Y()+(ui.previewCover.H()-drawHeight)/2, drawWidth, drawHeight)
+		} else {
+			defaultDraw()
+		}
+	})
+	ui.previewNative = fltk.NewBox(fltk.NO_BOX, 434, 212, 226, 34, "")
+	ui.previewNative.SetLabelSize(14)
 	ui.previewNative.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
-	ui.previewDescription = fltk.NewBox(fltk.NO_BOX, 252, 278, 705, 300, "")
+	ui.previewMeta = fltk.NewBox(fltk.NO_BOX, 434, 249, 226, 65, "")
+	ui.previewMeta.SetLabelSize(13)
+	ui.previewMeta.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_TOP | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
+	ui.previewDescription = fltk.NewBox(fltk.NO_BOX, 434, 318, 226, 182, "")
 	ui.previewDescription.SetLabelSize(14)
 	ui.previewDescription.SetAlign(fltk.ALIGN_TOP | fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
+	ui.previewStatus = fltk.NewBox(fltk.NO_BOX, 684, 166, 273, 28, "")
+	ui.previewStatus.SetLabelSize(12)
+	ui.previewStatus.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
+	ui.previewEpisodes = fltk.NewScroll(684, 197, 273, 317)
+	ui.previewEpisodes.SetType(fltk.SCROLL_VERTICAL)
+	ui.previewEpisodes.SetBox(fltk.FLAT_BOX)
+	ui.previewEpisodes.End()
+	ui.previewEpisodeText = fltk.NewBox(fltk.NO_BOX, 684, 519, 166, 25, "")
+	ui.previewEpisodeText.SetLabelSize(11)
+	ui.previewEpisodeText.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
+	ui.previewPrevious = fltk.NewButton(684, 547, 92, 34, "上一頁")
+	ui.styleButton(ui.previewPrevious, nil)
+	ui.bindSearchButton(ui.previewPrevious, func() { ui.detailModel.movePage(-1); ui.renderDetailEpisodes() })
+	ui.previewNext = fltk.NewButton(865, 547, 92, 34, "下一頁")
+	ui.styleButton(ui.previewNext, nil)
+	ui.bindSearchButton(ui.previewNext, func() { ui.detailModel.movePage(1); ui.renderDetailEpisodes() })
 	ui.previewGroup.End()
 	ui.previewGroup.Hide()
 
@@ -99,6 +142,10 @@ func (ui *view) buildSearchView() {
 		}
 		if ui.selected == 4 && ui.searchInput.HasFocus() {
 			return false
+		}
+		if ui.selected == 4 && ui.searchPreview && key == 32 {
+			ui.deferredSearchAction(ui.playSelectedDetailEpisode, true)()
+			return true
 		}
 		if key == 'k' || key == 'K' {
 			if state&fltk.CTRL != 0 {
@@ -127,7 +174,7 @@ func (ui *view) buildSearchView() {
 }
 
 func (ui *view) bindSearchButton(button *fltk.Button, action func()) {
-	previewAction := button == ui.previewBack || button == ui.previewPlay
+	previewAction := button == ui.previewBack || button == ui.previewPlay || button == ui.previewContinue || button == ui.previewRetry || button == ui.previewPrevious || button == ui.previewNext
 	activate := ui.deferredSearchAction(action, previewAction)
 	button.SetCallback(activate)
 	button.SetEventHandler(func(event fltk.Event) bool {
@@ -235,7 +282,15 @@ func (ui *view) startRemoteSearch() {
 }
 
 func (ui *view) openSearchResult(item backend.Anime) {
+	ui.stopDetailLoad()
+	ui.detailModel.open(item.ID)
+	ui.detailEpisodesDone = false
+	ui.detailEpisodesErr = false
+	ui.detailHistoryErr = false
+	ui.detailCoverErr = false
+	ui.previewCover.SetLabel("封面載入中…")
 	ui.pageGeneration++
+	detailGeneration := ui.detailGeneration
 	request, ctx, ok := ui.searchModel.beginDetail(item)
 	if !ok {
 		ui.searchModel.queueDetail(item)
@@ -243,6 +298,7 @@ func (ui *view) openSearchResult(item backend.Anime) {
 		ui.searchPage.Hide()
 		ui.previewGroup.Show()
 		ui.renderPreview()
+		ui.renderDetailEpisodes()
 		ui.previewBack.TakeFocus()
 		return
 	}
@@ -250,6 +306,7 @@ func (ui *view) openSearchResult(item backend.Anime) {
 	ui.searchPage.Hide()
 	ui.previewGroup.Show()
 	ui.renderPreview()
+	ui.renderDetailEpisodes()
 	ui.previewBack.TakeFocus()
 	if ui.service == nil {
 		ui.searchModel.finishDetail(request, backend.Detail{}, fmt.Errorf("service unavailable"))
@@ -259,9 +316,12 @@ func (ui *view) openSearchResult(item backend.Anime) {
 	go func() {
 		detail, err := ui.service.Detail(ctx, item.ID)
 		fltk.Awake(func() {
-			ui.searchModel.finishDetail(request, detail, err)
+			applied := ui.searchModel.finishDetail(request, detail, err)
 			if ui.ctx.Err() != nil || ui.closing {
 				return
+			}
+			if applied && err == nil && ui.detailGeneration == detailGeneration && ui.searchPreview {
+				ui.loadDetailResources(detailGeneration, item.ID)
 			}
 			if ui.selected == 4 {
 				ui.refreshSearchView()
@@ -403,6 +463,7 @@ func (ui *view) renderPreview() {
 	}
 	item := ui.searchModel.previewItem
 	title, native, description := item.Title, item.NativeTitle, item.Description
+	metadata := ""
 	status := ""
 	if ui.searchModel.phase == searchPhaseLoading {
 		if ui.searchModel.active.kind == searchRequestPlayback {
@@ -438,22 +499,61 @@ func (ui *view) renderPreview() {
 			if strings.TrimSpace(detail.Metadata.Description) != "" {
 				description = detail.Metadata.Description
 			}
+			metadata = detailMetadataLabel(detail.Metadata)
 		}
 	}
 	ui.previewTitle.SetLabel(title)
 	ui.previewTitle.SetTooltip(title)
 	ui.previewNative.SetLabel(native)
 	ui.previewNative.SetTooltip(native)
+	ui.previewMeta.SetLabel(metadata)
 	if status != "" && description != "" {
 		status += "\n\n"
 	}
 	ui.previewDescription.SetLabel(status + truncateSearchDescription(description))
-	if ui.searchModel.preview != nil && !ui.searchModel.requestActive && ui.onPlay != nil {
+	if ui.previewCoverImage == nil && ui.previewCover.Label() == "" {
+		ui.previewCover.SetLabel("目前沒有封面")
+	}
+	if ui.searchModel.preview != nil && len(ui.detailModel.episodes) > 0 && !ui.searchModel.requestActive && ui.onPlay != nil {
 		ui.previewPlay.Activate()
 	} else {
 		ui.previewPlay.Deactivate()
 	}
+	if _, ok := ui.detailModel.continueRequest(); ok && !ui.searchModel.requestActive && ui.onPlay != nil {
+		ui.previewContinue.Activate()
+	} else {
+		ui.previewContinue.Deactivate()
+	}
+	if ui.searchModel.phase == searchPhaseFailed || ui.detailEpisodesErr || ui.detailHistoryErr || ui.detailCoverErr {
+		ui.previewRetry.Show()
+	} else {
+		ui.previewRetry.Hide()
+	}
 	ui.applyTheme()
+}
+
+func detailMetadataLabel(metadata *backend.Metadata) string {
+	if metadata == nil {
+		return ""
+	}
+	values := make([]string, 0, 4)
+	if metadata.Season != "" || metadata.Year != 0 {
+		season := metadata.Season
+		if metadata.Year != 0 {
+			if season != "" {
+				season += " "
+			}
+			season += fmt.Sprint(metadata.Year)
+		}
+		values = append(values, season)
+	}
+	if metadata.Studio != "" {
+		values = append(values, "製作："+metadata.Studio)
+	}
+	if metadata.EpisodeCount > 0 {
+		values = append(values, fmt.Sprintf("共 %d 集", metadata.EpisodeCount))
+	}
+	return strings.Join(values, "\n")
 }
 
 func (ui *view) searchStatusText() string {
@@ -553,6 +653,7 @@ func (ui *view) searchEscape() {
 
 func (ui *view) backToSearchResults() {
 	ui.pageGeneration++
+	ui.stopDetailLoad()
 	ui.searchModel.cancel()
 	ui.searchPreview = false
 	ui.previewGroup.Hide()
@@ -580,11 +681,44 @@ func (ui *view) resizeSearch() {
 	ui.searchPrevious.Resize(252, footerY, 113, 36)
 	ui.searchPageText.Resize(365, footerY+2, max(220, width-450), 28)
 	ui.searchNext.Resize(right-113, footerY, 113, 36)
-	ui.previewBack.Resize(252, 118, 113, 38)
-	ui.previewPlay.Resize(385, 118, 165, 38)
-	ui.previewTitle.Resize(252, 174, width-32, 46)
-	ui.previewNative.Resize(252, 226, width-32, 38)
-	ui.previewDescription.Resize(252, 278, width-32, max(140, height-168))
+	buttonWidths := [4]int{min(113, max(96, width*22/100)), min(142, max(116, width*28/100)), min(126, max(100, width*25/100)), min(96, max(75, width*19/100))}
+	buttonSpacing := 8
+	buttonTotalWidth := 0
+	for _, buttonWidth := range buttonWidths {
+		buttonTotalWidth += buttonWidth
+	}
+	buttonAvailableWidth := width - 32 - buttonSpacing*(len(buttonWidths)-1)
+	if buttonTotalWidth > buttonAvailableWidth {
+		for index := range buttonWidths[:len(buttonWidths)-1] {
+			buttonWidths[index] = buttonWidths[index] * buttonAvailableWidth / buttonTotalWidth
+		}
+		buttonWidths[len(buttonWidths)-1] = buttonAvailableWidth
+		for _, buttonWidth := range buttonWidths[:len(buttonWidths)-1] {
+			buttonWidths[len(buttonWidths)-1] -= buttonWidth
+		}
+	}
+	buttonX := 252
+	for index, button := range []*fltk.Button{ui.previewBack, ui.previewPlay, ui.previewContinue, ui.previewRetry} {
+		button.Resize(buttonX, 118, buttonWidths[index], 38)
+		buttonX += buttonWidths[index] + buttonSpacing
+	}
+	coverWidth := max(120, width*23/100)
+	episodeWidth := max(150, width*34/100)
+	episodeX := 236 + width - episodeWidth - 20
+	metaX := 252 + coverWidth + 16
+	metaWidth := max(150, episodeX-metaX-20)
+	ui.previewTitle.Resize(252, 166, max(250, episodeX-272), 42)
+	ui.previewCover.Resize(252, 215, coverWidth, min(286, max(160, height-239)))
+	ui.previewNative.Resize(metaX, 212, metaWidth, 34)
+	ui.previewMeta.Resize(metaX, 249, metaWidth, 65)
+	ui.previewDescription.Resize(metaX, 318, metaWidth, max(100, 110+height-318-24))
+	ui.previewStatus.Resize(episodeX, 166, episodeWidth, 28)
+	episodeFooterY := 110 + height - 76
+	ui.previewEpisodes.Resize(episodeX, 197, episodeWidth, max(120, episodeFooterY-205))
+	ui.previewEpisodeText.Resize(episodeX, episodeFooterY, max(70, episodeWidth-110), 25)
+	ui.previewPrevious.Resize(episodeX, episodeFooterY+28, 92, 34)
+	ui.previewNext.Resize(episodeX+episodeWidth-92, episodeFooterY+28, 92, 34)
+	ui.resizeDetailEpisodeRows()
 	for index, button := range ui.searchRows {
 		button.Resize(ui.searchScroll.X()+15, ui.searchScroll.Y()+9+index*45, max(300, ui.searchScroll.W()-35), 40)
 	}

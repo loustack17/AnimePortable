@@ -137,6 +137,9 @@ func (ui *view) applyTheme() {
 		ui.previewTitle.SetLabelColor(colors.ink)
 		ui.previewNative.SetLabelColor(colors.muted)
 		ui.previewDescription.SetLabelColor(colors.ink)
+		ui.previewMeta.SetLabelColor(colors.muted)
+		ui.previewStatus.SetLabelColor(colors.muted)
+		ui.previewCover.SetLabelColor(colors.muted)
 		ui.searchInput.Redraw()
 		ui.searchScroll.Redraw()
 		ui.searchStatus.Redraw()
@@ -144,7 +147,13 @@ func (ui *view) applyTheme() {
 		ui.previewTitle.Redraw()
 		ui.previewNative.Redraw()
 		ui.previewDescription.Redraw()
-		for _, button := range append(append([]*fltk.Button(nil), ui.searchRows...), ui.searchButton, ui.searchBack, ui.searchPrevious, ui.searchNext, ui.previewBack, ui.previewPlay) {
+		ui.previewMeta.Redraw()
+		ui.previewStatus.Redraw()
+		ui.previewCover.Redraw()
+		ui.previewEpisodes.Redraw()
+		ui.previewEpisodeText.SetLabelColor(colors.muted)
+		ui.previewEpisodeText.Redraw()
+		for _, button := range append(append(append([]*fltk.Button(nil), ui.searchRows...), ui.previewEpisodeRows...), ui.searchButton, ui.searchBack, ui.searchPrevious, ui.searchNext, ui.previewBack, ui.previewPlay, ui.previewContinue, ui.previewRetry, ui.previewPrevious, ui.previewNext) {
 			button.Redraw()
 		}
 	}

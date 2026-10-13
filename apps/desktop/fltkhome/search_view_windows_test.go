@@ -5,9 +5,13 @@
 package fltkhome
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -16,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
@@ -25,6 +30,15 @@ type searchViewTestService struct {
 	libraryErr   error
 	appearance   string
 	episodes     func(context.Context, string) ([]backend.Episode, error)
+}
+
+type coverSearchViewTestService struct {
+	*searchViewTestService
+	coverErr error
+}
+
+func (service *coverSearchViewTestService) GetCover(context.Context, string) (backend.Cover, error) {
+	return backend.Cover{}, service.coverErr
 }
 
 func (service *searchViewTestService) Start(context.Context) error { return nil }
@@ -99,6 +113,7 @@ func newSearchViewTestFixture(t *testing.T, service Service) *view {
 	window.End()
 	ui.mainGroup.Show()
 	t.Cleanup(func() {
+		ui.stopDetailLoad()
 		ui.searchModel.close()
 		cancel()
 		window.Hide()
@@ -168,6 +183,32 @@ func TestNativeSearchViewBoundsRowsParentsFooterAndReflows(t *testing.T) {
 	}
 	ui.window.Resize(0, 0, 760, 480)
 	ui.resizeSearch()
+	for _, child := range []struct {
+		name string
+		x    int
+		y    int
+		w    int
+		h    int
+	}{
+		{name: "episode status", x: ui.previewStatus.X(), y: ui.previewStatus.Y(), w: ui.previewStatus.W(), h: ui.previewStatus.H()},
+		{name: "episode list", x: ui.previewEpisodes.X(), y: ui.previewEpisodes.Y(), w: ui.previewEpisodes.W(), h: ui.previewEpisodes.H()},
+		{name: "episode page text", x: ui.previewEpisodeText.X(), y: ui.previewEpisodeText.Y(), w: ui.previewEpisodeText.W(), h: ui.previewEpisodeText.H()},
+		{name: "previous page", x: ui.previewPrevious.X(), y: ui.previewPrevious.Y(), w: ui.previewPrevious.W(), h: ui.previewPrevious.H()},
+		{name: "next page", x: ui.previewNext.X(), y: ui.previewNext.Y(), w: ui.previewNext.W(), h: ui.previewNext.H()},
+		{name: "back action", x: ui.previewBack.X(), y: ui.previewBack.Y(), w: ui.previewBack.W(), h: ui.previewBack.H()},
+		{name: "play action", x: ui.previewPlay.X(), y: ui.previewPlay.Y(), w: ui.previewPlay.W(), h: ui.previewPlay.H()},
+		{name: "continue action", x: ui.previewContinue.X(), y: ui.previewContinue.Y(), w: ui.previewContinue.W(), h: ui.previewContinue.H()},
+		{name: "retry action", x: ui.previewRetry.X(), y: ui.previewRetry.Y(), w: ui.previewRetry.W(), h: ui.previewRetry.H()},
+		{name: "title", x: ui.previewTitle.X(), y: ui.previewTitle.Y(), w: ui.previewTitle.W(), h: ui.previewTitle.H()},
+		{name: "cover", x: ui.previewCover.X(), y: ui.previewCover.Y(), w: ui.previewCover.W(), h: ui.previewCover.H()},
+		{name: "native metadata", x: ui.previewNative.X(), y: ui.previewNative.Y(), w: ui.previewNative.W(), h: ui.previewNative.H()},
+		{name: "metadata", x: ui.previewMeta.X(), y: ui.previewMeta.Y(), w: ui.previewMeta.W(), h: ui.previewMeta.H()},
+		{name: "synopsis", x: ui.previewDescription.X(), y: ui.previewDescription.Y(), w: ui.previewDescription.W(), h: ui.previewDescription.H()},
+	} {
+		if child.x < ui.previewGroup.X() || child.x+child.w > ui.previewGroup.X()+ui.previewGroup.W() || child.y < ui.previewGroup.Y() || child.y+child.h > ui.previewGroup.Y()+ui.previewGroup.H() {
+			t.Errorf("%s bounds (%d,%d %dx%d) exceed preview group (%d,%d %dx%d)", child.name, child.x, child.y, child.w, child.h, ui.previewGroup.X(), ui.previewGroup.Y(), ui.previewGroup.W(), ui.previewGroup.H())
+		}
+	}
 	if bottom := ui.searchScroll.Y() + ui.searchScroll.H(); bottom >= ui.searchPrevious.Y() {
 		t.Fatalf("results viewport bottom %d overlaps footer at %d", bottom, ui.searchPrevious.Y())
 	}
@@ -181,6 +222,43 @@ func TestNativeSearchViewBoundsRowsParentsFooterAndReflows(t *testing.T) {
 	ui.backToSearchResults()
 	if ui.searchModel.selected != searchResultPageSize*2 || !ui.searchPage.Visible() || ui.previewGroup.Visible() {
 		t.Fatal("Back did not restore the selected result page")
+	}
+}
+
+func TestNativeDetailArrowKeepsLastEpisodeVisibleAtMinimumWindow(t *testing.T) {
+	ui := newSearchViewTestFixture(t, nil)
+	ui.window.Resize(0, 0, 760, 480)
+	ui.resizeSearch()
+	ui.searchPreview = true
+	ui.detailModel.open("anime")
+	episodes := make([]backend.Episode, detailEpisodePageSize)
+	for index := range episodes {
+		episodes[index] = backend.Episode{ID: fmt.Sprintf("episode-%d", index)}
+	}
+	ui.detailModel.setEpisodes(episodes)
+	ui.previewGroup.Show()
+	ui.renderDetailEpisodes()
+	ui.previewEpisodeRows[0].TakeFocus()
+	for index := 0; index < len(episodes)-1; index++ {
+		ui.handleDetailEpisodeKey(index, 0xff54)
+		pumpSearchEvents(t, func() bool {
+			return ui.detailModel.selected == index+1 && ui.previewEpisodeRows[index+1].HasFocus()
+		})
+	}
+	row := ui.previewEpisodeRows[len(ui.previewEpisodeRows)-1]
+	rowTop := row.Y()
+	rowBottom := rowTop + row.H()
+	viewportTop := ui.previewEpisodes.Y()
+	viewportBottom := viewportTop + ui.previewEpisodes.H()
+	if rowTop < viewportTop || rowBottom > viewportBottom {
+		t.Fatalf("focused final episode bounds (%d,%d) are outside viewport (%d,%d)", rowTop, rowBottom, viewportTop, viewportBottom)
+	}
+	ui.previewEpisodes.ScrollTo(ui.previewEpisodes.XPosition(), 100)
+	ui.focusDetailEpisodeRow(len(episodes) - 1)
+	rowTop = row.Y()
+	rowBottom = rowTop + row.H()
+	if rowTop < viewportTop || rowBottom > viewportBottom {
+		t.Fatalf("focused final episode after partial scroll bounds (%d,%d) are outside viewport (%d,%d)", rowTop, rowBottom, viewportTop, viewportBottom)
 	}
 }
 
@@ -272,4 +350,257 @@ func TestNativeLibraryFailureSettlesUntilExplicitSearchRetry(t *testing.T) {
 	if got := service.searchCalls.Load(); got != 1 {
 		t.Fatalf("explicit Search retry made %d remote calls, want 1", got)
 	}
+}
+
+func TestNativeDetailSpacePlaysExactFocusedEpisodeAndArrowRestoresFocus(t *testing.T) {
+	ui := newSearchViewTestFixture(t, nil)
+	ui.selected = 4
+	ui.searchPreview = true
+	ui.detailModel.open("anime")
+	ui.detailModel.setEpisodes([]backend.Episode{{ID: "episode-0"}, {ID: "episode-1"}, {ID: "episode-2"}, {ID: "episode-3"}})
+	ui.detailModel.selectEpisode(2)
+	ui.previewGroup.Show()
+	ui.renderDetailEpisodes()
+	ui.previewEpisodeRows[2].TakeFocus()
+	ui.handleDetailEpisodeKey(2, 0xff52)
+	pumpSearchEvents(t, func() bool { return ui.detailModel.selected == 1 && ui.previewEpisodeRows[1].HasFocus() })
+	ui.detailModel.selectEpisode(0)
+	ui.renderDetailEpisodes()
+	ui.previewEpisodeRows[2].TakeFocus()
+	ui.handleDetailEpisodeKey(2, 0xff54)
+	pumpSearchEvents(t, func() bool { return ui.detailModel.selected == 3 && ui.previewEpisodeRows[3].HasFocus() })
+	ui.detailModel.setHistory(nil)
+	ui.renderDetailEpisodes()
+	if !ui.previewEpisodeRows[3].HasFocus() {
+		t.Fatal("asynchronous history refresh lost the focused episode row")
+	}
+	var request backend.PlayRequest
+	played := false
+	ui.onPlay = func(value backend.PlayRequest) { request, played = value, true }
+	ui.previewEpisodeRows[2].TakeFocus()
+	ui.handleDetailEpisodeKey(2, 32)
+	pumpSearchEvents(t, func() bool { return played })
+	if request.AnimeID != "anime" || request.EpisodeID != "episode-2" || request.StartAt != 0 {
+		t.Fatalf("focused episode Space request = %#v", request)
+	}
+}
+
+func TestNativeDetailEnterSelectsRowAndBackCloseCancelLoads(t *testing.T) {
+	ui := newSearchViewTestFixture(t, nil)
+	ui.selected = 4
+	ui.searchPreview = true
+	ui.detailModel.open("anime")
+	ui.detailModel.setEpisodes([]backend.Episode{{ID: "episode-0"}, {ID: "episode-1"}, {ID: "episode-2"}})
+	ui.previewGroup.Show()
+	ui.renderDetailEpisodes()
+	ui.handleDetailEpisodeKey(2, 13)
+	pumpSearchEvents(t, func() bool { return ui.detailModel.selected == 2 && ui.previewEpisodeRows[2].HasFocus() })
+	backCtx, backCancel := context.WithCancel(ui.ctx)
+	ui.detailCancel = backCancel
+	generation := ui.detailGeneration
+	if !ui.detailRequestCurrent(generation, "anime") {
+		t.Fatal("current detail request was rejected")
+	}
+	ui.backToSearchResults()
+	if backCtx.Err() == nil || ui.detailRequestCurrent(generation, "anime") {
+		t.Fatal("Back kept a detail request active")
+	}
+	closeCtx, closeCancel := context.WithCancel(ui.ctx)
+	ui.detailModel.open("anime")
+	ui.detailCancel = closeCancel
+	generation = ui.detailGeneration
+	ui.stopDetailLoad()
+	if closeCtx.Err() == nil || ui.detailRequestCurrent(generation, "anime") {
+		t.Fatal("close cancellation kept a detail request current")
+	}
+}
+
+func TestNativeFailedPlayCallbackKeepsDetailReadyForRetry(t *testing.T) {
+	ui := newSearchViewTestFixture(t, nil)
+	ui.searchPreview = true
+	ui.selected = 4
+	ui.searchModel.previewItem = backend.Anime{ID: "anime"}
+	ui.detailModel.open("anime")
+	ui.detailModel.setEpisodes([]backend.Episode{{ID: "episode"}})
+	ui.onPlay = func(backend.PlayRequest) {}
+	resourceCtx, cancel := context.WithCancel(ui.ctx)
+	ui.detailCancel = cancel
+	ui.playSelectedDetailEpisode()
+	if resourceCtx.Err() == nil {
+		t.Fatal("play did not cancel pending detail resources")
+	}
+	if ui.detailModel.animeID != "anime" || ui.searchModel.previewItem.ID != "anime" {
+		t.Fatal("failed Play callback discarded the selected detail")
+	}
+	request, ok := ui.detailModel.playRequest()
+	if !ok || request.AnimeID != "anime" || request.EpisodeID != "episode" {
+		t.Fatalf("detail could not retry Play: %#v, %v", request, ok)
+	}
+}
+
+func TestNativeDetailMetadataAndUnavailableCoverStayNeutral(t *testing.T) {
+	if got := detailMetadataLabel(nil); got != "" {
+		t.Fatalf("missing metadata label = %q", got)
+	}
+	if got := detailMetadataLabel(&backend.Metadata{Season: "春", Year: 2025, Studio: "Studio", EpisodeCount: 12}); got != "春 2025\n製作：Studio\n共 12 集" {
+		t.Fatalf("metadata label = %q", got)
+	}
+	ui := newSearchViewTestFixture(t, nil)
+	ui.selected = 4
+	ui.searchPreview = true
+	ui.detailModel.open("anime")
+	ui.searchModel.previewItem = backend.Anime{ID: "anime", Title: "作品"}
+	ui.previewCover.SetLabel("目前沒有封面")
+	ui.renderPreview()
+	if ui.previewCover.Label() != "目前沒有封面" {
+		t.Fatalf("cover fallback label = %q", ui.previewCover.Label())
+	}
+}
+
+func TestNativeCoverDecodeBoundsAndReplacementLifecycle(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 8, 12))
+	for y := 0; y < source.Bounds().Dy(); y++ {
+		for x := 0; x < source.Bounds().Dx(); x++ {
+			source.Set(x, y, color.RGBA{R: uint8(x * 20), G: uint8(y * 10), A: 255})
+		}
+	}
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, source); err != nil {
+		t.Fatal(err)
+	}
+	firstPixels, err := decodeDetailCover(encoded.Bytes(), "image/png")
+	if err != nil || len(firstPixels) != detailCoverWidth*detailCoverHeight*4 {
+		t.Fatalf("first cover decode = %v, pixel bytes %d", err, len(firstPixels))
+	}
+	first, err := newDetailCoverImage(firstPixels)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui := newSearchViewTestFixture(t, nil)
+	ui.previewCoverImage = first
+	secondPixels, err := decodeDetailCover(encoded.Bytes(), "image/png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := newDetailCoverImage(secondPixels)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui.releaseDetailCover()
+	ui.previewCoverImage = second
+	if ui.previewCoverImage.W() != detailCoverWidth || len(secondPixels) != detailCoverWidth*detailCoverHeight*4 {
+		t.Fatal("replacement cover is not retained within the decoded image bound")
+	}
+	if _, err := decodeDetailCover(encoded.Bytes(), "image/jpeg"); err == nil {
+		t.Fatal("cover format mismatch was accepted")
+	}
+	ui.releaseDetailCover()
+}
+
+func TestNativeCoverDecodePreservesSquarePortraitAndLandscapeAspect(t *testing.T) {
+	for _, dimensions := range []struct {
+		name   string
+		width  int
+		height int
+	}{
+		{name: "square", width: 12, height: 12},
+		{name: "portrait", width: 8, height: 12},
+		{name: "landscape", width: 16, height: 9},
+	} {
+		t.Run(dimensions.name, func(t *testing.T) {
+			source := image.NewRGBA(image.Rect(0, 0, dimensions.width, dimensions.height))
+			for y := 0; y < dimensions.height; y++ {
+				for x := 0; x < dimensions.width; x++ {
+					source.Set(x, y, color.RGBA{R: 255, A: 255})
+				}
+			}
+			var encoded bytes.Buffer
+			if err := png.Encode(&encoded, source); err != nil {
+				t.Fatal(err)
+			}
+			pixels, err := decodeDetailCover(encoded.Bytes(), "image/png")
+			if err != nil {
+				t.Fatal(err)
+			}
+			minX, minY := detailCoverWidth, detailCoverHeight
+			maxX, maxY := -1, -1
+			for y := 0; y < detailCoverHeight; y++ {
+				for x := 0; x < detailCoverWidth; x++ {
+					if pixels[(y*detailCoverWidth+x)*4+3] == 0 {
+						continue
+					}
+					minX, maxX = min(minX, x), max(maxX, x)
+					minY, maxY = min(minY, y), max(maxY, y)
+				}
+			}
+			if maxX < minX || maxY < minY {
+				t.Fatal("decoded cover has no visible source pixels")
+			}
+			contentWidth, contentHeight := maxX-minX+1, maxY-minY+1
+			aspectError := contentWidth*dimensions.height - contentHeight*dimensions.width
+			if aspectError < 0 {
+				aspectError = -aspectError
+			}
+			if aspectError > max(dimensions.width, dimensions.height) {
+				t.Fatalf("content bounds %dx%d do not preserve source aspect %dx%d", contentWidth, contentHeight, dimensions.width, dimensions.height)
+			}
+		})
+	}
+}
+
+func TestNativeAbsentCoverIsNeutralAndCoverFailureCanRetry(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		err       error
+		wantLabel string
+		wantRetry bool
+	}{
+		{name: "absent", err: core.ErrNotFound, wantLabel: "目前沒有封面"},
+		{name: "loader failure", err: backend.ErrUnavailable, wantLabel: "封面暫時無法載入", wantRetry: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := &coverSearchViewTestService{searchViewTestService: &searchViewTestService{}, coverErr: test.err}
+			ui := newSearchViewTestFixture(t, service)
+			ui.selected = 4
+			ui.searchPreview = true
+			ui.searchModel.previewItem = backend.Anime{ID: "anime", Title: "作品"}
+			ui.detailModel.open("anime")
+			ui.previewGroup.Show()
+			ui.previewCover.SetLabel("封面載入中…")
+			ui.loadDetailResources(ui.detailGeneration, "anime")
+			pumpSearchEvents(t, func() bool {
+				return ui.previewCover.Label() == test.wantLabel && ui.detailEpisodesDone
+			})
+			if ui.detailCoverErr != test.wantRetry || ui.previewRetry.Visible() != test.wantRetry {
+				t.Fatalf("cover error=%v retry visible=%v, want %v", ui.detailCoverErr, ui.previewRetry.Visible(), test.wantRetry)
+			}
+		})
+	}
+}
+
+func TestNativeCoverRedrawScalesWithinResizedBoxAndKeepsSourceDimensions(t *testing.T) {
+	ui := newSearchViewTestFixture(t, nil)
+	ui.previewCover.Resize(252, 215, 112, 150)
+	ui.previewGroup.Show()
+	image, err := newDetailCoverImage(make([]byte, detailCoverWidth*detailCoverHeight*4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui.previewCoverImage = image
+	ui.window.Show()
+	ui.previewCover.Redraw()
+	fltk.Wait(0.02)
+	if image.W() > ui.previewCover.W() || image.H() > ui.previewCover.H() {
+		t.Fatalf("display dimensions %dx%d exceed resized cover box %dx%d", image.W(), image.H(), ui.previewCover.W(), ui.previewCover.H())
+	}
+	ui.previewCover.Resize(252, 215, 160, 200)
+	ui.previewCover.Redraw()
+	fltk.Wait(0.02)
+	if image.W() != 150 || image.H() != 200 {
+		t.Fatalf("display dimensions after cover enlargement = %dx%d, want 150x200", image.W(), image.H())
+	}
+	if image.DataW() != detailCoverWidth || image.DataH() != detailCoverHeight {
+		t.Fatalf("source image dimensions changed to %dx%d", image.DataW(), image.DataH())
+	}
+	ui.releaseDetailCover()
 }

@@ -452,6 +452,14 @@ func TestPlayAndCoverValidation(t *testing.T) {
 	if _, e := s.GetCover(context.Background(), "a"); e != core.ErrNotFound {
 		t.Errorf("cover metadata error %v", e)
 	}
+	st.metadata["a"] = core.AnimeMetadata{}
+	if _, e := s.GetCover(context.Background(), "a"); e != core.ErrNotFound {
+		t.Errorf("empty cover URL error %v", e)
+	}
+	st.metadata["a"] = core.AnimeMetadata{CoverURL: "file:///private/cover.jpg"}
+	if _, e := s.GetCover(context.Background(), "a"); e != ErrUnavailable {
+		t.Errorf("invalid cover URL error %v", e)
+	}
 	s.cover = nil
 	st.metadata["a"] = core.AnimeMetadata{}
 	if _, e := s.GetCover(context.Background(), "a"); e != ErrUnavailable {
