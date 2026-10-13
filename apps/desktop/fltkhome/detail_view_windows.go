@@ -273,7 +273,7 @@ func (ui *view) renderDetailEpisodes() {
 		button := fltk.NewButton(ui.previewEpisodes.X()+8, ui.previewEpisodes.Y()+7+offset*37, max(120, ui.previewEpisodes.W()-27), 33, label)
 		selectedIndex := index
 		ui.styleButton(button, func() bool { return ui.detailModel.selected == selectedIndex })
-		button.SetCallback(ui.deferredSearchAction(func() { ui.selectDetailEpisode(selectedIndex) }, true))
+		button.SetCallback(ui.deferredSearchAction(func() { ui.playDetailEpisodeAt(selectedIndex) }, true))
 		button.SetEventHandler(func(event fltk.Event) bool {
 			if event != fltk.KEYDOWN {
 				return false

@@ -67,14 +67,17 @@ func TestNativeStartupOpensHomeWithoutRecordChoiceAndKeepsLegacyUntouched(t *tes
 	}
 }
 
-func TestNativePreviewOnlyPlaysAfterExplicitAction(t *testing.T) {
-	ui := newSearchViewTestFixture(t, &searchViewTestService{})
+func TestNativePreviewOnlyPlaysAfterEpisodeAction(t *testing.T) {
+	service := &searchViewTestService{episodes: func(context.Context, string) ([]backend.Episode, error) {
+		return []backend.Episode{{ID: "episode-1"}, {ID: "episode-2"}}, nil
+	}}
+	ui := newSearchViewTestFixture(t, service)
 	ui.selected = 4
 	ui.searchModel.loaded = true
-	plays := 0
+	playedEpisodes := make([]string, 0, 2)
 	ui.onPlay = func(request backend.PlayRequest) {
-		plays++
-		if request.AnimeID != "local" || request.EpisodeID != "episode-1" {
+		playedEpisodes = append(playedEpisodes, request.EpisodeID)
+		if request.AnimeID != "local" {
 			t.Fatalf("playback=%#v", request)
 		}
 		ui.window.Hide()
@@ -85,16 +88,24 @@ func TestNativePreviewOnlyPlaysAfterExplicitAction(t *testing.T) {
 	pumpSearchEvents(t, func() bool {
 		return ui.searchModel.preview != nil && ui.detailEpisodesDone
 	})
-	if plays != 0 || !ui.previewPlay.IsActive() {
-		t.Fatal("preview autoplayed or explicit Play unavailable")
+	if len(playedEpisodes) != 0 || ui.previewContinue.Visible() {
+		t.Fatal("preview autoplayed or Continue appeared for an unwatched series")
 	}
-	ui.deferredSearchAction(ui.playSelectedDetailEpisode, true)()
-	pumpSearchEvents(t, func() bool { return plays == 1 })
-	if ui.searchModel.preview == nil || ui.previewTitle.Label() != "作品" || !ui.previewPlay.IsActive() {
-		t.Fatal("return after failed playback lost preview or disabled retry")
+	ui.handleDetailEpisodeKey(1, 13)
+	pumpSearchEvents(t, func() bool { return ui.detailModel.selected == 1 && ui.previewEpisodeRows[1].HasFocus() })
+	if len(playedEpisodes) != 0 {
+		t.Fatal("Enter played the selected episode")
 	}
-	ui.deferredSearchAction(ui.playSelectedDetailEpisode, true)()
-	pumpSearchEvents(t, func() bool { return plays == 2 })
+	ui.handleDetailEpisodeKey(1, 32)
+	pumpSearchEvents(t, func() bool { return len(playedEpisodes) == 1 })
+	if ui.searchModel.preview == nil || ui.previewTitle.Label() != "作品" {
+		t.Fatal("return after failed playback lost preview")
+	}
+	ui.playDetailEpisodeAt(0)
+	pumpSearchEvents(t, func() bool { return len(playedEpisodes) == 2 })
+	if playedEpisodes[0] != "episode-2" || playedEpisodes[1] != "episode-1" {
+		t.Fatalf("episode actions played %v", playedEpisodes)
+	}
 }
 
 func TestNativeLateStartupCompletionDoesNotReopenWhileClosing(t *testing.T) {

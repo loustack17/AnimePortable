@@ -153,7 +153,7 @@ func (ui *view) applyTheme() {
 		ui.previewEpisodes.Redraw()
 		ui.previewEpisodeText.SetLabelColor(colors.muted)
 		ui.previewEpisodeText.Redraw()
-		for _, button := range append(append(append([]*fltk.Button(nil), ui.searchRows...), ui.previewEpisodeRows...), ui.searchButton, ui.searchBack, ui.searchPrevious, ui.searchNext, ui.previewBack, ui.previewPlay, ui.previewContinue, ui.previewRetry, ui.previewPrevious, ui.previewNext) {
+		for _, button := range append(append(append([]*fltk.Button(nil), ui.searchRows...), ui.previewEpisodeRows...), ui.searchButton, ui.searchBack, ui.searchPrevious, ui.searchNext, ui.previewBack, ui.previewContinue, ui.previewRetry, ui.previewPrevious, ui.previewNext) {
 			button.Redraw()
 		}
 	}

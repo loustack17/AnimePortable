@@ -4,6 +4,18 @@
 
 ## Current loop
 
+### 2026-10-13 Loop30 — OWNER_UX_REVISION / IN_PROGRESS
+
+Owner acceptance requested immediate episode-click playback and Continue hidden for series without resumable history. The bounded UI/test correction is saved; CGO0 focused/regression checks and formatting pass. Exact new Windows CI and owner acceptance remain required. Previous 1158671 CI is baseline evidence only for this correction. No Loop30 PASS.
+
+
+### 2026-10-13 Loop30 — CI_VERIFIED / NEEDS_HUMAN
+
+Commit1158671026c429f1acc254e7376ea0e050803ffb andallLoop30source/workflowchanges are onGitHubmain, matchinglocal/origin/main. [CI38357613533](https://github.com/loustack17/AnimePortable/actions/runs/38357613533), job115164043342, passed everyrequiredstep: format/module/fullnativeGo/20repeat/Anime1/race/vet/security/dependencyclosure/build/startup/cleanworktree/artifact. Go1.26.9 fixedthe9reachable stdlibvulnerabilities withoutscanweakening. Existingnot-calledmoduleadvisoriesareseparatefromreachablefindings.
+
+Exactartifact11793333011 wasdownloaded andpreparedas artifacts/loop30/AnimePortable.exe andAnimePortable-loop30-1158671.zip. NativeBuildInfo confirmsGo1.26.9/windows-amd64/CGO1/production; workflowexplicitlyuses-buildvcs=false, so provenanceusesGitHubrun/artifactheadSHA instead ofembeddedrevision. Downloaded/delivered/ZIPexe hashesmatch; runtimepinmatches; ZIPhas5entriesandnopersonaldata. Source/cover/focus/fixturefixes weresimplifiedandindependentlyreviewed, zerounresolvedMUST_FIX. Owneracceptance remainsNOT_RUN; Loop30notPASS. Currenthumaninstructions: docs/LOOP30_HUMAN_CHECK.md; evidence: artifacts/evidence/loop30/1158671-test-object.json. CI/humancheckpointdocsupdatedlocallypendingownerclosure; sourcealreadyfullypushed. PriorFAIL/pendingnotesbelow arehistorical.
+
+
 ### 2026-10-13 Loop30 — native verified / security blocker
 
 Commit ebe73162d349e5079c823400a629d5265376af58 isfullypushed/mainremote matches. CI38356541646 passedfullWindowsGo tests,20repeatlifecycle/player,Anime1,raceandvet. govulncheckfound9reachableGostdlibissues inGo1.26.8, eachfixedbyofficialGo1.26.9; build/artifact/ownerNOT_RUN. One-lineCIgo-version1.26.9 draftpassedindependentverifier/security review; owner subsequently approvedtheone-lineGo1.26.9 CIpin; appliedexactrevieweddraft, awaitingpush/newfullCI. No scan/assertion weakened, no blindrerun. Details/patch/rawproof under artifacts/evidence/loop30/ci-go-security-refresh* andci-38356541646*. Priorfailedcompiler/fixturesnotesbelow historical.

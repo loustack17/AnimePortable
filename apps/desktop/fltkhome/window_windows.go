@@ -82,7 +82,6 @@ type view struct {
 	searchRows         []*fltk.Button
 	previewGroup       *fltk.Group
 	previewBack        *fltk.Button
-	previewPlay        *fltk.Button
 	previewTitle       *fltk.Box
 	previewNative      *fltk.Box
 	previewDescription *fltk.Box

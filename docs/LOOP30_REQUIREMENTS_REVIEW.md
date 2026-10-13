@@ -4,7 +4,7 @@ Date: 2026-10-13. Baseline: main `90a7fc9985bd5ab17b1198333567324fd69d2e8a`.
 
 ## Result
 
-Current result: PASS_REVIEW after the owner-authorized bounded repair of both P2 findings. Source-level defects are resolved; native Windows/build/race and owner acceptance remain NOT_RUN. No commit, push or CI execution occurred. The initial strict findings below are retained as historical evidence, superseded by the repair result at the end.
+Current result: OWNER_UX_REVISION. Baseline 1158671 passed all Windows CI steps, but owner acceptance requested corrections: episode clicks must play immediately and Continue must be hidden without valid same-series resumable history. The six-file UI/test correction is locally verified; simplify-first independent review and exact new Windows CI are required. Owner acceptance has not passed. Earlier repair and CI records below are historical.
 
 ## Historical review order and verification before repair
 
@@ -32,17 +32,17 @@ Source-present means inspected implementation, not a completed native/human gate
 
 | Requirement | Implementation and evidence | Current result |
 | --- | --- | --- |
-| Phase24 / FUNC-004 cover | Decoder, secure typed GetCover, native drawing and cleanup tests | R30-01/R30-02 resolved in source; native/human presentation NOT_RUN |
-| FUNC-004 title/native title/short synopsis/season/year/studio/count | `renderPreview`, `detailMetadataLabel`; metadata fallback test and bounded normalized excerpt test. Product section11 explicitly requests a short synopsis. | Source-present; real content/clipping NOT_RUN |
-| FUNC-005 ordered episodes | `detailModel.setEpisodes`, bounded page size8; `TestDetailModelKeepsEpisodeOrderAndBoundsPages` | Pure PASS; native integration NOT_RUN |
-| Play/Continue/current/progress | Exact-ID `playRequest`/`continueRequest`, stored milliseconds, completed exclusion, row progress labels; identity/history pure tests | Pure PASS; presentation/playback NOT_RUN |
-| UX-001/002/003/004 | Enter selects, focused-row Space plays, arrows start from focused index, async identity focus restoration and scroll visibility; added native key/focus tests | Source-present; native and owner NOT_RUN |
-| UX-005/006/007 | Escape/Back cancellation; existing slash and Ctrl+K Search handlers retained | Source-present; native regression and owner NOT_RUN |
-| UX-008/009/010 | Mouse callbacks, Scroll/paging, desktop controls, proportional toolbar bounds, calm existing theme; native layout tests | Source-present; native/mouse/visual gates NOT_RUN |
+| Phase24 / FUNC-004 cover | Decoder, secure typed GetCover, native drawing and cleanup tests | R30-01/R30-02 resolved in source; Native automated PASS; human presentation NOT_RUN |
+| FUNC-004 title/native title/short synopsis/season/year/studio/count | `renderPreview`, `detailMetadataLabel`; metadata fallback test and bounded normalized excerpt test. Product section11 explicitly requests a short synopsis. | Source-present; CI assertions PASS; actual content/clipping human gate NOT_RUN |
+| FUNC-005 ordered episodes | `detailModel.setEpisodes`, bounded page size8; `TestDetailModelKeepsEpisodeOrderAndBoundsPages` | Pure/native checks PASS in exact CI |
+| Play/Continue/current/progress | Exact-ID `playRequest`/`continueRequest`, stored milliseconds, completed exclusion, row progress labels; identity/history pure tests | Pure/native checks PASS; actual playback human gate NOT_RUN |
+| UX-001/002/003/004 | Enter selects, focused-row Space plays, arrows start from focused index, async identity focus restoration and scroll visibility; added native key/focus tests | Native checks PASS; owner gate NOT_RUN |
+| UX-005/006/007 | Escape/Back cancellation; existing slash and Ctrl+K Search handlers retained | Native regression PASS; owner gate NOT_RUN |
+| UX-008/009/010 | Mouse callbacks, Scroll/paging, desktop controls, proportional toolbar bounds, calm existing theme; native layout tests | Native layout/focus checks PASS; mouse/visual owner gate NOT_RUN |
 | QUAL-001..008/010/011, ARCH/SEC | Scoped model/cover/detail view, inward dependency direction, existing typed actions and bounded secure loader; no provider/core/schema/dependency/workflow changes | No additional concrete source finding; R30-02 resolved using the existing not-found sentinel |
 | QUAL-009 | Legacy playback model/code remains unchanged baseline; startup tests now exercise actual selected Play after prefetched Episodes, preserving original assertions. Scoped reviewer did not identify a MUST_FIX requiring unrelated legacy removal. | Retention documented; no additional confirmed MUST_FIX |
 | QUAL-012 | Fresh independent review after simplify | PASS_REVIEW after bounded repair; zero unresolved MUST_FIX |
-| STATE / execution boundaries | Bounded handoff, hash-bound results, separate NOT_RUN gates, preserved user/data files; local cgo breaker remains closed | No native PASS, no CI or owner acceptance claimed |
+| STATE / execution boundaries | Bounded handoff, hash-bound results, separate NOT_RUN gates, preserved user/data files; local cgo breaker remains closed | Exact CI/native PASS recorded; owner acceptance NOT_RUN |
 
 ## Historical TypeSafe and budget before repair
 
@@ -57,3 +57,11 @@ The subsequent document-only TypeSafe batch is retained in strict-review-documen
 R30-01 resolved: proportional content sampling into the existing bounded transparent240x320canvas; square/portrait/landscape tests check actual visible-content aspect. R30-02 resolved: backend emptyCoverURL uses existingcore.ErrNotFound; missingmetadata assertion remains unchanged. UI handles that sentinel neutrally and updates genuine failure Retry immediately. Invalid nonemptyURLs still go through the secure loader. Fresh scoped simplify and independent reviewer PASS_REVIEW, zero unresolved MUST_FIX; root corroborated code and five repair hashes.
 
 Fresh CGO0 desktop/backend/architecture/contracts and backendvet PASS; formatting/diff PASS. Native tests/build/race and owner remain NOT_RUN. Correctivepass6completed under latestownerinstruction; noextra feature/scope or commit/push. Final TypeSafe scope1.87/confidence0.80 and verification1.89/0.83 support; lifecycle1.75/0.62 requires independent source adjudication. Unchanged generation/cancellation and UI-thread image ownership were corroborated; uncertainty is not native PASS. Evidence: cover-corrections.json, cover-repair-source-judgments.json, cover-repair-final-evidence.json. Existing Windows CI on exactsource and owner acceptance are the remaining gates.
+
+## Current exact CI result
+
+Main1158671026c429f1acc254e7376ea0e050803ffb matchesGitHub. CI38357613533 allstepsSUCCESS, includingfullnativeGo/20repeat/Anime1/race/vet/security/build/startup/artifact. The nativeonlytests are nowexecuted andPASS; historicalNOT_RUNentries above refer topre-CI checkpoints. Exactexe/ZIP ready, contenthashes/provenancechecked, nodata included. Ownergate remainsNOT_RUN, soLoop30notPASS. Currentpacketandhumansteps: docs/LOOP30_HUMAN_CHECK.md; evidence: artifacts/evidence/loop30/1158671-test-object.json. No source/workflowchangedaftergreenCI.
+
+## Owner UX correction review
+
+Six-file correction passed simplify-first independent review. Exact row callback uses existing deferred/generation guard and exact-ID play helper; Enter selects, Space plays. Continue visibility covers unwatched/foreign/completed/zero-position/resumable history. TypeSafe scope1.99/confidence0.98 and verification1.91/0.85 support review. Lifecycle1.29/0.40 required independent adjudication: patch-only input omitted unchanged cancellation/generation helpers; reviewer inspected them and found no defect. Raw state/probabilities are preserved in artifacts/evidence/loop30/owner-ux-{state,judgments}.json. CGO0 focused/regression and format/diff pass; exact native CI pending. Mouse-event dispatch is a human gate, not claimed automated PASS.

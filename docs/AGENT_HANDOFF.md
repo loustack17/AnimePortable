@@ -9,34 +9,35 @@ instruction_version: v2.4.1
 status: IN_PROGRESS
 repository:
   branch: main
-  observed_head: ebe73162d349e5079c823400a629d5265376af58
-  working_tree: "Approved17files committed/pushed; preserve unrelated AGENTS/.codex/data. Local CI recovery checkpoint pending."
+  observed_head: 1158671026c429f1acc254e7376ea0e050803ffb
+  working_tree: "Source/workflow commits fully pushed. Local CI/human checkpoint docs await owner closure; preserve AGENTS/.codex and data."
 active_loop:
   number: 30
-  state: "PUSHEDebe7316; nativeGo/20repeat/Anime1/race/vet PASS; securityFAIL9stdlibissuesGo1.26.8. Ownerapprovedone-lineGo1.26.9 CIpatch; appliedexactdraft, pushpending. Not PASS."
-  goal: "Phase24 Windows detail metadata/cover, ordered episodes, selected Play/Continue, Enter/Space/progress."
+  state: "OWNER_UX_REVISION; baseline1158671 CI green; owner requested immediate episode click and conditional Continue. Not PASS."
+  goal: "Phase24 detail fields/cover, ordered episodes, selected Play/Continue, Enter/Space/progress."
 completed:
   - "Loop29/player follow-up PASS with owner acceptance."
-  - "Loop30 detail UI and focused tests; existing typed backend and secure loader."
-  - "Latest owner directed direct docs-only completion; one bounded pass resolved2cover findings."
-  - "Original aspect preserved with bounded letterbox; absent cover neutral via existing ErrNotFound; genuine failure Retry retained."
-  - "Fresh simplify, scoped independent PASS_REVIEW and root corroboration; no further features or unresolved MUST_FIX."
+  - "Loop30 code/tests simplified and independently reviewed; zero unresolved MUST_FIX."
+  - "Aspect preservation, neutral absent cover, missing row reflow and native fixture alignment corrected."
+  - "Owner approved Mesa revision and Go1.26.9 verifier repairs; all tests/security checks retained."
 verification:
-  - "Fresh CGO0 desktop/backend/architecture/contracts and backendvet PASS; format/diff PASS."
-  - "CI38356541646 fullnativeGo,20repeat lifecycle/player andAnime1acceptance PASS; exact ebe7316."
-  - "TypeSafe scope/verification support; lifecycle uncertainty independently adjudicated against unchanged guards."
-  - "Localcgo breakerclosed; native Go PASS inisolatedCI. Race/vet PASS inCI; securityFAIL,build/ownerNOT_RUN. NohostPASS."
+  - "Exact CI38357613533 job115164043342: ALL STEPS SUCCESS for1158671."
+  - "Native Go,20repeat lifecycle/player,Anime1,race,vet,security,dependencies,build,startup,clean-tree,artifact PASS."
+  - "Artifact11793333011 head SHA matches; native BuildInfo Go1.26.9/windows-amd64/CGO1/production. Existing-buildvcs=false acknowledged."
+  - "Downloaded/delivered/ZIP exe SHA3d5d643d... match. ZIP5entries, pinned DLL, no personal data."
+  - "Protected files and old portable DB/WAL/SHM hashes unchanged; no host exe execution counted as PASS."
+  - "Local cgo breaker remains closed; native evidence comes only from isolated CI."
 budget:
   corrections_used: 8
   corrections_max: 8
   remaining: 0
 boundaries:
-  - "Owner authorized commit/push of reviewed scoped source/tests/docs after verification; exclude AGENTS/.codex/artifacts/data. Owner additionally approved exactly4line Mesa CI pin refresh; no release/Loop31 work."
-  - "BWS memory-only key and necessary TypeSafe project uploads approved; no secrets/DB upload."
+  - "Scoped commit/push approved; no release/Loop31. Exclude AGENTS/.codex/artifacts/data."
+  - "Necessary TypeSafe uploads and memory-only BWS key approved; raw judgments preserved and uncertainty independently reviewed."
 next:
-  - "Commit/push approvedone-lineGo1.26.9 CIpatch plus recoverydocs, thenobservefullCI."
-  - "After authorizedCIrepair and green exactCI prepare exe/ZIP, then owner acceptance. No blindrerun."
+  - "Six-file UX/test correction saved; CGO0 checks pass. Complete simplify-first review, TypeSafe judgment, scoped commit/push and exact new CI."
+  - "Deliver new commit-specific exe/ZIP preserving existing data; request corrected human gate."
 references:
-  - "docs/LOOP30_DETAIL.md; LOOP30_REQUIREMENTS_REVIEW.md final repair result; LOOP30_HUMAN_CHECK.md."
-  - "artifacts/evidence/loop30/cover-corrections.json; cover-repair-final-evidence.json; cover-repair-source-judgments.json; ci-failure-repair-state.json and ci-mesa-refresh.patch; ci-go-security-refresh.patch/state/judgments."
+  - "docs/LOOP30_HUMAN_CHECK.md; LOOP30_DETAIL.md; LOOP30_REQUIREMENTS_REVIEW.md current CI result."
+  - "artifacts/evidence/loop30/1158671-test-object.json; ci-38357613533-{run,jobs,artifacts}.json."
 ```

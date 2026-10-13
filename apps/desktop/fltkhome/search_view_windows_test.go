@@ -196,7 +196,6 @@ func TestNativeSearchViewBoundsRowsParentsFooterAndReflows(t *testing.T) {
 		{name: "previous page", x: ui.previewPrevious.X(), y: ui.previewPrevious.Y(), w: ui.previewPrevious.W(), h: ui.previewPrevious.H()},
 		{name: "next page", x: ui.previewNext.X(), y: ui.previewNext.Y(), w: ui.previewNext.W(), h: ui.previewNext.H()},
 		{name: "back action", x: ui.previewBack.X(), y: ui.previewBack.Y(), w: ui.previewBack.W(), h: ui.previewBack.H()},
-		{name: "play action", x: ui.previewPlay.X(), y: ui.previewPlay.Y(), w: ui.previewPlay.W(), h: ui.previewPlay.H()},
 		{name: "continue action", x: ui.previewContinue.X(), y: ui.previewContinue.Y(), w: ui.previewContinue.W(), h: ui.previewContinue.H()},
 		{name: "retry action", x: ui.previewRetry.X(), y: ui.previewRetry.Y(), w: ui.previewRetry.W(), h: ui.previewRetry.H()},
 		{name: "title", x: ui.previewTitle.X(), y: ui.previewTitle.Y(), w: ui.previewTitle.W(), h: ui.previewTitle.H()},
@@ -271,16 +270,46 @@ func TestNativeDetailArrowKeepsLastEpisodeVisibleAtMinimumWindow(t *testing.T) {
 	if rowTop < ui.previewEpisodes.Y() || rowBottom > ui.previewEpisodes.Y()+ui.previewEpisodes.H() {
 		t.Fatalf("focused final episode after default reflow is outside viewport: (%d,%d)", rowTop, rowBottom)
 	}
-	ui.previewPlay.TakeFocus()
+	ui.previewBack.TakeFocus()
 	ui.window.Resize(0, 0, 760, 480)
 	ui.resizeSearch()
-	if !ui.previewPlay.HasFocus() {
-		t.Fatal("detail row reflow stole focus from the Play action")
+	if !ui.previewBack.HasFocus() {
+		t.Fatal("detail row reflow stole focus from the Back action")
 	}
 	for index, resizedRow := range ui.previewEpisodeRows {
 		if resizedRow.X() != ui.previewEpisodes.X()+8 || resizedRow.Y() != ui.previewEpisodes.Y()+7+index*37 || resizedRow.W() != max(120, ui.previewEpisodes.W()-27) {
 			t.Fatalf("minimum reflow row %d has bounds (%d,%d %dx%d)", index, resizedRow.X(), resizedRow.Y(), resizedRow.W(), resizedRow.H())
 		}
+	}
+}
+
+func TestNativeContinueActionOnlyShowsForResumableEpisode(t *testing.T) {
+	ui := newSearchViewTestFixture(t, nil)
+	ui.selected = 4
+	ui.searchPreview = true
+	ui.previewGroup.Show()
+	ui.onPlay = func(backend.PlayRequest) {}
+	ui.detailModel.open("anime")
+	ui.detailModel.setEpisodes([]backend.Episode{{ID: "episode-1"}})
+	ui.searchModel.preview = &backend.Detail{Anime: backend.Anime{ID: "anime", Title: "作品"}}
+	for _, testCase := range []struct {
+		name    string
+		history []backend.History
+		visible bool
+	}{
+		{name: "unwatched"},
+		{name: "other anime", history: []backend.History{{AnimeID: "other", EpisodeID: "episode-1", Position: 5000}}},
+		{name: "completed", history: []backend.History{{AnimeID: "anime", EpisodeID: "episode-1", Position: 5000, Completed: true}}},
+		{name: "zero position", history: []backend.History{{AnimeID: "anime", EpisodeID: "episode-1"}}},
+		{name: "resumable", history: []backend.History{{AnimeID: "anime", EpisodeID: "episode-1", Position: 5000}}, visible: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			ui.detailModel.setHistory(testCase.history)
+			ui.renderPreview()
+			if got := ui.previewContinue.Visible(); got != testCase.visible {
+				t.Fatalf("Continue visibility = %v, want %v", got, testCase.visible)
+			}
+		})
 	}
 }
 

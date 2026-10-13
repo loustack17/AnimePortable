@@ -679,6 +679,8 @@ Works from cached SQLite data without network.
 
 ### Requirements
 
+- Clicking an episode immediately plays that episode; no separate selected-episode Play button
+- Continue appears only for valid resumable saved progress belonging to that series
 - Space can play selected episode
 - Enter can open/select
 - current/progress state visible without clutter

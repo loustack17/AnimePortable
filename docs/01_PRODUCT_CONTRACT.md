@@ -221,6 +221,8 @@ Show only useful work-respecting metadata:
 - continue/play action
 - episode list
 
+Clicking an episode plays that episode immediately, without a separate selected-episode Play button. Show Continue only when that series has valid resumable saved progress.
+
 The product should respect the work by presenting correct metadata, but should not become an encyclopedia UI.
 
 ## 12. Schedule
