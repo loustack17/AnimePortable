@@ -68,6 +68,31 @@ func TestOverlayRendersAcrossReentryWithInheritedViewportAndClip(t *testing.T) {
 		if bright < 4 {
 			t.Fatalf("pass%d: episode text missing after context reentry: %d bright pixels", pass, bright)
 		}
+		focus := view.state.Focus
+		call("glDisable", 0x0C11)
+		call("glClearColor", 0, 0, 0, 0)
+		view.hideControls()
+		call("glClear", 0x00004000)
+		drawPlayerOverlay(view.video.W(), view.video.H(), view)
+		var hidden [4]byte
+		call("glReadPixels", 200, uintptr(view.video.H()-20), 1, 1, 0x1908, 0x1401, uintptr(unsafe.Pointer(&hidden[0])))
+		if hidden[0] != 0 || hidden[1] != 0 || hidden[2] != 0 {
+			t.Fatalf("pass%d: focused overlay remained visible after hide: %v", pass, hidden)
+		}
+		if view.state.Focus != focus {
+			t.Fatalf("pass%d: hiding changed keyboard focus from %d to %d", pass, focus, view.state.Focus)
+		}
+		view.showControls()
+		call("glClear", 0x00004000)
+		drawPlayerOverlay(view.video.W(), view.video.H(), view)
+		var shown [4]byte
+		call("glReadPixels", 200, uintptr(view.video.H()-20), 1, 1, 0x1908, 0x1401, uintptr(unsafe.Pointer(&shown[0])))
+		if shown[2] < 10 {
+			t.Fatalf("pass%d: overlay did not reappear after show: %v", pass, shown)
+		}
+		if view.state.Focus != focus {
+			t.Fatalf("pass%d: showing changed keyboard focus from %d to %d", pass, focus, view.state.Focus)
+		}
 		call("glDisable", 0x0C11)
 		view.window.Hide()
 	}

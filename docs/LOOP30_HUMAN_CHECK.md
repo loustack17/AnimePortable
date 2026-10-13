@@ -2,16 +2,16 @@
 
 ## 狀態
 
-IN_PROGRESS：你確認滑鼠點集數正常，新的修正範圍是 Enter 也播放聚焦集數，以及閒置觀看幾秒後隱藏控制項、滑鼠移動或鍵盤操作時再顯示。下列 dbb191f 尚未包含這兩項修正，新版 CI 完成後更新。
+IN_PROGRESS：bca387a 使用者回報控制項仍可見、影像不順但聲音正常。原生繪圖條件的焦點例外已修正，新版 CI 尚待完成；下列 bca387a 是修正前物件。
 
-修正前版本 `dbb191f21603373b8527da9a56b4c8811593e863` 的 [Windows CI](https://github.com/loustack17/AnimePortable/actions/runs/38361340591) 全部通過。已修正點集數立即播放、移除額外播放按鈕，以及沒有同作品可續播進度時隱藏繼續觀看。Enter 選取、Space 播放保留。人工驗收仍待確認，Loop30 未結案。
+CI_VERIFIED / NEEDS_HUMAN。新版 `bca387a2c7cb64e250970fa1f6358d3aa4d1f51c` 的 [Windows CI](https://github.com/loustack17/AnimePortable/actions/runs/38435868704) 全部通過。Enter 和 Space 都能播放聚焦集數；播放中閒置約3秒（檢查週期0.5秒）隱藏控制項，滑鼠移動或按鍵再顯示。暫停、載入、拖曳音量／進度或固定選單時維持可用。使用者已確認先前滑鼠點集數正常；本次兩項修正仍待確認，Loop30 未結案。
 
-- [新版 AnimePortable.exe](../artifacts/loop30/dbb191f/AnimePortable.exe)，保留同資料夾播放器 DLL。
-- [完整 ZIP](../artifacts/loop30/dbb191f/AnimePortable-loop30-dbb191f.zip)。
-- EXE SHA-256：`20452f320a68e2a3e321409c0f62a7a8cb3105d39db70ca869cc206fd8928979`。
-- ZIP SHA-256：`4fecd8ca38cfc7557f33603023e86aecff41e36207ff0fa70e8fa111b60f308d`。
+- [新版 AnimePortable.exe](../artifacts/loop30/bca387a/AnimePortable.exe)，保留同資料夾播放器 DLL。
+- [完整 ZIP](../artifacts/loop30/bca387a/AnimePortable-loop30-bca387a.zip)。
+- EXE SHA-256：`f711f95d6df8ea96dc79262cf92dedaa48df528501941b6817a16dfb756da094`。
+- ZIP SHA-256：`5a29b2ba001ee042a3b93cb2d7fe2d935a9e895b102a81ba54485912caafaafc`。
 
-新版在獨立資料夾，不複製、覆寫或刪除舊播放紀錄。ZIP 僅含五項程式與授權檔；執行檔、ZIP 內執行檔雜湊一致，DLL 符合既有固定雜湊。證據：`artifacts/evidence/loop30/dbb191f-test-object.json`。
+新版在獨立資料夾，不複製、覆寫或刪除舊播放紀錄。ZIP 僅五項程式與授權檔；執行檔雜湊一致，DLL 符合固定雜湊。證據：`artifacts/evidence/loop30/bca387a-test-object.json`。
 
 ## 驗收項目
 

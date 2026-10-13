@@ -4,8 +4,7 @@
 
 ## Current loop
 
-Current owner follow-up: IN_PROGRESS, not PASS. Owner confirmed mouse episode playback works, but requested Enter (in addition to Space) to play the focused episode, and idle player controls to hide after a few seconds and reappear on mouse movement or keyboard input. Scope is only these two UI behaviors; no backend/core/workflow change. Baseline dbb191f CI is historical for this new correction. Exact new native CI and owner acceptance remain required.
-
+Loop30 IN_PROGRESS: actual overlay drawing ignored hidden state while keyboard focus remained selected. Two-file correction plus framebuffer regression saved; new CI/owner gate pending. Owner also reports video-only stutter, cause unverified; no speculative tuning. Artifacts cleanup517.2MiB complete with data/evidence preserved; after each new download remove superseded builds and keep latest usable version. Historical checkpoints below describe earlier code.
 
 ### Historical dbb191f checkpoint — CI_VERIFIED / NEEDS_HUMAN
 

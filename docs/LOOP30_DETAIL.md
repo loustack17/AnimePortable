@@ -15,10 +15,7 @@
 
 ## Verification state
 
-Current owner follow-up: IN_PROGRESS, not PASS. Owner confirmed mouse episode playback works, but requested Enter (in addition to Space) to play the focused episode, and idle player controls to hide after a few seconds and reappear on mouse movement or keyboard input. Scope is only these two UI behaviors; no backend/core/workflow change. Baseline dbb191f CI is historical for this new correction. Exact new native CI and owner acceptance remain required.
-
-
-Historical dbb191f checkpoint: CI_VERIFIED / NEEDS_HUMAN. Earlier owner UX correction was fully pushed as dbb191f21603373b8527da9a56b4c8811593e863. Exact CI38361340591/job115176006170 passed every step: native tests,20repeat,Anime1,race,vet,security,dependency closure,production build,startup,clean tree and artifact. Simplify-first/independent review PASS; TypeSafe lifecycle uncertainty adjudicated against unchanged generation/cancellation guards. Exact artifact11795515880 is packaged under artifacts/loop30/dbb191f; exe/ZIP content hashes and runtime pin verified, no personal data. Corrected owner acceptance remains pending, so Loop30 is not PASS. Baseline1158671 is retained as rollback. Historical checkpoints below are superseded.
+IN_PROGRESS, not PASS. Owner bca387a check reports controls remain visible and video stutters while audio is normal. Confirmed causal defect: native overlay visibility guard included selected<0; remembered valid keyboard focus forced drawing after hideControls. Two-file C++/framebuffer correction removes focus from the visibility decision and preserves focus on hide/show. Framebuffer oracle uses full-frame black clear with scissor disabled, then verifies hidden pixel/show pixel and retained focus. Format/diff pass; final review, exact native CI and owner acceptance pending. Intermittent video stutter cause remains unverified: synchronous RenderGL/redraw notifications are candidate paths, not demonstrated bottlenecks. No speculative playback tuning or extra product instrumentation. Owner cleanup preference: keep newest usable executable/ZIP after each download, remove old downloads/build caches, preserve personal data and essential evidence/rollback records. First cleanup removed517.2MiB, manifest retained.
 
 ## 2026-10-13 recovery checkpoint
 

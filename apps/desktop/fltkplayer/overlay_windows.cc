@@ -37,7 +37,7 @@ static void focus(int current, int target, float x, float y, float w, float h) {
 }
 
 extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int resolution, int loading, int progress_hover, int scrubbing, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels) {
-    if (!visible && !menu && !episodes && selected < 0) return;
+    if (!visible && !menu && !episodes) return;
     GLint oldMatrix = GL_MODELVIEW;
     glGetIntegerv(GL_MATRIX_MODE, &oldMatrix);
     glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT | GL_LINE_BIT | GL_VIEWPORT_BIT | GL_SCISSOR_BIT);
