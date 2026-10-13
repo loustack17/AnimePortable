@@ -40,7 +40,7 @@ Source-present means inspected implementation, not a completed native/human gate
 | UX-005/006/007 | Escape/Back cancellation; existing slash and Ctrl+K Search handlers retained | Source-present; native regression and owner NOT_RUN |
 | UX-008/009/010 | Mouse callbacks, Scroll/paging, desktop controls, proportional toolbar bounds, calm existing theme; native layout tests | Source-present; native/mouse/visual gates NOT_RUN |
 | QUAL-001..008/010/011, ARCH/SEC | Scoped model/cover/detail view, inward dependency direction, existing typed actions and bounded secure loader; no provider/core/schema/dependency/workflow changes | No additional concrete source finding; R30-02 resolved using the existing not-found sentinel |
-| QUAL-009 | Legacy `playSearchPreview` remains referenced by unchanged startup tests; new toolbar uses selected Play. No baseline tests were weakened or deleted. | Retention documented; no additional confirmed MUST_FIX |
+| QUAL-009 | Legacy playback model/code remains unchanged baseline; startup tests now exercise actual selected Play after prefetched Episodes, preserving original assertions. Scoped reviewer did not identify a MUST_FIX requiring unrelated legacy removal. | Retention documented; no additional confirmed MUST_FIX |
 | QUAL-012 | Fresh independent review after simplify | PASS_REVIEW after bounded repair; zero unresolved MUST_FIX |
 | STATE / execution boundaries | Bounded handoff, hash-bound results, separate NOT_RUN gates, preserved user/data files; local cgo breaker remains closed | No native PASS, no CI or owner acceptance claimed |
 

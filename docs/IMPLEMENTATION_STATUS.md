@@ -4,6 +4,11 @@
 
 ## Current loop
 
+### 2026-10-13 Loop30 — native fixture alignment ready for CI
+
+7e15677compiledWindows source inCI38355710455, butnativefixturesfailed. Two testfilesnowcorrectactiveSearchstate/readiness anduseactualselectedPlay/prefetchBackflow. Originalcriticalassertionsretained, no Skip/deletion/tolerancechanges. Scoped simplify/independentPASS_REVIEW; format/diff PASS. NewexactfullCIrequired, ownerNOT_RUN, noLoopPASS. No productbehavior/workflowchangedinthispass.
+
+
 ### 2026-10-13 Loop30 — native compile correction ready for CI
 
 The approvedMesarefresh waspushedasf4bf285; CI38355086703 passedtoolchainsetup thenfailednativecompile onmissingresizeDetailEpisodeRows. The20line methodand21line targetednativeassertions arenowadded, simplifiedandindependentlyreviewed PASS_REVIEW; existingfocus/geometry retained, no testweakening. CGO0regression/vet/format/diff PASS. Windowscompile/fullnative/race/build/owner stillrequireactualCI evidence; noLoop30PASS. PreviousCI failure notesbelow arehistorical. Exactfixhashes/review preserved in artifacts/evidence/loop30/native-resize-fix-state.json andnative-resize-fix-judgments.json.

@@ -82,16 +82,18 @@ func TestNativePreviewOnlyPlaysAfterExplicitAction(t *testing.T) {
 		ui.renderPreview()
 	}
 	ui.openSearchResult(backend.Anime{ID: "local", Title: "作品"})
-	pumpSearchEvents(t, func() bool { return ui.searchModel.preview != nil })
+	pumpSearchEvents(t, func() bool {
+		return ui.searchModel.preview != nil && ui.detailEpisodesDone
+	})
 	if plays != 0 || !ui.previewPlay.IsActive() {
 		t.Fatal("preview autoplayed or explicit Play unavailable")
 	}
-	ui.deferredSearchAction(ui.playSearchPreview, true)()
+	ui.deferredSearchAction(ui.playSelectedDetailEpisode, true)()
 	pumpSearchEvents(t, func() bool { return plays == 1 })
 	if ui.searchModel.preview == nil || ui.previewTitle.Label() != "作品" || !ui.previewPlay.IsActive() {
 		t.Fatal("return after failed playback lost preview or disabled retry")
 	}
-	ui.deferredSearchAction(ui.playSearchPreview, true)()
+	ui.deferredSearchAction(ui.playSelectedDetailEpisode, true)()
 	pumpSearchEvents(t, func() bool { return plays == 2 })
 }
 
@@ -137,8 +139,6 @@ func TestNativeBackRejectsLateEpisodeCompletion(t *testing.T) {
 	plays := 0
 	ui.onPlay = func(backend.PlayRequest) { plays++ }
 	ui.openSearchResult(backend.Anime{ID: "local", Title: "作品"})
-	pumpSearchEvents(t, func() bool { return ui.searchModel.preview != nil })
-	ui.playSearchPreview()
 	pumpSearchEvents(t, func() bool {
 		select {
 		case <-started:
@@ -157,7 +157,10 @@ func TestNativeBackRejectsLateEpisodeCompletion(t *testing.T) {
 			return false
 		}
 	})
-	if plays != 0 || ui.searchPreview {
+	processed := false
+	fltk.AddTimeout(0.05, func() { processed = true })
+	pumpSearchEvents(t, func() bool { return processed })
+	if plays != 0 || ui.searchPreview || ui.detailModel.animeID != "" {
 		t.Fatal("late source completion played after Back")
 	}
 }

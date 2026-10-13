@@ -227,6 +227,7 @@ func TestNativeSearchViewBoundsRowsParentsFooterAndReflows(t *testing.T) {
 
 func TestNativeDetailArrowKeepsLastEpisodeVisibleAtMinimumWindow(t *testing.T) {
 	ui := newSearchViewTestFixture(t, nil)
+	ui.selected = 4
 	ui.window.Resize(0, 0, 760, 480)
 	ui.resizeSearch()
 	ui.searchPreview = true
