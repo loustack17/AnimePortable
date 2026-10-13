@@ -178,12 +178,6 @@ func (ui *view) continueDetailEpisode() {
 	ui.onPlay(request)
 }
 
-func (ui *view) selectDetailEpisode(index int) {
-	ui.detailModel.selectEpisode(index)
-	ui.renderDetailEpisodes()
-	ui.focusSelectedDetailEpisode()
-}
-
 func (ui *view) playDetailEpisodeAt(index int) {
 	ui.detailModel.selectEpisode(index)
 	ui.renderDetailEpisodes()
@@ -327,9 +321,7 @@ func (ui *view) renderDetailEpisodes() {
 
 func (ui *view) handleDetailEpisodeKey(index, key int) bool {
 	switch key {
-	case fltk.ENTER_KEY, 13, 0xff8d:
-		ui.deferredSearchAction(func() { ui.selectDetailEpisode(index) }, true)()
-	case 32:
+	case fltk.ENTER_KEY, 13, 0xff8d, 32:
 		ui.deferredSearchAction(func() { ui.playDetailEpisodeAt(index) }, true)()
 	case 0xff52:
 		ui.deferredSearchAction(func() {

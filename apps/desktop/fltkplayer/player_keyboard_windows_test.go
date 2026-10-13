@@ -130,6 +130,56 @@ func TestMissingFocusFallsBackToProgressForArrows(t *testing.T) {
 	}
 }
 
+func TestKeyboardInputRevealsHiddenControlsAndRestartsIdleTimer(t *testing.T) {
+	view := keyboardTestView(Callbacks{})
+	view.visible = false
+	view.lastMove = time.Unix(1, 0)
+	if keyDown(view, 'x', 0) {
+		t.Fatal("unbound key was consumed")
+	}
+	if !view.visible || !view.lastMove.After(time.Unix(1, 0)) {
+		t.Fatalf("keyboard input left controls visible=%v lastMove=%v", view.visible, view.lastMove)
+	}
+}
+
+func TestModifiedShortcutRevealsControlsWithoutConsumingShortcut(t *testing.T) {
+	view := keyboardTestView(Callbacks{})
+	view.visible = false
+	if keyDown(view, 'x', fltk.CTRL) {
+		t.Fatal("modified shortcut was consumed")
+	}
+	if !view.visible {
+		t.Fatal("modified shortcut did not reveal controls")
+	}
+}
+
+func TestPlaybackStateTransitionsRevealControls(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		state State
+	}{
+		{"loading", State{Loading: true}},
+		{"playing", State{Playing: true}},
+		{"paused", State{Paused: true}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			view := keyboardTestView(Callbacks{})
+			view.visible = false
+			view.SetState(test.state)
+			if !view.visible {
+				t.Fatalf("state %+v did not reveal controls", test.state)
+			}
+		})
+	}
+	view := keyboardTestView(Callbacks{})
+	view.SetState(State{Playing: true})
+	view.visible = false
+	view.SetState(State{})
+	if !view.visible {
+		t.Fatal("playback failure did not reveal controls")
+	}
+}
+
 func TestPlayerFocusSurvivesAutoHidePointerAndStateUpdates(t *testing.T) {
 	view := keyboardTestView(Callbacks{})
 	view.SetFocus(focusVolume)

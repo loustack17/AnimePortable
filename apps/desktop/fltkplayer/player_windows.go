@@ -24,6 +24,8 @@ const (
 	focusFullscreen
 )
 
+const controlsIdleTimeout = 3 * time.Second
+
 const FocusProgress = focusProgress
 
 type Callbacks struct {
@@ -69,7 +71,6 @@ type View struct {
 	scrubbing     bool
 	scrubPosition float64
 	progressHover bool
-	hoverControls bool
 	closed        bool
 	nativeHandles map[uintptr]struct{}
 	episodeStart  int
@@ -186,6 +187,9 @@ func (view *View) Close() {
 }
 
 func (view *View) SetState(state State) {
+	wasPlaying := view.state.Playing && !view.state.Paused && !view.state.Loading
+	wasLoading := view.state.Loading
+	wasPaused := view.state.Paused
 	fullscreenChanged := state.Fullscreen != view.state.Fullscreen
 	if state.Volume < 0 {
 		state.Volume = 0
@@ -206,6 +210,10 @@ func (view *View) SetState(state State) {
 		view.episodeCursor = state.Episode
 	}
 	view.state = state
+	isPlaying := state.Playing && !state.Paused && !state.Loading
+	if (isPlaying && !wasPlaying) || (state.Loading && !wasLoading) || (state.Paused && !wasPaused) || (wasPlaying && !state.Playing) {
+		view.showControls()
+	}
 	if fullscreenChanged {
 		view.syncNativeInput()
 	}
@@ -239,7 +247,7 @@ func (view *View) tick() {
 		return
 	}
 	view.syncNativeInput()
-	if view.state.Playing && !view.state.Paused && !view.state.Loading && !view.hoverControls && !view.scrubbing && !view.menuVisible() && !view.episodesOpen && time.Since(view.lastMove) > 2500*time.Millisecond {
+	if view.shouldHideControls(time.Now()) {
 		view.hideControls()
 	}
 	fltk.RepeatTimeout(0.5, view.tick)
@@ -252,11 +260,14 @@ func (view *View) showAt(x, y int) {
 func (view *View) showAtSize(x, y, width, height int) {
 	view.lastMove = time.Now()
 	view.visible = true
-	view.hoverControls = y < 62 || y >= height-84
 	view.menuHover = x < 18 || view.menuHover && x < 180 && y < height-54
 	view.volumeOpen = x >= 232 && x <= 395 && y >= height-60 || view.state.Focus == focusVolume
 	view.progressHover = y >= height-82 && y < height-54 && x >= 24 && x <= width-24
 	view.Redraw()
+}
+
+func (view *View) shouldHideControls(now time.Time) bool {
+	return view.visible && view.state.Playing && !view.state.Paused && !view.state.Loading && !view.scrubbing && !view.dragging && !view.menuPinned && !view.episodesOpen && now.Sub(view.lastMove) >= controlsIdleTimeout
 }
 
 func (view *View) hideControls() {
@@ -388,7 +399,6 @@ func (view *View) handle(event fltk.Event) bool {
 		view.showAt(x, y)
 		return true
 	case fltk.LEAVE:
-		view.hoverControls = false
 		view.progressHover = false
 		view.menuHover = false
 		view.lastMove = time.Now()
@@ -488,6 +498,7 @@ func (view *View) handleKeyEvent(event fltk.Event, key, modifiers int) bool {
 	if event != fltk.KEYDOWN {
 		return false
 	}
+	view.showControls()
 	if modifiers&(fltk.CTRL|fltk.ALT|fltk.META) != 0 {
 		return false
 	}

@@ -74,7 +74,7 @@ func TestNativePreviewOnlyPlaysAfterEpisodeAction(t *testing.T) {
 	ui := newSearchViewTestFixture(t, service)
 	ui.selected = 4
 	ui.searchModel.loaded = true
-	playedEpisodes := make([]string, 0, 2)
+	playedEpisodes := make([]string, 0, 3)
 	ui.onPlay = func(request backend.PlayRequest) {
 		playedEpisodes = append(playedEpisodes, request.EpisodeID)
 		if request.AnimeID != "local" {
@@ -92,18 +92,21 @@ func TestNativePreviewOnlyPlaysAfterEpisodeAction(t *testing.T) {
 		t.Fatal("preview autoplayed or Continue appeared for an unwatched series")
 	}
 	ui.handleDetailEpisodeKey(1, 13)
-	pumpSearchEvents(t, func() bool { return ui.detailModel.selected == 1 && ui.previewEpisodeRows[1].HasFocus() })
-	if len(playedEpisodes) != 0 {
-		t.Fatal("Enter played the selected episode")
-	}
-	ui.handleDetailEpisodeKey(1, 32)
 	pumpSearchEvents(t, func() bool { return len(playedEpisodes) == 1 })
+	if playedEpisodes[0] != "episode-2" {
+		t.Fatalf("Enter played episode %q, want exact row episode-2", playedEpisodes[0])
+	}
+	ui.handleDetailEpisodeKey(0, 32)
+	pumpSearchEvents(t, func() bool { return len(playedEpisodes) == 2 })
+	if playedEpisodes[1] != "episode-1" {
+		t.Fatalf("Space played episode %q, want exact row episode-1", playedEpisodes[1])
+	}
 	if ui.searchModel.preview == nil || ui.previewTitle.Label() != "作品" {
 		t.Fatal("return after failed playback lost preview")
 	}
 	ui.playDetailEpisodeAt(0)
-	pumpSearchEvents(t, func() bool { return len(playedEpisodes) == 2 })
-	if playedEpisodes[0] != "episode-2" || playedEpisodes[1] != "episode-1" {
+	pumpSearchEvents(t, func() bool { return len(playedEpisodes) == 3 })
+	if playedEpisodes[2] != "episode-1" {
 		t.Fatalf("episode actions played %v", playedEpisodes)
 	}
 }

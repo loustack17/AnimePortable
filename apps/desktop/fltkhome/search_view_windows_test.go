@@ -436,7 +436,7 @@ func TestNativeDetailSpacePlaysExactFocusedEpisodeAndArrowRestoresFocus(t *testi
 	}
 }
 
-func TestNativeDetailEnterSelectsRowAndBackCloseCancelLoads(t *testing.T) {
+func TestNativeDetailWithoutPlayCallbackKeepsSelectedRowFocusedAndCancelsLoads(t *testing.T) {
 	ui := newSearchViewTestFixture(t, nil)
 	ui.selected = 4
 	ui.searchPreview = true

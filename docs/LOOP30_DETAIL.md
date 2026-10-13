@@ -2,7 +2,7 @@
 
 ## Contract
 
-- Scope: Phase 24 under ADR-023: cover, title/native title, synopsis, season/year, studio, episode count when metadata is available; ordered episodes, Play/Continue, Space playback and Enter selection, visible current/progress state. Existing Search preview becomes the detail screen. No Schedule/Following/new settings or platform migration.
+- Scope: Phase 24 under ADR-023: cover, title/native title, synopsis, season/year, studio, episode count when metadata is available; ordered episodes, Play/Continue, Enter/Space playback on episode rows, visible current/progress state. Existing Search preview becomes the detail screen. No Schedule/Following/new settings or platform migration.
 - Baseline: main 90a7fc9985bd5ab17b1198333567324fd69d2e8a plus retained uncommitted Loop29 closure docs. Preserve AGENTS.md, .codex/, all prior documentation and portable data.
 - Harness: Codex App; OMO configured explorer/worker/reviewer; one bounded implementation worker, root integration/docs/verifier. No nested agents or overlapping writers.
 - Boundary: workspace-write repository only; sandbox disposable cache allowed; GitHub CI reads only. Owner subsequently authorized scoped commit/push after verification; workflow/release mutation remains outside scope. BWS key read and necessary TypeSafe state/code uploads explicitly authorized by user; key stays in memory.
@@ -15,7 +15,10 @@
 
 ## Verification state
 
-OWNER_UX_REVISION / IN_PROGRESS. Baseline 1158671 passed all Windows CI steps. Owner acceptance requested immediate mouse episode playback and Continue hidden without valid same-series resumable progress. These six-file UI/test corrections are saved and CGO0 focused/regression checks pass; final simplify-first review, exact new CI/build and owner acceptance remain required. No workflow/backend/core change. Earlier records below are historical.
+Current owner follow-up: IN_PROGRESS, not PASS. Owner confirmed mouse episode playback works, but requested Enter (in addition to Space) to play the focused episode, and idle player controls to hide after a few seconds and reappear on mouse movement or keyboard input. Scope is only these two UI behaviors; no backend/core/workflow change. Baseline dbb191f CI is historical for this new correction. Exact new native CI and owner acceptance remain required.
+
+
+Historical dbb191f checkpoint: CI_VERIFIED / NEEDS_HUMAN. Earlier owner UX correction was fully pushed as dbb191f21603373b8527da9a56b4c8811593e863. Exact CI38361340591/job115176006170 passed every step: native tests,20repeat,Anime1,race,vet,security,dependency closure,production build,startup,clean tree and artifact. Simplify-first/independent review PASS; TypeSafe lifecycle uncertainty adjudicated against unchanged generation/cancellation guards. Exact artifact11795515880 is packaged under artifacts/loop30/dbb191f; exe/ZIP content hashes and runtime pin verified, no personal data. Corrected owner acceptance remains pending, so Loop30 is not PASS. Baseline1158671 is retained as rollback. Historical checkpoints below are superseded.
 
 ## 2026-10-13 recovery checkpoint
 

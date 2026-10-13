@@ -4,10 +4,12 @@
 
 ## Current loop
 
-### 2026-10-13 Loop30 — OWNER_UX_REVISION / IN_PROGRESS
+Current owner follow-up: IN_PROGRESS, not PASS. Owner confirmed mouse episode playback works, but requested Enter (in addition to Space) to play the focused episode, and idle player controls to hide after a few seconds and reappear on mouse movement or keyboard input. Scope is only these two UI behaviors; no backend/core/workflow change. Baseline dbb191f CI is historical for this new correction. Exact new native CI and owner acceptance remain required.
 
-Owner acceptance requested immediate episode-click playback and Continue hidden for series without resumable history. The bounded UI/test correction is saved; CGO0 focused/regression checks and formatting pass. Exact new Windows CI and owner acceptance remain required. Previous 1158671 CI is baseline evidence only for this correction. No Loop30 PASS.
 
+### Historical dbb191f checkpoint — CI_VERIFIED / NEEDS_HUMAN
+
+Owner UX correction dbb191f21603373b8527da9a56b4c8811593e863 is fully pushed. [CI38361340591](https://github.com/loustack17/AnimePortable/actions/runs/38361340591) passed all required checks and produced exact artifact11795515880. Episode clicks immediately play; redundant Play removed; Continue hidden without same-series resumable history. Simplify-first and independent review PASS; TypeSafe uncertainty independently adjudicated. Exact executable/ZIP ready in artifacts/loop30/dbb191f, hashes/pinned runtime verified, no personal data. Corrected owner acceptance pending; no Loop30 PASS. See LOOP30_HUMAN_CHECK.md and artifacts/evidence/loop30/dbb191f-test-object.json. Historical checkpoints below describe earlier source.
 
 ### 2026-10-13 Loop30 — CI_VERIFIED / NEEDS_HUMAN
 

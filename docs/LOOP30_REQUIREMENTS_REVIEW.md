@@ -4,7 +4,10 @@ Date: 2026-10-13. Baseline: main `90a7fc9985bd5ab17b1198333567324fd69d2e8a`.
 
 ## Result
 
-Current result: OWNER_UX_REVISION. Baseline 1158671 passed all Windows CI steps, but owner acceptance requested corrections: episode clicks must play immediately and Continue must be hidden without valid same-series resumable history. The six-file UI/test correction is locally verified; simplify-first independent review and exact new Windows CI are required. Owner acceptance has not passed. Earlier repair and CI records below are historical.
+Current owner follow-up: LOCAL_REVIEW_VERIFIED / IN_PROGRESS, not PASS. Owner confirmed mouse episode playback works, but requested Enter (in addition to Space) to play the focused episode, and idle player controls to hide after a few seconds and reappear on mouse movement or keyboard input. Scope is only these two UI behaviors; no backend/core/workflow change. Baseline dbb191f CI is historical for this new correction. Exact new native CI and owner acceptance remain required.
+
+
+Historical dbb191f result: PASS_REVIEW / CI_VERIFIED / NEEDS_HUMAN for earlier owner UX correction. Simplify-first independent review found no MUST_FIX; exact CI38361340591 passed all Windows/native/race/security/build/startup checks. Immediate episode clicks and conditional Continue are implemented, with Enter/Space retained. Exact exe/ZIP verified; corrected owner acceptance remains pending. Loop30 is not PASS. Earlier records below are historical.
 
 ## Historical review order and verification before repair
 
@@ -64,4 +67,8 @@ Main1158671026c429f1acc254e7376ea0e050803ffb matchesGitHub. CI38357613533 allste
 
 ## Owner UX correction review
 
-Six-file correction passed simplify-first independent review. Exact row callback uses existing deferred/generation guard and exact-ID play helper; Enter selects, Space plays. Continue visibility covers unwatched/foreign/completed/zero-position/resumable history. TypeSafe scope1.99/confidence0.98 and verification1.91/0.85 support review. Lifecycle1.29/0.40 required independent adjudication: patch-only input omitted unchanged cancellation/generation helpers; reviewer inspected them and found no defect. Raw state/probabilities are preserved in artifacts/evidence/loop30/owner-ux-{state,judgments}.json. CGO0 focused/regression and format/diff pass; exact native CI pending. Mouse-event dispatch is a human gate, not claimed automated PASS.
+Six-file correction passed simplify-first independent review. Exact row callback uses existing deferred/generation guard and exact-ID play helper; Enter selects, Space plays. Continue visibility covers unwatched/foreign/completed/zero-position/resumable history. TypeSafe scope1.99/confidence0.98 and verification1.91/0.85 support review. Lifecycle1.29/0.40 required independent adjudication: patch-only input omitted unchanged cancellation/generation helpers; reviewer inspected them and found no defect. Raw state/probabilities are preserved in artifacts/evidence/loop30/owner-ux-{state,judgments}.json. CGO0 focused/regression and format/diff pass; exact native CI38361340591 PASS. Mouse-event dispatch is a human gate, not claimed automated PASS.
+
+## Enter and idle-controls follow-up review
+
+Simplify-first independent code/platform/lifecycle review PASS, no unresolved MUST_FIX. Enter/Space use the same exact-row generation-guarded playback path; Search Enter and working mouse callback retained. Existing player timer hides visible controls after3s active idle playback; passive hover no longer pins them. Any KEYDOWN/mouse movement reveals; pause/loading/state transitions reveal, progress-only updates do not reset the timer. Scrubbing/volume drag/pinned menu/episode list preserve interaction. Tests cover thresholds, pointer, key/modifier reveal, state transitions/progress and exact episode IDs. TypeSafe scope1.97/confidence0.97 and verification1.90/0.85 support review; lifecycle1.22/0.46 required independent adjudication against full unchanged generation/timer/close guards, which found no defect. Raw state/judgments and source hashes saved under artifacts/evidence/loop30/enter-idle-*.json. Format/diff and focused CGO0 regression PASS; exact native CI and human acceptance remain pending.

@@ -16,7 +16,7 @@ Build a lightweight desktop anime client whose primary job is to make it fast an
 
 Playback uses in-process libmpv on Windows under ADR-023.
 
-Playback uses a minimal immersive control overlay on the video under ADR-023.
+Playback uses a minimal immersive control overlay on the video under ADR-023. Show controls initially, then hide them after a few seconds of idle active playback; mouse movement or keyboard input reveals them again. Preserve controls during pause/loading and active menu or drag interaction.
 
 ## 2. Product philosophy
 
@@ -221,7 +221,7 @@ Show only useful work-respecting metadata:
 - continue/play action
 - episode list
 
-Clicking an episode plays that episode immediately, without a separate selected-episode Play button. Show Continue only when that series has valid resumable saved progress.
+Clicking an episode or pressing Enter/Space on its focused row plays that episode immediately, without a separate selected-episode Play button. Show Continue only when that series has valid resumable saved progress.
 
 The product should respect the work by presenting correct metadata, but should not become an encyclopedia UI.
 
@@ -269,7 +269,7 @@ No analytics or behavioural scoring.
 Minimum bindings:
 
 - Arrow keys: navigate
-- Enter: open/select
+- Enter: open anime detail / play focused episode
 - Space: play selected episode
 - Esc: back
 - `/`: search
