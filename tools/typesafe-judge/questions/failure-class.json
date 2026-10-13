@@ -1,0 +1,30 @@
+{
+ "failure_class": {
+  "type": "choice",
+  "instructions": "Classify the failed check described in `failure` (command, exit status, smallest relevant error, changed files) into the single most likely class. The classes are defined in docs/05_WORKFLOW.md section 5.",
+  "criteria": {
+   "IMPLEMENTATION_FAILURE": "Product behavior differs from what the requirement expects",
+   "REGRESSION_FAILURE": "Behavior that passed before this change now fails",
+   "BUILD_OR_TYPE_FAILURE": "A compile, type, vet, lint or format gate fails because of repository source code (for example an undefined name or type error in a changed file)",
+   "SECURITY_FAILURE": "A security criterion or fail-closed rule fails, or a scan reports a reachable vulnerability",
+   "RESOURCE_FAILURE": "A leak, missing cleanup, race, lifecycle problem or resource bound fails",
+   "TEST_FAILURE": "A deterministic functional test fails and none of the more specific classes fits",
+   "FLAKY_OR_NONDETERMINISTIC": "The same unchanged state gives different results across runs",
+   "ENVIRONMENT_BLOCKED": "No approved capable environment, tool, package version or hardware is available, so the check could not really run",
+   "SANDBOX_INFRA_FAILURE": "The sandbox cannot start even a minimal process; the repository check never ran",
+   "SANDBOX_CAPABILITY_LIMITATION": "Ordinary commands run locally, but the local sandbox or toolchain cannot perform a step the check needs (for example spawning child processes, or cgo object files that cannot be parsed) while the same code builds in CI or no repository file changed",
+   "UPSTREAM_BLOCKED": "An external service (Anime1, AniList, Bangumi, GitHub) prevented a required live check",
+   "SPEC_AMBIGUITY": "The requirement is too vague to decide the correct behavior",
+   "SPEC_OR_TEST_CONFLICT": "A test or criterion contradicts the documented requirement",
+   "ARCHITECTURE_CONFLICT": "A correct fix needs a change to an architectural decision",
+   "VERIFIER_INTEGRITY_FAILURE": "A required check was weakened, bypassed or unexpectedly modified",
+   "EXECUTION_BOUNDARY_VIOLATION": "A write or access escaped the allowed repository, credential or remote boundary",
+   "UNKNOWN_FAILURE": "The evidence is not enough to tell"
+  }
+ },
+ "product_code_at_fault": {
+  "type": "noul",
+  "instructions": "Based on `failure`, is a change to product (non-test) code required to make this check pass correctly?",
+  "criteria": {"true": "Product code must change", "false": "Only tests, fixtures, environment or configuration are involved, or it cannot be told"}
+ }
+}

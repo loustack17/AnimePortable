@@ -1,500 +1,190 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 
-# Security and Privacy Requirements
+# Security and Privacy
 
-The current Windows desktop UI is FLTK with in-process libmpv under ADR-020/023. Fyne, Wails, Svelte and external MPV sections below document historical boundaries; active native actions must preserve the same trust, secret and playback-lifecycle protections. Linux/macOS implementation is paused.
+Treat all remote data as untrusted, including data from services we normally trust. The Go backend is the security broker. The Windows UI is FLTK. Playback is in-process libmpv (ADR-020, ADR-023). Linux and macOS are deferred.
 
-## 1. Security model
+## Trust boundaries
 
-Treat all remote data as untrusted, including data from services we normally trust.
-
-Trust boundaries:
-
-1. Internet -> Go backend
-2. Go backend -> desktop UI
-3. Go backend -> local playback proxy
-4. local playback proxy -> MPV
-5. MPV IPC -> Go backend
-6. local persistence
-
-The Go backend is the security broker.
+| # | Boundary | Rule |
+| --- | --- | --- |
+| 1 | Internet -> Go backend | One controlled HTTPS client. Validate everything. |
+| 2 | Go backend -> FLTK UI | Typed actions and typed results only. |
+| 3 | Go backend -> loopback playback proxy | Proxy holds source credentials. Bound to loopback. |
+| 4 | Loopback proxy -> libmpv | libmpv gets only a random loopback session URL. |
+| 5 | libmpv DLL loading | Absolute path, SHA-256 pinned, loaded only when playback starts. |
+| 6 | Local persistence (SQLite) | Local file, no secrets stored. |
 
 Hard rules:
 
-- Internet never directly talks to the desktop UI.
-- Remote Anime1 media URLs never directly reach MPV.
-- Desktop UI never receives playback credentials.
-- Desktop UI never sends arbitrary MPV commands.
-- Desktop UI never supplies arbitrary network URLs for playback.
+- The Internet never talks to the UI directly.
+- Remote Anime1 media URLs never reach libmpv directly.
+- The UI never receives playback credentials.
+- The UI never sends raw libmpv commands.
+- The UI never supplies arbitrary network URLs for playback.
 
-## 2. Privacy baseline
+## Privacy baseline
 
-MVP has:
+No account, telemetry, analytics, ads, ad SDK, automatic crash upload, cloud sync, user tracking ID or elevated privilege. Following, history, progress, metadata cache and settings stay local. Do not run as administrator.
 
-- no account
-- no telemetry
-- no analytics
-- no ads
-- no advertising SDK
-- no automatic crash upload
-- no cloud sync
-- no user tracking ID
-- no elevated privileges
+## Sensitive playback data
 
-Local data may include:
+Sensitive: stream URL, cookies, referer, source-specific user agent, temporary tokens, signed URL queries, proxy session token.
 
-- following
-- history
-- playback progress
-- metadata cache
-- settings
+- Keep in memory only. Never SQLite, UI, logs or crash reports.
+- Never in command-line arguments when avoidable. No secrets are passed to the player.
+- Minimize lifetime and copies.
+- Do not claim secure erasure from RAM. The strategy is short lifetime, no persistence, no logging, narrow ownership.
 
-These stay local.
+## Secure playback proxy
 
-## 3. Sensitive playback data
+Flow: `libmpv -> localhost random session URL -> Go proxy -> validated remote media`.
 
-Sensitive runtime data can include:
+- Bind to loopback only. Never `0.0.0.0`.
+- High-entropy random per-session token. No guessable paths such as `/episode/7`.
+- Short-lived session. Invalidate it immediately when playback or the session ends.
+- Never expose source credentials to libmpv.
 
-- stream URL
-- cookies
-- referer
-- user-agent if source-specific
-- temporary token
-- signed URL query
-- proxy session token
-- MPV IPC endpoint
+## libmpv DLL loading (rewritten 2026-10-13, owner decision; replaces the external-MPV IPC rules)
 
-Rules:
+There is no MPV process and no IPC endpoint (named pipe or socket). libmpv runs in the app process.
 
-- memory-only unless absolutely required
-- never SQLite
-- never desktop UI
-- never logs
-- never crash reports
-- never command-line arguments when avoidable
-- minimize lifetime
-- minimize copies
+- The packaged `libmpv-2.dll` sits next to the executable. Its expected SHA-256 is the constant in `internal/runtimepin/libmpv.go`.
+- Load by absolute path only, and only when playback starts. Never load by bare name or from the search path.
+- Verify the hash before use. Keep a read-only, non-write-shareable file handle through `LoadLibraryEx` and symbol binding. Reject reparse points and non-regular files.
+- Limit dependency search to the DLL directory and Windows System32.
+- A missing or altered DLL must leave Home usable and show a safe inline playback error.
+- An explicit absolute DLL path plus user-supplied SHA-256 (two environment variables) may replace the bundled DLL. The same checks apply. Never accept a DLL silently from the search path.
+- The player starts with `config=no`. The user's mpv config files and scripts are not loaded.
+- The UI cannot issue arbitrary libmpv commands. It uses typed player callbacks.
+- Playback source detail is shown to the user only as safe, generic errors.
 
-Do not claim guaranteed secure erasure from RAM. Go GC/runtime may retain copies temporarily. The practical strategy is short lifetime, no persistence, no logging, and narrow ownership.
+DLL licensing is a settled owner decision (ADR-023). Do not reopen it.
 
-## 4. Secure playback proxy
+## External network client
 
-Use a local proxy as a credential-isolation boundary.
+All outbound HTTP uses one controlled secure client (`adapters/network/securehttp`). Adapters must not create unmanaged clients.
 
-Flow:
+- Connect, read and request timeouts.
+- Reusable transport and connection pool.
+- Cancellation through `context.Context`.
+- Response bodies always closed.
+- Response sizes bounded where possible.
 
-`MPV -> localhost random session URL -> Go proxy -> validated remote media`
+## Protocol allowlist
 
-Requirements:
+Remote requests are HTTPS only. The only HTTP exception is the app-owned loopback playback proxy. Reject `file:`, `ftp:`, `gopher:`, `data:`, `javascript:`, `smb:`, `nfs:` and any custom scheme.
 
-- bind only to loopback
-- never `0.0.0.0`
-- random high-entropy per-session token
-- short-lived session
-- invalidate immediately on playback/session end
-- no guessable `/episode/7` paths
-- never expose source credentials to MPV argv
+## TLS
 
-## 5. MPV IPC security
+Certificate, hostname and expiry verification are mandatory. `InsecureSkipVerify: true` is forbidden. No certificate pinning unless a reliable upstream pinning model exists.
 
-MPV JSON IPC is not considered a secure network protocol.
+## SSRF protection
 
-Requirements:
+Before connecting, resolve the destination and validate the actual IP used for the connection (this defends against DNS rebinding). Reject loopback, private IPv4, IPv4 link-local, IPv6 loopback, private and local IPv6, IPv6 link-local, multicast, unspecified, and known metadata-service addresses. Never trust only the hostname string.
 
-### Unix
+## Redirect policy
 
-- random socket path
-- user-private runtime directory
-- directory permissions restricted to current user
-- cleanup socket after session
+Do not auto-follow blindly. For each redirect: parse the destination, apply protocol policy, apply host policy, resolve, apply the SSRF policy, then continue. A legal source redirecting to localhost or a private IP is blocked. Do not forward sensitive headers to unrelated origins.
 
-### Windows
+## Domain policy
 
-- random named pipe
-- current-user access where practical
-- short-lived endpoint
-- cleanup on session end
+Use explicit origin allowlists for the Anime1 site and API, the AniList API and the Bangumi API. Playback CDN origins may be dynamic but must satisfy HTTPS, valid TLS, public IP, acceptable redirects and an expected media response. Unknown playback origins fail closed unless resolver policy approves them.
 
-The desktop UI never receives the IPC endpoint.
+## Remote HTML
 
-## 6. External network client
+Never render raw Anime1 HTML. Use parser-only extraction into typed models. Ignore scripts, iframes, popups, ads, arbitrary anchors and JavaScript redirects. Raw HTML never reaches the UI.
 
-All outbound HTTP must use one controlled secure client or transport policy.
+## Metadata text
 
-Adapters must not instantiate arbitrary unmanaged clients.
+AniList and Bangumi fields are remote input. Normalize titles, native titles, descriptions, seasons and studios to bounded plain text and render plain text. Reject unsafe or non-canonical cached metadata on write and on read.
 
-Requirements:
-
-- reasonable connect/read/request timeouts
-- reusable transport/connection pool
-- cancellation through `context.Context`
-- response bodies always closed
-- bounded response sizes where possible
-
-## 7. Protocol allowlist
-
-Remote external requests:
-
-- HTTPS only
-
-The only normal HTTP exception is the app-owned loopback playback proxy.
-
-Reject:
-
-- `file:`
-- `ftp:`
-- `gopher:`
-- `data:`
-- `javascript:`
-- `smb:`
-- `nfs:`
-- arbitrary custom schemes
-
-## 8. TLS
-
-Mandatory:
-
-- certificate verification
-- hostname verification
-- valid expiry chain
-
-Forbidden:
-
-```go
-InsecureSkipVerify: true
-```
-
-Do not implement certificate pinning in MVP unless a reliable upstream pinning model exists.
-
-## 9. SSRF protection
-
-Before connecting to a remote target, resolve and validate destination IPs.
-
-Reject at minimum:
-
-- loopback
-- private IPv4
-- IPv4 link-local
-- IPv6 loopback
-- IPv6 private/local ranges where applicable
-- IPv6 link-local
-- multicast
-- unspecified addresses
-- known metadata-service addresses/ranges
-
-Do not trust only the hostname string.
-
-Defend against DNS rebinding / pinning by validating the actual resolved address used for connection.
-
-## 10. Redirect policy
-
-Do not blindly auto-follow redirects.
-
-For each redirect:
-
-1. parse destination
-2. apply protocol policy
-3. apply host/domain policy
-4. resolve destination
-5. apply SSRF/IP policy
-6. only then continue
-
-A legal source redirecting to localhost/private IP must be blocked.
-
-Sensitive headers must not be forwarded to unrelated origins.
-
-## 11. Domain policy
-
-Use explicit known-origin policy for:
-
-- Anime1 API/site origins
-- AniList API origin
-- Bangumi API origin
-
-Playback CDN origins may be more dynamic, but must still satisfy:
-
-- HTTPS
-- valid TLS
-- public IP
-- acceptable redirect chain
-- expected media response
-
-Unknown playback origins should fail closed unless explicitly approved by resolver policy.
-
-## 12. Remote HTML policy
-
-Never render Anime1 raw HTML.
-
-Use parser-only extraction into typed models.
-
-Ignore:
-
-- scripts
-- iframes
-- popup links
-- ads
-- arbitrary anchors
-- JavaScript redirects
-
-Raw HTML must not be passed to the desktop UI.
-
-## 13. Metadata text policy
-
-AniList/Bangumi display fields are remote input.
-
-The desktop UI must display them as bounded plain text, not raw HTML.
-
-Preferred MVP behavior:
-
-- normalize titles, native titles, descriptions, seasons, and studios to bounded plain text
-- render plain text
-- reject unsafe or non-canonical cached metadata on write and read
-
-Do not use raw remote HTML rendering.
-
-## 14. Remote image policy
+## Remote images
 
 Covers are untrusted binary data.
 
-Requirements:
+- Fixed AniList and Bangumi HTTPS cover origins.
+- The secure client's DNS, SSRF, redirect, TLS and timeout rules apply.
+- Final HTTP status 200.
+- JPEG or PNG only. Header MIME, content signature and decoder format must agree.
+- Identity content encoding only.
+- 4 MiB encoded limit.
+- 4096 pixels per dimension and 4,194,304 pixels total, checked before full decode.
+- At most four concurrent fetch-and-validate operations.
+- Load on demand, no memory cache.
+- Fixed sanitized errors and zero content on failure.
 
-- fixed AniList and Bangumi HTTPS cover origins
-- existing secure HTTP DNS, SSRF, redirect, TLS, and timeout enforcement
-- final HTTP status `200`
-- JPEG or PNG only, with header MIME, content signature, and decoder format agreement
-- identity content encoding only
-- 4 MiB encoded byte limit
-- 4096-pixel per-dimension limit and 4,194,304-pixel total limit before full decode
-- at most four concurrent fetch-and-validation operations
-- explicit on-demand loading with no memory cache
-- fixed sanitized errors and zero content on failure
+The UI action returns typed validated bytes and dimensions. It is never a caller-configurable URL fetch.
 
-Do not allow image URLs to become arbitrary fetch primitives.
+## Media validation
 
-The desktop binding must return typed validated image bytes and dimensions. It must not expose the loader as a caller-configurable URL fetch API.
+Before proxying a source to libmpv, validate scheme, TLS, origin policy, resolved IP, redirects, HTTP status, expected content or manifest type and response sanity. Optional low-cost checks: duration, codec, resolution, suspiciously tiny content (for example an 8-second "episode"). Such a source must not autoplay without validation.
 
-## 15. Media validation
+Limit: if a legitimate upstream is itself compromised and serves wrong content with correct host, TLS and structure, the client cannot prove authenticity without signed manifests. The goal is risk reduction and fail-closed validation.
 
-Before proxying a playback source to MPV, validate:
+## Metadata integrity
 
-- scheme
-- TLS
-- origin policy
-- resolved IP
-- redirects
-- HTTP status
-- expected content type / manifest type
-- response sanity
+Never trust the first search result. Use confidence scoring and provider cross-check. Low confidence shows no metadata.
 
-Optional low-cost sanity checks may include:
+## UI restrictions
 
-- duration
-- codec
-- resolution
-- suspiciously tiny content
+The FLTK UI must not: fetch Internet resources directly, receive playback cookies or tokens, receive signed media URLs where avoidable, send raw libmpv commands or arbitrary playback URLs, render raw remote HTML, or open unvalidated external content. It may call typed Go actions such as `PlayEpisode(id)`, `Search(query)`, `Follow(id)` and `LoadSchedule()`. Widgets get no provider clients, no persistence handles and no credentials.
 
-Example suspicious case:
+## External links
 
-Expected anime episode ~24 minutes, source reports ~8 seconds.
+The MVP may omit them. If added: never auto-open, show the destination, open in the OS default browser, never load remote pages in the app.
 
-Such a source should not autoplay without validation.
+## Logging
 
-## 16. Source integrity limitations
+Structured logging with central redaction. Never log cookies, Authorization values, tokens, proxy session IDs, signed URL query parameters or full private playback URLs. Prefer provider, host, operation, local episode ID and a sanitized error category.
 
-If a legitimate upstream itself is compromised and serves malicious or wrong content from:
+## Crash handling
 
-- correct hostname
-- correct TLS
-- valid response structure
+No automatic crash upload. If added later: explicit opt-in, and redact paths, usernames, URLs, tokens, cookies and watch history.
 
-the client cannot cryptographically prove content authenticity unless the upstream provides signed manifests/hashes.
+## Local database
 
-Therefore the goal is risk reduction and fail-closed validation, not an impossible guarantee of perfect provenance.
+SQLite is local only. The caller supplies an absolute path. In the portable build that path is `<extracted folder>/data`.
 
-## 17. Metadata integrity
+- The final database path must be a regular file, never a symlink. Open with SQLite `nofollow`.
+- A same-user replacement race between check and open remains a known local residual risk.
+- On Windows, files inherit the ACL of their directory. The database lives in the portable folder and inherits that folder's ACL. If the folder is in a shared or world-readable location, other local users can read the watch history (residual risk).
+- No database encryption in the MVP.
 
-Never blindly trust the first search result.
+## Resource safety
 
-Use confidence scoring and provider cross-checking.
+Prevent goroutine leaks, stuck channels, unclosed HTTP bodies and sockets, abandoned proxy sessions, unbounded maps and caches, unstopped tickers and uncancelled contexts. Long-running work needs a lifecycle.
 
-Low confidence:
+Closing a playback session must, in order:
 
-- show no metadata
-- do not attach incorrect metadata
+1. Cancel the session context.
+2. Stop event readers.
+3. Persist final progress.
+4. Invalidate the proxy session.
+5. Close sockets and streams.
+6. Destroy the libmpv player and release the DLL handle when the last session ends.
+7. Release references.
 
-This is both correctness and integrity protection.
+Caches prefer SQLite. Any memory cache needs an upper bound, TTL and eviction. Metadata refresh concurrency is bounded.
 
-## 18. Desktop UI restrictions
+## Supply chain
 
-The Fyne UI must not:
+CI runs `go mod verify`, `go vet`, `go test`, `govulncheck`, native build and static checks, and a dependency audit with locked dependency files. Keep dependencies minimal. Third-party notices ship in `THIRD_PARTY_NOTICES.md`.
 
-- `fetch()` arbitrary Internet resources directly
-- receive playback cookies/tokens
-- receive signed media URL where avoidable
-- send arbitrary MPV commands
-- send arbitrary playback URLs
-- render raw remote HTML
-- open unvalidated external content
+## Security acceptance
 
-The UI may invoke typed Go actions such as:
+Not accepted unless all hold:
 
-- `PlayEpisode(id)`
-- `Search(query)`
-- `Follow(id)`
-- `LoadSchedule()`
-
-## 19. External links
-
-MVP may omit external links entirely.
-
-If added later:
-
-- never auto-open
-- show/validate destination
-- open via OS default browser
-- never load remote pages inside the application UI
-- consider allowlist/confirmation policy
-
-## 20. Transitional WebView security and final removal
-
-While Wails/Svelte is present, bundle application JS/CSS locally.
-
-Use a restrictive Content Security Policy.
-
-Do not enable:
-
-- remote JS
-- arbitrary iframes
-- inline/eval-like execution unless framework tooling absolutely requires a narrowly-scoped exception
-
-The transitional WebView is an application UI, not a browser. The Fyne release must have no WebView/HTML runtime at all. Remove this CSP-only verifier only after WebView removal is proved and equivalent native input, text/image handling, external-link, secret and action-boundary checks pass. Fyne must not expose provider/network clients, raw MPV IPC, playback credentials or persistence handles to widgets.
-
-## 21. Logging
-
-Use structured logging.
-
-Central redaction is mandatory.
-
-Never log:
-
-- cookies
-- Authorization
-- tokens
-- proxy session IDs
-- authenticated/signed URL query parameters
-- full private playback URLs
-
-Prefer:
-
-- provider
-- host
-- operation
-- episode local ID
-- sanitized error category
-
-## 22. Crash handling
-
-No automatic crash upload in MVP.
-
-If crash reporting is added later:
-
-- explicit opt-in
-- redact paths/usernames
-- redact URLs
-- redact tokens/cookies
-- redact watch history where possible
-
-## 23. Local database privacy
-
-SQLite is local-only. Callers must provide an absolute path in a user-specific application-data directory.
-
-The final database path must be a regular file, never a symlink; open it with SQLite `nofollow` enabled. Creating or checking directory ancestors cannot eliminate a same-user replacement race, which remains a local residual risk.
-
-On Unix, create the database directory with private permissions and database, WAL, and SHM artifacts with `0600`. On Windows, use the inherited ACL of the user profile/application-data directory.
-
-MVP does not require DB encryption.
-
-Do not run as administrator/root.
-
-## 24. Memory/resource safety
-
-Go GC does not prevent logical memory leaks.
-
-Must prevent:
-
-- goroutine leaks
-- stuck channels
-- unclosed HTTP bodies
-- unclosed sockets
-- forgotten IPC readers
-- abandoned proxy sessions
-- unbounded maps/caches
-- tickers not stopped
-- contexts not cancelled
-
-Long-running work must have a lifecycle.
-
-MPV session close must:
-
-1. cancel session context
-2. stop IPC readers
-3. persist final progress
-4. invalidate proxy session
-5. close sockets/streams
-6. wait/reap process as appropriate
-7. delete IPC endpoint
-8. release references
-
-## 25. Cache rules
-
-Prefer SQLite over large in-memory caches.
-
-Any memory cache must have:
-
-- upper bound
-- TTL
-- eviction
-
-Metadata refresh concurrency must be bounded.
-
-## 26. Supply-chain security
-
-CI should include:
-
-- `go mod verify`
-- `go vet`
-- `go test`
-- `govulncheck`
-- native UI static/compile checks; transitional frontend lint/typecheck while Wails remains
-- native dependency audit; transitional frontend dependency audit while Wails remains
-- locked dependency files
-- dependency update automation where appropriate
-
-Keep dependencies minimal.
-
-## 27. Security hard requirements
-
-The implementation is not accepted unless all of the following hold:
-
-- no telemetry by default
-- no account requirement
+- no telemetry by default, no account requirement
 - no persistent playback credentials
-- no secrets in logs
-- no secrets in desktop UI
-- no secrets in MPV argv where avoidable
-- loopback-only proxy
-- random short-lived proxy sessions
-- private short-lived MPV IPC
-- HTTPS-only remote network
-- TLS verification
-- redirect revalidation
-- SSRF protection
-- private/link-local/loopback blocking
-- no raw remote HTML
-- no remote JavaScript execution
-- image limits
-- typed desktop UI actions
-- no arbitrary UI URL playback
+- no secrets in logs, the UI or player arguments
+- loopback-only proxy with random short-lived sessions
+- pinned, hash-verified, absolute-path libmpv load; safe failure when it is missing or altered
+- HTTPS only, TLS verification, redirect revalidation
+- SSRF protection and private, link-local and loopback blocking
+- no raw remote HTML, no remote JavaScript execution
+- image limits enforced
+- typed UI actions, no arbitrary UI URL playback
 - no elevated privilege
 - deterministic cleanup
 - bounded caches

@@ -1,0 +1,21 @@
+{
+ "stage": {
+  "type": "choice",
+  "instructions": "In `log_excerpt` from a GitHub Actions run, at which stage did the first failure happen?",
+  "criteria": {
+   "setup": "Runner, toolchain or package installation before any repository command",
+   "format_or_module": "Formatting, module verification or dependency download",
+   "compile": "Go or C/C++ compilation or linking",
+   "tests": "A Go test assertion, panic or timeout",
+   "race": "Race detector report",
+   "vet_or_security": "go vet or vulnerability scan",
+   "build_or_package": "Production build, startup check or artifact upload",
+   "none": "No failure is shown"
+  }
+ },
+ "repository_caused": {
+  "type": "noul",
+  "instructions": "Is the first failure in `log_excerpt` caused by repository code or tests rather than by the runner environment or an external service?",
+  "criteria": {"true": "Caused by repository code or tests", "false": "Caused by environment, package mirror, version pin or external service"}
+ }
+}

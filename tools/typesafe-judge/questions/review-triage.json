@@ -1,0 +1,16 @@
+{
+ "severity": {
+  "type": "choice",
+  "instructions": "Given `finding` (a reviewer comment with file and line) and `requirement` (the acceptance criteria and rules it cites), how should the loop treat the finding?",
+  "criteria": {
+   "MUST_FIX": "It shows a concrete correctness, security, resource-lifecycle, architecture or requirement violation in the changed code",
+   "ADVISORY": "It is a valid but optional improvement that does not violate any stated requirement",
+   "INVALID": "It is wrong about the code, out of the loop's scope, or not supported by the cited evidence"
+  }
+ },
+ "evidence_cited": {
+  "type": "noul",
+  "instructions": "Does `finding` cite specific code, a test, or a requirement that can be checked directly?",
+  "criteria": {"true": "Cites checkable file/line, test or requirement", "false": "General opinion without checkable evidence"}
+ }
+}

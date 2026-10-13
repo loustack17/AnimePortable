@@ -1,0 +1,48 @@
+{
+ "clarity": {
+  "type": "score",
+  "instructions": "How easily can an AI coding agent understand `section_text` on first read and know exactly what is true or what it must do?",
+  "criteria": [
+   "The meaning cannot be recovered: it depends on unstated context, undefined abbreviations, run-together words without spaces, or references the reader cannot resolve",
+   "The main point can be worked out only after rereading, decoding compressed wording, or guessing what vague references mean",
+   "Plain sentences; every rule, fact or step can be acted on or checked directly on first read"
+  ]
+ },
+ "filler": {
+  "type": "score",
+  "instructions": "How much of `section_text` is abstract, emphatic, slogan-like or repeated wording that gives an agent nothing concrete to check or do?",
+  "criteria": [
+   "Almost all content is concrete: specific rules, commands, file paths, names, numbers or observable results",
+   "Concrete content with some abstract principles, emphatic adjectives or restated rules that add no checkable meaning",
+   "Mostly abstract principles, buzzwords, slogans or repetition, with few concrete checkable rules"
+  ]
+ },
+ "status": {
+  "type": "choice",
+  "instructions": "Considering `project_context`, what role does `section_text` play for someone doing the project's next piece of work?",
+  "criteria": {
+   "current_rule": "States a rule, requirement or design decision that still governs how the current Go + FLTK + in-process libmpv Windows product or the agent workflow must work",
+   "current_progress": "Records the current state of in-progress work, open gates or next steps",
+   "historical_record": "Records past events, completed loops, old evidence, measurements or decisions that no longer drive current work",
+   "superseded_design": "Describes a design, tool or process that project_context says was removed or replaced (Wails, Svelte, Fyne, external MPV process and JSON IPC, NSIS, WebView) as if it were still the plan",
+   "mixed": "Interleaves current rules or progress with historical or superseded material so the reader must separate them"
+  }
+ },
+ "tool_specific": {
+  "type": "noul",
+  "instructions": "Does `section_text` require or assume one specific AI coding tool, vendor or model (for example Codex, OpenAI, GPT, Claude, OpenCode, a named model version or its configuration files) instead of stating a tool-neutral rule?",
+  "criteria": {
+   "true": "Names or depends on a particular AI coding tool, vendor, model or its configuration",
+   "false": "Tool-neutral, or mentions no AI coding tool at all"
+  }
+ },
+ "needed": {
+  "type": "score",
+  "instructions": "How often would an AI agent implementing the next product feature in this project need to read `section_text`?",
+  "criteria": [
+   "Never: it only serves audit history or traceability",
+   "Only in a specific situation, such as a release, a security change, a CI failure or a platform port",
+   "Routinely: it defines how ordinary feature work must be done or what the product must do"
+  ]
+ }
+}

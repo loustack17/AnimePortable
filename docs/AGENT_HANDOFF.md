@@ -1,39 +1,46 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 # Agent Handoff
 
+Recovery index only. Git, CI, tests and the linked docs override it. Rules for this file: [05_WORKFLOW.md section 10](05_WORKFLOW.md).
+
 ```yaml
-schema_version: 1
-protocol_version: v2.4.1
-instruction_version: v2.4.1
+schema_version: 2
+instruction_version: "3.0"
 status: IN_PROGRESS
-repository:
-  branch: main
-  observed_head: 3d58b0dd2270e9b14ab29ad3c2d587fe4d2dc584
-  working_tree: "Two-file render-feedback fix and checkpoint docs local; exclude AGENTS/.codex/data. Scoped commit/push already authorized."
-active_loop:
-  number: 30
-  state: "Owner controls PASS; video stutter remains; TypeSafe-approved isolated swap-feedback fix frozen, native CI/owner comparison pending. Not LoopPASS."
-completed:
-  - "Episode click/Enter/Space and conditional Continue implemented; actual overlay hide/show owner PASS."
-  - "3d58b0d default-off diagnostic source fully pushed, exact CI38441971359 allchecks PASS; latestpackage ready."
-  - "Owner completed diagnostic and stillstutters; rawreport archivedlocal, derivedstats saved."
-  - "Two-file isolatedfix: remove premature optional Engine.Render ReportSwap; nativeoracle requires>=2newframe updates, allpreviousassertions retained."
-verification:
-  - "Baseline render8.0103/s, outputdrop308, decoderdrop0, GLerrors0; aggregate walltime alone does not identify GPU bottleneck."
-  - "TypeSafe assessment outputpath2/conf1,swapcontract1.99/conf1,narrowfix1.99/conf1. Rawreport/numericvalues/GPUidentity excluded from API; only anonymousconditions/code."
-  - "Independent tools verified Renderhook then overlay then FLTKflip; optionalReportSwap formerlyinsideRender falsely reported completedflip."
-  - "Final repair TypeSafe scope1.99/conf1,lifecycle1.98/.98,verification1.91/.88 supports; simplify-first fact review andformat/diffPASS."
-  - "Exact newnativeCI and comparable owner30–60s sample required. No performanceimprovement or LoopPASS claimed."
+branch: main
+observed_head: e8f0640790e0abaa620d5c3db32f453de2c91ba3  # last commit; the docs restructure is not committed yet
+active_work: >
+  The docs restructure (D1) is finished and uncommitted. The new docs are in docs/ and the old
+  docs are unchanged in docs/archive/. It waits for the owner to review the diff and approve the commit.
+active_acceptance: The D1 checks listed in docs/loops/DOCS_RESTRUCTURE.md.
+budgets: >
+  D1 clarity rounds used: 2 of 2. D1 review-fix rounds used: 2 of 2.
+  Loop 30 corrections are counted in docs/loops/LOOP30.md section 7.
+loop30:
+  state: Loop 30 (anime detail and episode UI) is in progress, not PASS, and is paused until the docs commit.
+  owner_accepted: Player controls hide after idle time and reappear on input.
+  owner_pending: Detail page, cover, episode click/Enter/Space, Continue, back/retry and minimum window size.
+  open_problem: >
+    Video stutters while audio is normal. Commit e8f0640 removes a frame-swap report that fired
+    before the frame was shown, and adds a native test that requires at least 2 new frames.
+    CI run 38444662617 for it is green. No improvement is claimed until the owner tests it.
+  details: docs/loops/LOOP30.md
+next_actions:
+  - 1. The owner reviews the docs diff and approves the docs commit.
+  - 2. Remove legacy code and directories as a separate verified change; keep docs/archive/.
+  - 3. Resume Loop 30. Deliver the CI-built exe and launcher of e8f0640, remove old binaries and caches (keep data/ and evidence), and ask the owner for one 30 to 60 second test of the same clip.
+  - 4. After that test, judge the new diagnostic report with TypeSafe (de-identified numbers only) before any further fix. If there is no improvement, record that.
+do_not_repeat:
+  - Do not run the local native cgo build; it is a known environment failure.
+  - Do not research libmpv licensing again; the owner settled it in ADR-023.
+  - Do not tune playback options without a measured cause.
 boundaries:
-  - "ALL judgment/evaluation/analysis via BWS memory-only key and TypeSafe; tools execute/test. No independent speculative tuning."
-  - "No workflow/globalSDK/config/release/Loop31 changes. Localnativecgo closed; localGo1.27 stdresolution issue recorded, no retries/globalrepair."
-  - "User requests usage-saving durablecheckpoint now: do not broaden or reconstructhistory."
-next:
-  - "Commit/push exactly2source+5checkpointdocs ifnotalreadydone; reconcile Git first. Wait exact newCI only when continuing, not blindreruns."
-  - "On greenCI deliver newexe/launcher, delete oldbinaries/caches preservingdata/evidence, ask sameclip comparison once."
-  - "Read actualnewreport and useTypeSafe with deidentifiedconditions before anynextcausalchange. Ifimprovement absent, recordthat; no claims fromCI alone."
+  - Keep .codex/, artifacts/ and portable data untouched.
+  - Do not commit, push, change workflows, release, or start Loop 31 without owner approval.
 references:
-  - "docs/LOOP30_DETAIL.md; LOOP30_REQUIREMENTS_REVIEW.md; LOOP30_HUMAN_CHECK.md."
-  - "artifacts/evidence/loop30/owner-stutter-baseline.json; stutter-derived-local.json (localonly)."
-  - "artifacts/evidence/loop30/stutter-{assessment,repair}-{state,judgments}.json."
-  - "artifacts/loop30/3d58b0d/DiagnosePlayback.cmd; baselineCI38441971359 proof/testobject."
+  - docs/STATUS.md
+  - docs/loops/LOOP30.md
+  - artifacts/evidence/loop30/
+  - artifacts/evidence/docs-audit/
 ```

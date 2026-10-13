@@ -1,0 +1,25 @@
+{
+ "in_scope": {
+  "type": "score",
+  "instructions": "Compare `change` (diff summary and changed files) with `contract` (the loop's scope and out-of-scope list). How well does the change stay inside the contract?",
+  "criteria": [
+   "Includes work the contract excludes or that belongs to another loop",
+   "Mostly in scope, with some unrelated edits or refactoring",
+   "Every change is needed for the contract's scope"
+  ]
+ },
+ "criteria_covered": {
+  "type": "score",
+  "instructions": "How completely do `change` and `evidence` address every acceptance ID listed in `contract`?",
+  "criteria": [
+   "One or more listed acceptance IDs have no implementation or no verification",
+   "All IDs are addressed but some lack direct evidence",
+   "Every listed ID has implementation and direct verification evidence or an explicit pending human gate"
+  ]
+ },
+ "verifier_weakened": {
+  "type": "noul",
+  "instructions": "Does `change` delete, skip, loosen or special-case any test, assertion, threshold, CI step or acceptance criterion?",
+  "criteria": {"true": "A verifier was weakened or bypassed", "false": "Verifiers are unchanged or only strengthened/added"}
+ }
+}

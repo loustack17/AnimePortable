@@ -1,0 +1,18 @@
+{
+ "outcome": {
+  "type": "choice",
+  "instructions": "The owner tested the build described in `check` and replied with `reply` (often in Traditional Chinese). What did the owner report for this check?",
+  "criteria": {
+   "HUMAN_PASS": "The owner says the checked behavior works",
+   "HUMAN_FAIL": "The owner reports the behavior is wrong, missing or broken",
+   "HUMAN_BLOCKED": "The owner could not run the check",
+   "HUMAN_EXCEPTION_APPROVED": "The owner accepts a known failure or gap as an explicit exception",
+   "UNCLEAR": "The reply does not say whether this specific check passed"
+  }
+ },
+ "new_issue": {
+  "type": "noul",
+  "instructions": "Does `reply` report a new problem or request that is not part of `check`?",
+  "criteria": {"true": "Reports a separate new problem or request", "false": "Only about the requested check"}
+ }
+}

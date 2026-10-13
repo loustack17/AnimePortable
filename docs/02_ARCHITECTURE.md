@@ -2,490 +2,182 @@
 
 # Architecture
 
-Windows uses FLTK calling typed Go application actions and in-process libmpv through the core player port (ADR-020/023). Wails/Svelte/Fyne and external MPV references below document historical design; their active product source and dependencies have been removed. Linux/macOS implementation is paused. Windows resource, portable-release and native-operation gates remain open.
+Minimal Ports & Adapters: `UI -> Core -> Adapters`. Dependencies point inward. The goal is replaceability and maintainability without layer ceremony. Do not build chains such as Controller -> Service -> Manager -> Facade -> UseCase -> Repository.
 
-## 1. Architecture style
+The Windows UI is FLTK. It calls typed Go application actions. Playback is in-process libmpv behind the core `Player` port (ADR-020, ADR-023).
 
-Use a **minimal Ports & Adapters architecture**.
+## Repository layout
 
-The goal is replaceability and maintainability without enterprise-style ceremony.
+| Path | Responsibility |
+| --- | --- |
+| `core/` | Domain models, ports, matching and playback-tracking policy. No concrete infrastructure. Files: `app.go`, `errors.go`, `metadata.go`, `metadata_match.go`, `metadata_normalize.go`, `metadata_variants.go`, `models.go`, `playback.go`, `playback_tracking.go`, `source.go`, `store.go`. |
+| `adapters/source/anime1/` | Anime1 `AnimeSource`. Parser-only HTML extraction (`html_policy.go`), schedule. |
+| `adapters/metadata/anilist/`, `adapters/metadata/bangumi/` | `MetadataProvider` implementations. |
+| `adapters/metadata/cover/` | Validated cover loader (fixed origins, size and format limits). |
+| `adapters/metadata/internal/` | Helpers shared by the two metadata adapters only. |
+| `adapters/persistence/sqlite/` | `Store` implementation, embedded migrations in `migrations/`. |
+| `adapters/network/securehttp/` | The single controlled outbound HTTP client. |
+| `adapters/playback/proxy/` | Loopback playback proxy. |
+| `adapters/player/libmpv/` | `Player` implementation over libmpv. |
+| `internal/metadata/` | Shared metadata text policy. |
+| `internal/runtimepin/` | Pinned libmpv DLL SHA-256 constant. |
+| `apps/desktop/` | Desktop entry (`main_fltk_windows.go`), play queue, playback startup. |
+| `apps/desktop/backend/` | Typed application actions (`Service`), DTOs, ingest, portable data location. |
+| `apps/desktop/fltkengine/` | libmpv engine wiring, DLL loader (`internal/mpvwin`), playback diagnostics. |
+| `apps/desktop/fltkhome/` | Home, Search and Detail views and models. |
+| `apps/desktop/fltkplayer/` | Player window, on-video controls (`overlay_windows.*`), native input. |
+| `tools/portable-package/` | CLI that builds the portable ZIP. |
+| `tools/*.ps1` | Build helpers (Go license notices, test execution helper). |
+| `tests/architecture/` | Import-rule tests. |
+| `tests/contract/` | Shared adapter contract tests and fakes. |
+| `tests/integration/`, `testdata/` | Integration tests and fixtures (currently placeholders). |
+| `docs/` | Project documents. |
 
-The architecture should be understood as three practical layers:
+Files with `_windows` in the name build on Windows only. Native FLTK tests run only in GitHub Windows CI (see `06_ACCEPTANCE.md`).
 
-`UI -> Core -> Adapters`
+## Dependency rule
 
-Do not create long chains such as:
+The core must not import: FLTK, Anime1, AniList or Bangumi implementations, libmpv, a SQLite driver, or platform-specific libraries. Adapters implement core-defined ports. `tests/architecture/imports_test.go` enforces this.
 
-`Controller -> Service -> Manager -> Facade -> UseCase -> Repository -> Adapter -> Client`
+## Ports
 
-unless a concrete need appears later.
-
-## 2. Dependency rule
-
-Dependencies point inward.
-
-The core must not import concrete infrastructure.
-
-Forbidden core dependencies include:
-
-- Wails
-- Svelte
-- Anime1 implementation
-- AniList implementation
-- Bangumi implementation
-- MPV implementation
-- SQLite driver
-- platform-specific IPC libraries
-
-Adapters implement core-defined ports.
-
-## 3. Required ports
-
-Only these four external-boundary abstractions are mandatory in MVP:
-
-### AnimeSource
-
-Responsible for anime source capabilities.
-
-Conceptual interface:
+Exactly four external-boundary abstractions, defined in `core/`.
 
 ```go
+// core/source.go
 type AnimeSource interface {
-    Catalog(ctx context.Context) ([]SourceAnime, error)
-    Search(ctx context.Context, query string) ([]SourceAnime, error)
-    Episodes(ctx context.Context, ref SourceRef) ([]SourceEpisode, error)
-    Resolve(ctx context.Context, ref EpisodeRef) (PlaybackSource, error)
-    Schedule(ctx context.Context, query ScheduleQuery) ([]SourceScheduleItem, error)
+	Catalog(ctx context.Context) ([]SourceAnime, error)
+	Search(ctx context.Context, query string) ([]SourceAnime, error)
+	Episodes(ctx context.Context, ref SourceRef) ([]SourceEpisode, error)
+	Resolve(ctx context.Context, ref EpisodeRef) (PlaybackSource, error)
+	Schedule(ctx context.Context, query ScheduleQuery) ([]SourceScheduleItem, error)
 }
-```
 
-### MetadataProvider
-
-Responsible for external metadata lookup.
-
-```go
+// core/metadata.go
 type MetadataProvider interface {
-    Search(ctx context.Context, query MetadataQuery) ([]MetadataCandidate, error)
-    Get(ctx context.Context, ref MetadataRef) (AnimeMetadata, error)
+	Search(ctx context.Context, query MetadataQuery) ([]MetadataCandidate, error)
+	Get(ctx context.Context, ref MetadataRef) (AnimeMetadata, error)
 }
-```
 
-### Player
-
-Responsible for playback-session lifecycle.
-
-```go
+// core/playback.go
 type Player interface {
-    Start(ctx context.Context, req PlayRequest) (PlaybackSession, error)
+	Start(ctx context.Context, req PlayRequest) (PlaybackSession, error)
 }
-
 type PlaybackSession interface {
-    Load(ctx context.Context, req PlayRequest) error
-    Events() <-chan PlaybackEvent
-    Close() error
+	Load(ctx context.Context, req PlayRequest) error
+	Events() <-chan PlaybackEvent
+	Close() error
+}
+// Optional extension used for progress snapshots:
+type PlaybackSnapshotter interface {
+	PlaybackSession
+	Snapshot(ctx context.Context) (PlaybackSnapshot, error)
+}
+
+// core/store.go
+type Store interface {
+	SaveAnime / Anime / ListAnime
+	SaveSourceRef / SourceRefs
+	SaveEpisodeMapping / EpisodeMappings
+	SaveMetadata / Metadata
+	SetFollowing / Following
+	AddHistory / History / RemoveHistory
+	SaveProgress / SavePlaybackCheckpoint / Progress
+	SaveSettings / Settings
 }
 ```
 
-### Store
+(`Store` is abbreviated: each name is a method taking `ctx` plus typed arguments. See `core/store.go` for exact signatures.)
 
-Responsible for local persistence.
+`PlaybackSource` hides its URL and headers from formatting (`String()` returns `PlaybackSource{redacted}`).
 
-Keep this interface practical and coarse enough to avoid dozens of tiny repository abstractions.
+Create a port only for a genuinely external or replaceable dependency. Do not create ports for helpers such as a title normalizer, clock, logger or image decoder.
 
-It must support:
+## Domain rules
 
-- anime records
-- source mappings
-- metadata
-- following
-- history
-- progress
-- settings
+- Domain models carry no provider-specific fields. Provider mappings are separate (`SourceRef{Provider, ID}`). One local anime can map to Anime1, AniList and Bangumi IDs.
+- Following, history and progress use local canonical IDs (ADR-018), never Anime1 IDs. If Anime1 disappears the local library stays usable.
+- Anime1-only fields (such as `data-apireq` tokens) stay inside the Anime1 adapter. They never reach core models, UI, SQLite domain tables or logs.
+- Sources may have different capabilities (search, schedule, playback, latest updates). A missing capability degrades gracefully.
 
-## 4. Provider-neutral domain model
+## Graceful degradation
 
-Do not place provider-specific fields in domain models.
+Remote failure is not application failure.
 
-Wrong:
+- Source down: Home from cache, Following, History, metadata and cached schedule still work. Only fresh catalog, fresh search and playback resolution fail.
+- AniList down: Bangumi and cached metadata still work, and the reverse.
+- libmpv DLL missing or altered: browsing still works.
 
-```go
-type Anime struct {
-    Anime1ID string
-}
-```
+## Metadata
 
-Correct concept:
+AniList is primary. Bangumi is fallback and cross-check. Providers return candidates only. Core policy decides which candidate is acceptable. Never accept `searchResults[0]` blindly. No metadata is better than wrong metadata.
 
-```go
-type Anime struct {
-    ID          AnimeID
-    Title       string
-    NativeTitle string
-    Description string
-}
-```
+Matching may use normalized and native titles, Traditional/Simplified, punctuation and full-width normalization, season/year, episode count and provider cross-check. The core matcher returns one of: accepted (high confidence), awaiting cross-check (medium confidence), or no metadata (low confidence, ambiguous or conflicting).
 
-Provider mappings are separate:
+Display text crosses one shared policy (`internal/metadata`) before caching: bounded plain text. SQLite rejects unsafe writes and fails closed on unsafe cached rows. Cover URLs stay backend-only. Cover bytes reach the UI as typed validated content, never as a general URL loader. The cover loader keeps no memory cache.
 
-```go
-type SourceRef struct {
-    Provider string
-    ID       string
-}
-```
+## UI boundary
 
-This permits a local anime identity to map to multiple external systems.
+The FLTK UI must not know Anime1 details, libmpv commands, SQLite queries or metadata provider HTTP APIs. It calls typed actions on `apps/desktop/backend.Service`: list, search, detail, play episode, follow/unfollow, schedule, history. It never receives raw libmpv commands, arbitrary URLs or playback credentials.
 
-Example:
+FLTK code stays in `apps/desktop/`. Core packages compile and test without FLTK.
 
-- local anime ID
-  - Anime1 source ID
-  - AniList metadata ID
-  - Bangumi metadata ID
+## Performance
 
-## 5. Local canonical identity
+Ports are in-process Go interface calls. Do not remove a useful boundary for dispatch cost. Real risks are: network latency, UI rendering and decoded cover lifetime, unbounded memory caches, bad SQLite access patterns, excessive background work, libmpv memory, allocations in hot loops.
 
-Following, history, and progress must use local canonical IDs.
+## Contract tests
 
-They must not be keyed directly to Anime1 identifiers.
+Every adapter passes the shared tests in `tests/contract/`.
 
-If Anime1 disappears, the user's local library must remain usable.
+| Port | Checks |
+| --- | --- |
+| AnimeSource | valid IDs, ordered episodes, cancellation, no source secrets leak, structurally valid playback source, normalized schedule |
+| MetadataProvider | malformed responses fail safely, no raw HTML leaks, cancellation, typed sanitized errors |
+| Player | session starts, `Load` replaces the current item without a second player, events stop after close, deterministic cleanup |
+| Store | persistence round trips, fail-closed validation |
 
-## 6. Source-specific data isolation
+## Pragmatic SOLID
 
-Anime1-only fields such as `data-apireq` tokens belong inside the Anime1 adapter.
+SOLID is a quality constraint, not a reason to add layers.
 
-They must never leak into:
+| Principle | Rule here |
+| --- | --- |
+| SRP | A package, file, type or function has one reason to change. Split when the boundary is real, not by line count. |
+| OCP | Replace things by adding an adapter or strategy at a real port. Do not grow provider conditionals in core. |
+| LSP | Every port implementation honors the same contract, errors, cancellation, lifecycle and security semantics. |
+| ISP | Ports are no broader than their consumers need. No interface per helper. |
+| DIP | Core depends on core-owned abstractions. Concrete UI, source, metadata, player, persistence and network code stays outward. |
 
-- core anime model
-- core episode model
-- frontend
-- SQLite domain tables
-- logs
+Code quality:
 
-## 7. Source replaceability
+- Names reveal domain intent. No generic `utils`, `helpers`, `common`, `misc`, `manager` dumping grounds.
+- Straightforward control flow. Early returns over deep nesting.
+- Minimal typed exported API.
+- One shared place for each security or policy rule. No duplicates in adapters.
+- No dead code, debug scaffolding or speculative abstraction.
+- Comments explain non-obvious constraints or why, not syntax.
+- Tests describe behavior, not implementation trivia.
+- There is no universal file-length limit. A file fails review when it mixes unrelated responsibilities, hides ownership, or sits outside the layer where a maintainer would look for it.
 
-MVP ships with Anime1 only, but the architecture must allow another source adapter later.
+## File placement
 
-Future example:
+Before adding a production file, answer:
 
-```text
-adapters/source/
-├── anime1/
-├── source_b/
-└── source_c/
-```
+1. What single responsibility does it own?
+2. Which layer owns that responsibility?
+3. Why is this the narrowest existing package that fits?
+4. Does it create an inward-dependency violation, cycle, provider leak or dumping ground?
+5. Would a maintainer look for this behavior here?
 
-Replacing a source must not require changes to:
+Do not add top-level directories or broad shared packages without a concrete need and independent review. If a feature makes one file or package hold several independent responsibilities, restructure it in the same loop when the fix is local and low-risk. If the fix changes architecture, write an ADR.
 
-- playback core
-- metadata matching core
-- following/history schema
-- UI navigation
-- MPV integration
+## Architecture acceptance
 
-## 8. Source capabilities
-
-Future sources may have different capabilities.
-
-Represent capability differences explicitly, e.g.:
-
-- search
-- schedule
-- playback
-- latest updates
-
-Do not assume every source supports everything.
-
-A missing capability must degrade gracefully.
-
-## 9. Source health and graceful degradation
-
-Remote failure must not equal application failure.
-
-If Anime1 is unavailable, cached features should still work:
-
-- Home from cache
-- Following
-- History
-- metadata
-- cached schedule
-
-Only operations that require the source should fail:
-
-- fresh catalog
-- fresh search
-- playback resolution
-
-If AniList fails, Bangumi and cached metadata may still work.
-
-If Bangumi fails, AniList and cached metadata may still work.
-
-If MPV is missing, browsing still works.
-
-## 10. Metadata architecture
-
-Primary provider:
-
-- AniList
-
-Fallback / cross-check:
-
-- Bangumi
-
-The metadata matcher is not part of either provider implementation.
-
-Providers return candidates.
-
-Core/application policy decides which candidate is acceptable.
-
-Rule:
-
-`No metadata is better than wrong metadata.`
-
-## 11. Metadata matching
-
-Matching may use:
-
-- normalized title
-- native title
-- Traditional/Simplified normalization
-- punctuation normalization
-- full-width normalization
-- season/year
-- episode count
-- provider cross-check
-
-Never accept `searchResults[0]` blindly.
-
-Low-confidence matches must fail safely.
-
-The core matcher exposes normalized title comparison and an explicit decision:
-
-- accepted high-confidence matches
-- medium-confidence matches awaiting provider cross-check
-- no-metadata results for low-confidence, ambiguous, or conflicting input
-
-Provider implementations only return candidates; they do not select metadata.
-
-Application-level provider orchestration is deferred until the application wiring phase; the core matcher remains a pure, provider-neutral policy seam.
-
-Metadata display content crosses one shared backend policy before it can be cached:
-
-- provider titles, descriptions, seasons, and studios are normalized to bounded plain text
-- SQLite rejects unsafe writes and fails closed when cached rows no longer satisfy that policy
-- cover URLs remain backend-only inputs to a fixed-origin loader
-- cover bytes are exposed as typed validated content, not as an arbitrary frontend fetch capability
-
-The cover loader performs work only when called and keeps no memory cache. The Fyne UI adapter must preserve the safe typed result without exposing raw provider payloads or a general-purpose URL loader. The current Wails binding is transitional.
-
-## 12. UI boundary
-
-The Fyne UI must not know about:
-
-- Anime1 implementation details
-- MPV IPC details
-- SQLite queries
-- metadata provider HTTP APIs
-
-UI talks to application-level typed actions such as:
-
-- list anime
-- search
-- get detail
-- play episode
-- follow/unfollow
-- read schedule
-- read history
-
-Do not expose raw MPV commands or arbitrary URLs to the UI.
-
-## 13. Desktop toolkit isolation
-
-Fyne-specific code stays in the desktop app adapter. During migration, Wails-specific code also stays there and is removed before release.
-
-Core packages must compile and test without Fyne or Wails.
-
-## 14. CLI architecture test
-
-Maintain a small non-product CLI or test harness that can reuse:
-
-- core
-- Anime1 adapter
-- metadata adapters
-- SQLite adapter
-- MPV adapter
-
-Purpose: prove the core is not coupled to the desktop toolkit.
-
-The CLI does not need polished UX.
-
-## 15. Suggested repository layout
-
-```text
-anime-client/
-├── core/
-│   ├── models.go
-│   ├── source.go
-│   ├── metadata.go
-│   ├── playback.go
-│   ├── library.go
-│   └── app.go
-│
-├── adapters/
-│   ├── source/
-│   │   └── anime1/
-│   ├── metadata/
-│   │   ├── anilist/
-│   │   └── bangumi/
-│   ├── player/
-│   │   └── mpv/
-│   ├── persistence/
-│   │   └── sqlite/
-│   │       └── migrations/
-│   ├── network/
-│   │   └── securehttp/
-│   └── playback/
-│       └── proxy/
-│
-├── apps/
-│   ├── desktop/
-│   │   ├── backend/
-│   │   ├── nativeui/
-│   │   └── main.go
-│   └── cli/
-│
-├── testdata/
-├── tests/
-│   ├── contract/
-│   └── integration/
-└── docs/
-```
-
-Do not over-split `core/` until actual size justifies it.
-
-## 16. Performance rule
-
-Ports are architectural boundaries, not network RPC.
-
-They are in-process Go interface calls.
-
-Do not optimize away useful boundaries out of fear of interface-dispatch overhead.
-
-Real performance risks are:
-
-- network latency
-- UI rendering and decoded cover lifetime
-- cover image decoding
-- unbounded memory cache
-- bad SQLite access patterns
-- excessive background work
-- MPV
-- excessive allocations inside hot loops
-- retained offscreen Fyne objects or graphics resources
-
-## 17. Lightweight architecture rule
-
-Create a port only when the dependency is genuinely external or replaceable.
-
-Required:
-
-- Anime source
-- metadata provider
-- player
-- store
-
-Do not create ports for trivial helpers such as:
-
-- title normalizer
-- clock
-- logger
-- image decoder
-- random helper utilities
-
-unless a real requirement emerges.
-
-## 18. Contract tests
-
-Each future adapter must pass shared contract tests.
-
-AnimeSource contract examples:
-
-- valid IDs
-- correctly ordered episodes
-- cancellation works
-- source-specific secrets do not leak
-- resolver returns a structurally valid playback source
-- schedule is normalized
-
-MetadataProvider contract examples:
-
-- malformed responses fail safely
-- no raw HTML leaks
-- cancellation works
-- provider errors are typed/sanitized
-
-Player contract examples:
-
-- session starts
-- load replaces current item without spawning a second player
-- events stop after close
-- cleanup is deterministic
-
-## 19. Pragmatic SOLID and code-quality rule
-
-This project uses SOLID as a design-quality constraint, not as a reason to add abstraction. The existing minimal Ports & Adapters design is the project-specific Clean Architecture boundary. Do not add enterprise-style layer chains merely to claim Clean Architecture compliance.
-
-Apply the principles as follows:
-
-- **Single Responsibility (SRP):** packages, files, types, and major functions have one coherent reason to change. Split mixed responsibilities when the boundary is real; do not split mechanically by line count.
-- **Open/Closed (OCP):** expected external replacement happens through the existing ports/adapters and explicit policies. Prefer adding an adapter or strategy at a real seam over growing provider-specific conditionals in core.
-- **Liskov Substitution (LSP):** every implementation of `AnimeSource`, `MetadataProvider`, `Player`/`PlaybackSession`, and `Store` must honor the same documented contract, cancellation, error, lifecycle, and security semantics. Passing only the happy path is insufficient.
-- **Interface Segregation (ISP):** ports stay cohesive and no broader than the consumers require. Do not create one interface per helper or force consumers to depend on methods they do not use.
-- **Dependency Inversion (DIP):** core policy depends on core-owned abstractions; concrete Fyne, source, metadata, player, persistence, network, and platform details remain outward. Wails remains outward only during migration.
-
-Code-quality rules:
-
-- choose names that reveal domain intent; avoid vague `manager`, `handler`, `helper`, `util`, `common`, or `misc` dumping grounds unless the name is genuinely the domain concept
-- keep control flow straightforward; prefer early validation/returns over deeply nested branching when behavior remains clear
-- keep exported APIs minimal and typed
-- centralize cross-cutting security/policy logic instead of duplicating it in adapters
-- remove dead code and obsolete compatibility paths when their removal is in scope and verified
-- avoid copy/paste behavior when one stable shared rule already exists, but do not extract one-off code prematurely
-- comments should explain non-obvious constraints, invariants, security reasoning, or why a choice exists; comments must not merely narrate obvious syntax
-- tests must remain readable and describe behavior, not implementation trivia
-
-There is no universal hard file-length limit. A file fails the quality gate when it mixes unrelated responsibilities, hides ownership, becomes difficult to review safely, or contains a structure that should clearly live in an existing package/file boundary.
-
-## 20. File and package placement
-
-The suggested repository layout in section 15 is a real placement constraint, not decorative documentation.
-
-For every new production file, the implementer and reviewer must be able to answer:
-
-1. What single responsibility does this file own?
-2. Which architectural layer owns that responsibility?
-3. Why is this the narrowest existing package that fits it?
-4. Does placing it here introduce an inward dependency violation, circular dependency, provider leakage, or generic dumping ground?
-5. Would a future maintainer find this behavior where they would reasonably expect it?
-
-Do not create new top-level directories or broad shared packages without a concrete need and independent architecture review.
-
-If a feature causes one file/type/package to accumulate multiple independent responsibilities, restructure within the same loop before PASS when the correction is local and low-risk. If the correction materially changes architecture, stop and use the ADR rule instead.
-
-## 21. Architectural acceptance rules
-
-MVP is not accepted unless:
-
-- core imports no Fyne or Wails
-- core imports no Anime1 implementation
-- core imports no MPV implementation
-- core imports no SQLite driver
-- core imports no AniList/Bangumi implementation
-- Anime1 can be replaced by a fake source in tests
-- UI can be removed while core tests still pass
-- source failure does not break cached local library/history
-- production files have coherent responsibilities and live in the documented architectural layer
-- no new generic dumping-ground package/file is introduced
-- external adapters remain substitutable under shared contracts
-- core policy remains readable without concrete infrastructure knowledge
+- Core imports no FLTK, Anime1, AniList, Bangumi, libmpv or SQLite driver code.
+- Anime1 can be replaced by a fake source in tests.
+- The UI can be removed while core tests still pass.
+- Source failure does not break the cached library or history.
+- Production files have coherent responsibilities and sit in the documented layer.
+- No new generic dumping-ground package or file.
+- Adapters are substitutable under the shared contracts.
