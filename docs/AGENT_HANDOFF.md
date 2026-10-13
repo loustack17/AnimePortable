@@ -9,11 +9,11 @@ instruction_version: v2.4.1
 status: IN_PROGRESS
 repository:
   branch: main
-  observed_head: 90a7fc9985bd5ab17b1198333567324fd69d2e8a
-  working_tree: "10 Loop30 source/test files plus Loop29/30 docs; preserve AGENTS/.codex and portable data."
+  observed_head: 26e7fae35cf321a035fa805c7cc123c537143a6e
+  working_tree: "Approved17files committed/pushed; preserve unrelated AGENTS/.codex/data. Local CI recovery checkpoint pending."
 active_loop:
   number: 30
-  state: "LOCAL_VERIFIED; zero unresolved MUST_FIX; exact CI/build and owner gates pending. Not PASS."
+  state: "PUSHED; CI38354290531 ENVIRONMENT_BLOCKED: Mesa26.2.4-2 installed vs26.2.4-1 pin; tests/build skipped. Not PASS."
   goal: "Phase24 Windows detail metadata/cover, ordered episodes, selected Play/Continue, Enter/Space/progress."
 completed:
   - "Loop29/player follow-up PASS with owner acceptance."
@@ -31,12 +31,12 @@ budget:
   corrections_max: 6
   remaining: 0
 boundaries:
-  - "Owner authorized commit/push of reviewed scoped source/tests/docs after verification; exclude AGENTS/.codex/artifacts/data. No workflow/release/Loop31 work."
+  - "Owner authorized commit/push of reviewed scoped source/tests/docs after verification; exclude AGENTS/.codex/artifacts/data. Owner additionally approved exactly4line Mesa CI pin refresh; no release/Loop31 work."
   - "BWS memory-only key and necessary TypeSafe project uploads approved; no secrets/DB upload."
 next:
-  - "Complete pre-push verification/index review, commit and push approved scoped files to main, then observe exact existing Windows CI."
-  - "After exact green CI prepare exe/ZIP, verify package and run simple owner acceptance before Loop30 PASS."
+  - "Approved4line Mesa refresh applied exactly as independently reviewed draft; commit/push then observe freshCI."
+  - "After authorizedCIrepair and green exactCI prepare exe/ZIP, then owner acceptance. No blindrerun."
 references:
   - "docs/LOOP30_DETAIL.md; LOOP30_REQUIREMENTS_REVIEW.md final repair result; LOOP30_HUMAN_CHECK.md."
-  - "artifacts/evidence/loop30/cover-corrections.json; cover-repair-final-evidence.json; cover-repair-source-judgments.json."
+  - "artifacts/evidence/loop30/cover-corrections.json; cover-repair-final-evidence.json; cover-repair-source-judgments.json; ci-failure-repair-state.json and ci-mesa-refresh.patch."
 ```

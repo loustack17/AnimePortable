@@ -38,14 +38,14 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CC=$gcc"
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CXX=$gxx"
           $mesaVersion = & (Join-Path $env:MSYS2_ROOT 'usr\bin\pacman.exe') -Q mingw-w64-x86_64-mesa
-          if ($LASTEXITCODE -ne 0 -or $mesaVersion -ne 'mingw-w64-x86_64-mesa 26.2.4-1') { throw 'Unexpected Mesa verifier package version' }
-          $mesaArchive = Join-Path $env:RUNNER_TEMP 'mingw-w64-x86_64-mesa-26.2.4-1-any.pkg.tar.zst'
+          if ($LASTEXITCODE -ne 0 -or $mesaVersion -ne 'mingw-w64-x86_64-mesa 26.2.4-2') { throw 'Unexpected Mesa verifier package version' }
+          $mesaArchive = Join-Path $env:RUNNER_TEMP 'mingw-w64-x86_64-mesa-26.2.4-2-any.pkg.tar.zst'
           $curlInfo = & curl.exe --version
           if ($LASTEXITCODE -ne 0 -or $curlInfo[0] -notmatch '^curl (\d+\.\d+\.\d+) ' -or [version]$Matches[1] -lt [version]'8.4.0') { throw 'curl 8.4.0 or newer required for bounded download' }
-          & curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 60 --max-filesize 20971520 --output $mesaArchive 'https://mirror.msys2.org/mingw/mingw64/mingw-w64-x86_64-mesa-26.2.4-1-any.pkg.tar.zst'
+          & curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 60 --max-filesize 20971520 --output $mesaArchive 'https://mirror.msys2.org/mingw/mingw64/mingw-w64-x86_64-mesa-26.2.4-2-any.pkg.tar.zst'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ((Get-Item -LiteralPath $mesaArchive).Length -gt 20MB) { throw 'Unexpected Mesa archive size' }
-          if ((Get-FileHash -LiteralPath $mesaArchive -Algorithm SHA256).Hash -ne '10b2497b17d7554ea9d758b7db2ebf648f6ece10d19e239f63ecce978a331980') { throw 'Mesa verifier package hash mismatch' }
+          if ((Get-FileHash -LiteralPath $mesaArchive -Algorithm SHA256).Hash -ne 'ad9b42d49767a2585c1ddb957195fba8ca19d02bd3c4bcc2fdfacc51e3c5de83') { throw 'Mesa verifier package hash mismatch' }
           $mesaExtract = Join-Path $env:RUNNER_TEMP 'mesa-verified'
           New-Item -ItemType Directory -Force -Path $mesaExtract | Out-Null
           & (Join-Path $env:MSYS2_ROOT 'usr\bin\tar.exe') --force-local -xf ($mesaArchive.Replace('\', '/')) -C ($mesaExtract.Replace('\', '/')) 'mingw64/bin/opengl32.dll' 'mingw64/bin/libgallium_wgl.dll'

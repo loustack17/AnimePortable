@@ -61,3 +61,11 @@ Owner latest instruction authorized direct docs-only engineering completion. One
 ## 2026-10-13 commit/push authorization
 
 Owner explicitly authorized repeated verification/review then push if no issues. Scope:10reviewed source/test files and7related Loop29/30 docs; exclude AGENTS.md,.codex/,artifacts/data. Existing CI only, no workflow/release changes. Pre-push checks and exact committed-source evidence are recorded under artifacts/evidence/loop30; native/user gates remain open until actual evidence.
+
+## 2026-10-13 pushed CI environment blocker
+
+Commit26e7fae35cf321a035fa805c7cc123c537143a6e contains17authorizedfiles and is onGitHubmain. Freshpre-pushrepeatchecks and finalindexreview PASS. ExactCI38354290531 failedbeforeproducttests at Mesa packageversionguard: installed26.2.4-2 vs pinned26.2.4-1. Native/build/race/ownerNOT_RUN, noLoopPASS. OfficialMSYS2packageindex verifies26.2.4-2 and SHAad9b42d49767a2585c1ddb957195fba8ca19d02bd3c4bcc2fdfacc51e3c5de83. Fourlineversion/archive/URL/SHA draftci-mesa-refresh.patch retainsallsecurity/testguards; workflowisuntouched and requiresexplicitscopeapproval. No equivalentCIrerun attempted.
+
+## 2026-10-13 verifier repair authorized
+
+Owner approved reviewed4line Mesa26.2.4-2 version/archive/URL/SHA refresh and push. Actualworkflowmatchesrevieweddraftexactly; no tests/securitychecks/permissions changed. Literalconfigurationrequires no simplification beyond retaining existingcontrolflow. Independentverifier/security PASS_DRAFT plus deterministicexactdiff establish pre-pushreview; freshWindowsCI must stillrun. Earlierapprovalpendingnotes are historical.
