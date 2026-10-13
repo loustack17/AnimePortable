@@ -213,6 +213,26 @@ func (ui *view) focusDetailEpisodeRow(index int) {
 	row.TakeFocus()
 }
 
+func (ui *view) resizeDetailEpisodeRows() {
+	if ui.previewEpisodes == nil {
+		return
+	}
+	focusedIndex := -1
+	for index, row := range ui.previewEpisodeRows {
+		if row.HasFocus() {
+			focusedIndex = index
+			break
+		}
+	}
+	ui.previewEpisodes.ScrollTo(0, 0)
+	for index, row := range ui.previewEpisodeRows {
+		row.Resize(ui.previewEpisodes.X()+8, ui.previewEpisodes.Y()+7+index*37, max(120, ui.previewEpisodes.W()-27), 33)
+	}
+	if focusedIndex >= 0 {
+		ui.focusDetailEpisodeRow(focusedIndex)
+	}
+}
+
 func (ui *view) renderDetailEpisodes() {
 	if ui.previewEpisodes == nil {
 		return

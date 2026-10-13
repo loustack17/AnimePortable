@@ -260,6 +260,27 @@ func TestNativeDetailArrowKeepsLastEpisodeVisibleAtMinimumWindow(t *testing.T) {
 	if rowTop < viewportTop || rowBottom > viewportBottom {
 		t.Fatalf("focused final episode after partial scroll bounds (%d,%d) are outside viewport (%d,%d)", rowTop, rowBottom, viewportTop, viewportBottom)
 	}
+	ui.window.Resize(0, 0, 1000, 618)
+	ui.resizeSearch()
+	if !row.HasFocus() || row.W() != max(120, ui.previewEpisodes.W()-27) {
+		t.Fatalf("default reflow lost row focus or width: focused=%v width=%d viewport=%d", row.HasFocus(), row.W(), ui.previewEpisodes.W())
+	}
+	rowTop = row.Y()
+	rowBottom = rowTop + row.H()
+	if rowTop < ui.previewEpisodes.Y() || rowBottom > ui.previewEpisodes.Y()+ui.previewEpisodes.H() {
+		t.Fatalf("focused final episode after default reflow is outside viewport: (%d,%d)", rowTop, rowBottom)
+	}
+	ui.previewPlay.TakeFocus()
+	ui.window.Resize(0, 0, 760, 480)
+	ui.resizeSearch()
+	if !ui.previewPlay.HasFocus() {
+		t.Fatal("detail row reflow stole focus from the Play action")
+	}
+	for index, resizedRow := range ui.previewEpisodeRows {
+		if resizedRow.X() != ui.previewEpisodes.X()+8 || resizedRow.Y() != ui.previewEpisodes.Y()+7+index*37 || resizedRow.W() != max(120, ui.previewEpisodes.W()-27) {
+			t.Fatalf("minimum reflow row %d has bounds (%d,%d %dx%d)", index, resizedRow.X(), resizedRow.Y(), resizedRow.W(), resizedRow.H())
+		}
+	}
 }
 
 func TestNativeDeferredSubmitIsDiscardedAfterLeavingSearch(t *testing.T) {

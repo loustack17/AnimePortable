@@ -4,6 +4,11 @@
 
 ## Current loop
 
+### 2026-10-13 Loop30 — native compile correction ready for CI
+
+The approvedMesarefresh waspushedasf4bf285; CI38355086703 passedtoolchainsetup thenfailednativecompile onmissingresizeDetailEpisodeRows. The20line methodand21line targetednativeassertions arenowadded, simplifiedandindependentlyreviewed PASS_REVIEW; existingfocus/geometry retained, no testweakening. CGO0regression/vet/format/diff PASS. Windowscompile/fullnative/race/build/owner stillrequireactualCI evidence; noLoop30PASS. PreviousCI failure notesbelow arehistorical. Exactfixhashes/review preserved in artifacts/evidence/loop30/native-resize-fix-state.json andnative-resize-fix-judgments.json.
+
+
 ### 2026-10-13 Loop30 — PUSHED / CI_ENVIRONMENT_BLOCKED
 
 All17authorized source/test/docs files were committed and pushed as26e7fae35cf321a035fa805c7cc123c537143a6e. Local main/origin/main and GitHub main match. Pre-push repeatedCGO0tests/vet/format and finalindependentindexreview PASS. ExactCI38354290531 failed during verifier setup: MSYS2installedMesa26.2.4-2, workflowexpects26.2.4-1; producttests/build/race/ownerremainNOT_RUN. No sourcefailure inferred. Evidenceand4lineworkflowrepairdraft are saved under artifacts/evidence/loop30; owner subsequently approved the reviewed4line Mesa pin refresh; applieddraftmatchesexactly and awaitscommit/push/newCI. Loop30notPASS. CI recovery docs below were updated locally afterpush.

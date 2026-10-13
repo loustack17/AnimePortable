@@ -69,3 +69,7 @@ Commit26e7fae35cf321a035fa805c7cc123c537143a6e contains17authorizedfiles and is 
 ## 2026-10-13 verifier repair authorized
 
 Owner approved reviewed4line Mesa26.2.4-2 version/archive/URL/SHA refresh and push. Actualworkflowmatchesrevieweddraftexactly; no tests/securitychecks/permissions changed. Literalconfigurationrequires no simplification beyond retaining existingcontrolflow. Independentverifier/security PASS_DRAFT plus deterministicexactdiff establish pre-pushreview; freshWindowsCI must stillrun. Earlierapprovalpendingnotes are historical.
+
+## 2026-10-13 native compile correction
+
+CI38355086703 passedMesa/setup/format/module but compilerfoundresizeDetailEpisodeRows undefined. Underowner iterativeverification/review directive, soleworker addedthemissing20line methodand21lines nativeassertions. Existingrowgeometry/focusedvisibility/Playfocuspreserved; no other product/workflow/backendchange. SimplifyandscopedindependentPASS_REVIEW; freshCGO0regression/backendvet/format/diff PASS, directviewcallnamescreen no unresolvedname. These arenotnativecompilePASS; newexactCIrequired. Correctionsused7; priorbudget/checkpointnotes are historical. RawTypeSafe native-resize-fix-judgments.json: scope1.99/confidence0.98 supports; verification/lifecycle uncertainty adjudicated againstactualpatch, unchangedrequestguards and explicitlypendingnativegates.
