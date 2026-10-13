@@ -29,26 +29,28 @@ var opengl = syscall.NewLazyDLL("opengl32.dll")
 var wglGetProcAddress = opengl.NewProc("wglGetProcAddress")
 
 type Engine struct {
-	video          *fltk.GlWindow
-	library        *mpv.Library
-	core           *mpv.Mpv
-	render         *mpv.RenderContext
-	events         chan libmpv.Event
-	mu             sync.Mutex
-	closed         bool
-	generation     uint64
-	position       time.Duration
-	duration       time.Duration
-	paused         bool
-	pending        bool
-	pendingStarted bool
-	failed         bool
-	seekPending    bool
-	seekStarted    bool
-	onState        func(time.Duration, time.Duration, bool, int)
-	onLoad         func(uint64)
-	onFailure      func(uint64)
-	closeOnce      sync.Once
+	video            *fltk.GlWindow
+	library          *mpv.Library
+	core             *mpv.Mpv
+	render           *mpv.RenderContext
+	events           chan libmpv.Event
+	mu               sync.Mutex
+	closed           bool
+	generation       uint64
+	position         time.Duration
+	duration         time.Duration
+	paused           bool
+	pending          bool
+	pendingStarted   bool
+	failed           bool
+	seekPending      bool
+	seekStarted      bool
+	diagnostics      *playbackDiagnostics
+	diagnosticsTicks uint8
+	onState          func(time.Duration, time.Duration, bool, int)
+	onLoad           func(uint64)
+	onFailure        func(uint64)
+	closeOnce        sync.Once
 }
 
 func New(ctx context.Context, video *fltk.GlWindow) (*Engine, error) {
@@ -90,8 +92,17 @@ func New(ctx context.Context, video *fltk.GlWindow) (*Engine, error) {
 			return libmpv.ErrPlayerFailed
 		}
 		engine := &Engine{video: video, library: library, core: core, render: render, events: make(chan libmpv.Event, 32)}
+		if playbackDiagnosticsEnabled(os.Getenv) {
+			engine.diagnostics = newPlaybackDiagnostics(true, filepath.Join(filepath.Dir(executable), "playback-diagnostics.json"))
+		}
 		render.SetUpdateCallback(func() {
+			if engine.diagnostics != nil {
+				engine.diagnostics.recordMPVUpdateCallback()
+			}
 			fltk.Awake(func() {
+				if engine.diagnostics != nil {
+					engine.diagnostics.recordFLTKAwakeCallback()
+				}
 				if !engine.isClosed() {
 					video.Redraw()
 				}
@@ -141,6 +152,22 @@ func glProc(name string) uintptr {
 		return 0
 	}
 	return proc.Addr()
+}
+
+func openGLString(name uintptr) string {
+	address, _, _ := opengl.NewProc("glGetString").Call(name)
+	if address == 0 {
+		return ""
+	}
+	bytes := make([]byte, 0, 128)
+	for index := uintptr(0); index < 128; index++ {
+		value := *(*byte)(unsafe.Add(unsafe.Pointer(address), index))
+		if value == 0 {
+			break
+		}
+		bytes = append(bytes, value)
+	}
+	return boundedDiagnosticText(string(bytes), 128)
 }
 
 func dispatch(ctx context.Context, action func() error) error {
@@ -379,6 +406,21 @@ func (engine *Engine) tick() {
 		fltk.RepeatTimeout(0.5, engine.tick)
 		return
 	}
+	if engine.diagnostics != nil {
+		engine.diagnosticsTicks++
+		if engine.diagnosticsTicks >= 10 {
+			engine.diagnosticsTicks = 0
+			engine.diagnostics.recordMPVProperties(playbackDiagnosticMPVProperties{
+				FrameDropCount:        parseDiagnosticCount(engine.core.GetPropertyString("frame-drop-count")),
+				DecoderFrameDropCount: parseDiagnosticCount(engine.core.GetPropertyString("decoder-frame-drop-count")),
+				HWDecCurrent:          engine.core.GetPropertyString("hwdec-current"),
+				DisplayFPS:            parseDiagnosticFPS(engine.core.GetPropertyString("display-fps")),
+				EstimatedDisplayFPS:   parseDiagnosticFPS(engine.core.GetPropertyString("estimated-display-fps")),
+				VODelayedFrameCount:   parseDiagnosticCount(engine.core.GetPropertyString("vo-delayed-frame-count")),
+				VideoFPS:              parseDiagnosticFPS(engine.core.GetPropertyString("video-params/fps")),
+			})
+		}
+	}
 	position, _ := strconv.ParseFloat(engine.core.GetPropertyString("time-pos"), 64)
 	duration, _ := strconv.ParseFloat(engine.core.GetPropertyString("duration"), 64)
 	paused := engine.core.GetPropertyString("pause") == "yes"
@@ -415,8 +457,26 @@ func (engine *Engine) Render(width, height int) error {
 	if engine.isClosed() {
 		return nil
 	}
-	engine.render.Update()
-	if err := engine.render.RenderGL(0, width, height, true); err != nil {
+	diagnostics := engine.diagnostics
+	if diagnostics != nil {
+		diagnostics.renderStarted(time.Now())
+		diagnostics.captureOpenGL(func() (string, string) {
+			return openGLString(0x1F00), openGLString(0x1F01)
+		})
+	}
+	flags := engine.render.Update()
+	if diagnostics != nil {
+		diagnostics.recordRenderUpdate(flags&mpv.RenderUpdateFrame != 0)
+	}
+	started := time.Time{}
+	if diagnostics != nil {
+		started = time.Now()
+	}
+	err := engine.render.RenderGL(0, width, height, true)
+	if diagnostics != nil {
+		diagnostics.renderFinished(started, time.Now(), err != nil)
+	}
+	if err != nil {
 		return libmpv.ErrPlayerFailed
 	}
 	engine.render.ReportSwap()
@@ -476,6 +536,7 @@ func (engine *Engine) Close() error {
 			engine.render.SetUpdateCallback(nil)
 			engine.video.MakeCurrent()
 			freeErr := engine.render.Free()
+			_ = engine.diagnostics.persist()
 			coreErr := engine.core.TerminateDestroy()
 			libraryErr := engine.library.Close()
 			close(engine.events)

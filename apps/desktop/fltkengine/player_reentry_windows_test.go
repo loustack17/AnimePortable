@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,6 +52,25 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 	})
 
 	preparePinnedRuntime(t)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("resolve test executable: %v", err)
+	}
+	diagnosticsPath := filepath.Join(filepath.Dir(executable), "playback-diagnostics.json")
+	if _, err := os.Stat(diagnosticsPath); err == nil {
+		t.Fatalf("diagnostic test output already exists: %s", diagnosticsPath)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("check diagnostic test output: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(diagnosticsPath) })
+	previousDiagnostics, hadPreviousDiagnostics := os.LookupEnv("ANIMEPORTABLE_PLAYBACK_DIAGNOSTICS")
+	t.Cleanup(func() {
+		if hadPreviousDiagnostics {
+			_ = os.Setenv("ANIMEPORTABLE_PLAYBACK_DIAGNOSTICS", previousDiagnostics)
+		} else {
+			_ = os.Unsetenv("ANIMEPORTABLE_PLAYBACK_DIAGNOSTICS")
+		}
+	})
 	mediaDirectory := t.TempDir()
 	media := []string{filepath.Join(mediaDirectory, "first-black.mp4"), filepath.Join(mediaDirectory, "second-black.mp4")}
 	for _, path := range media {
@@ -78,6 +98,13 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 	}
 
 	for pass := 0; pass < 2; pass++ {
+		diagnosticMode := "0"
+		if pass == 0 {
+			diagnosticMode = "1"
+		}
+		if err := os.Setenv("ANIMEPORTABLE_PLAYBACK_DIAGNOSTICS", diagnosticMode); err != nil {
+			t.Fatalf("set playback diagnostics mode: %v", err)
+		}
 		var err error
 		newContext, cancelNew := context.WithTimeout(context.Background(), 12*time.Second)
 		engine, err = pumpFLTKResult(t, 15*time.Second, func() (*fltkengine.Engine, error) {
@@ -98,7 +125,9 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 		drawCount := 0
 		mediaReady := false
 		readyDraws := 0
+		stateCallbacks := 0
 		engine.SetStateHandler(func(position, duration time.Duration, paused bool, resolution int) {
+			stateCallbacks++
 			mediaReady = duration >= 2900*time.Millisecond && duration <= 3100*time.Millisecond && resolution == 180
 		})
 		var drawContext uintptr
@@ -137,6 +166,9 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 			drawCounts = append(drawCounts, drawCount)
 			contexts = append(contexts, drawContext)
 			t.Fatalf("pass%d: timed out waiting for a complete post-focus media draw; %s", pass+1, diagnostic())
+		}
+		if pass == 0 && !pumpUntil(t, 7*time.Second, func() bool { return stateCallbacks >= 10 }) {
+			t.Fatalf("timed out waiting for diagnostic property sampling; %s", diagnostic())
 		}
 		drawCounts = append(drawCounts, drawCount)
 		contexts = append(contexts, drawContext)
@@ -188,6 +220,34 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 
 		if err := pumpFLTKError(t, 15*time.Second, engine.Close); err != nil {
 			t.Fatalf("pass%d: close engine: %v; %s", pass+1, err, diagnostic())
+		}
+		if pass == 0 {
+			data, err := os.ReadFile(diagnosticsPath)
+			if err != nil {
+				t.Fatalf("read opt-in playback diagnostics: %v", err)
+			}
+			var report struct {
+				MPVUpdateCallbacks uint64                     `json:"mpv_update_callbacks"`
+				FLTKAwakeCallbacks uint64                     `json:"fltk_awake_callbacks"`
+				RenderCalls        uint64                     `json:"render_calls"`
+				RenderSpanNanos    uint64                     `json:"render_span_nanos"`
+				MPVPropertySamples uint64                     `json:"mpv_property_samples"`
+				MPV                map[string]json.RawMessage `json:"mpv"`
+			}
+			if err := json.Unmarshal(data, &report); err != nil {
+				t.Fatalf("decode opt-in playback diagnostics: %v", err)
+			}
+			if report.MPVUpdateCallbacks == 0 || report.FLTKAwakeCallbacks == 0 || report.RenderCalls < 2 || report.RenderSpanNanos == 0 || report.MPVPropertySamples == 0 || report.MPV["frame_drop_count"] == nil || report.MPV["display_fps"] == nil {
+				t.Fatalf("playback diagnostics missing measured values: %+v", report)
+			}
+			if strings.Contains(string(data), media[0]) || strings.Contains(string(data), "TEST EPISODE") {
+				t.Fatal("playback diagnostics contain media path or title")
+			}
+			if err := os.Remove(diagnosticsPath); err != nil {
+				t.Fatalf("remove test diagnostic output: %v", err)
+			}
+		} else if _, err := os.Stat(diagnosticsPath); !os.IsNotExist(err) {
+			t.Fatalf("diagnostics output exists without opt-in: %v", err)
 		}
 		engine = nil
 		view.SetRenderHook(nil)

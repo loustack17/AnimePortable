@@ -4,7 +4,7 @@
 
 ## Current loop
 
-Loop30 IN_PROGRESS: actual overlay drawing ignored hidden state while keyboard focus remained selected. Two-file correction plus framebuffer regression saved; new CI/owner gate pending. Owner also reports video-only stutter, cause unverified; no speculative tuning. Artifacts cleanup517.2MiB complete with data/evidence preserved; after each new download remove superseded builds and keep latest usable version. Historical checkpoints below describe earlier code.
+Loop30 IN_PROGRESS. Owner confirmed3022551 rendered control hide/reveal PASS; video-only stutter remains. Prepare default-off, local, privacy-bounded playback diagnostic to measure real render/drop data before causal fix; no speculative settings. Required source/nativeCI/privacy/review checks and owner sample pending. Preserve user data and latest-only binaries after download.
 
 ### Historical dbb191f checkpoint — CI_VERIFIED / NEEDS_HUMAN
 

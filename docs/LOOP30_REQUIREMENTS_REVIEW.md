@@ -4,7 +4,7 @@ Date: 2026-10-13. Baseline: main `90a7fc9985bd5ab17b1198333567324fd69d2e8a`.
 
 ## Result
 
-IN_PROGRESS, not PASS: owner feedback reopened rendered-control visibility on bca387a. Native C++ selected-focus bypass confirmed and corrected in two files; actual framebuffer hide/show regression added. Exact new Windows CI and owner acceptance pending. Video stutter with normal audio is unresolved without runtime measurement; no claim this fix resolves it. Earlier reviews/CI below are historical.
+IN_PROGRESS: owner confirms3022551 hide/reveal works; video stutter with audio normal remains unresolved. A temporary default-off bounded local engine diagnostic is being prepared, not a causal playback fix. Required opt-in/privacy/aggregation/lifecycle review and exact native CI pending, then owner sample. Only whitelisted numeric playback/render counters and bounded GPU strings; no content identifiers,URLs,credentials,DB,logs or remote telemetry. No performancePASS or Loop30PASS before actual evidence.
 
 ## Historical review order and verification before repair
 
@@ -73,3 +73,7 @@ Simplify-first independent code/platform/lifecycle review PASS, no unresolved MU
 ## Focused hidden-overlay correction
 
 Simplify-first independent review PASS. The hidden/no-menu/no-episodes guard now returns regardless of remembered focus, before any GL state change. The native test disables inherited scissor before black clear, checks hidden/shown framebuffer pixels and retained focus in both reentry passes; existing assertions retained. TypeSafe scope/lifecycle/verification uncertainty independently adjudicated against this synchronous two-file patch: generic image/generation rubric omitted applicable renderer evidence, no new async/resource ownership work. Raw judgments saved in focused-overlay-judgments.json. Exact new native CI and owner acceptance required. Video-only stutter cause remains UNKNOWN; no unmeasured tuning.
+
+## Default-off local playback diagnostic review
+
+Simplify-first independent privacy/platform/lifecycle/performance-interference review PASS. Four engine-only files; exact environment opt-in, fixed numeric counters plus bounded128-byte GPU vendor/renderer and decoder enum, no media identifiers/URL/DB/credentials/network/telemetry. Existing tick samples five-second whitelist; actualGLreads once, bounded mutex aggregation; report atomically replaced after native callback drain on normalClose. Default-off has no added property reads/clocks/output. Pure aggregation/opt-in/privacy/parsing/overwrite/once-read tests and vet PASS; native fixture verifies actual sampler/Close report and second disabled pass, pending exactCI. TypeSafe scope1.99/conf1 and lifecycle1.97/.97 support; verification1.79/.70 requires independent adjudication because native/owner sample intentionally pending, not falsePASS. Enabled sampling has bounded cost, so metrics are diagnostic only; RenderGL walltime includes target-display waiting and is not alone proof of GPU bottleneck. One-click local launcher will enable only its child process. Actual owner report is not sent to API. No playback tuning/improvementclaim.
