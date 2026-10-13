@@ -22,8 +22,8 @@ func (store *Store) SaveSettings(ctx context.Context, settings core.Settings) er
 	}
 	return store.withDB(ctx, func(db *sql.DB) error {
 		_, err := db.ExecContext(ctx, `INSERT INTO settings (
-			id, appearance, mpv_path, autoplay_next, resume_playback, language
-		) VALUES (1, ?, '', ?, ?, ?)
+			id, appearance, autoplay_next, resume_playback, language
+		) VALUES (1, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			appearance = excluded.appearance,
 			autoplay_next = excluded.autoplay_next,

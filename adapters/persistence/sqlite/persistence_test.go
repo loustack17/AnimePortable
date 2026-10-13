@@ -198,28 +198,6 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	}
 }
 
-func TestLegacyPlayerPathDoesNotAffectCurrentSettings(t *testing.T) {
-	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
-	defer store.Close()
-	ctx := context.Background()
-	legacyPath := "C:/private/old-mpv.exe"
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO settings(id, appearance, mpv_path, autoplay_next, resume_playback, language)
-		VALUES (1, 3, ?, 2, 1, 1)`, legacyPath); err != nil {
-		t.Fatal(err)
-	}
-	settings, err := store.Settings(ctx)
-	if err != nil || settings.Appearance != core.AppearanceDark || settings.Language != core.LanguageTraditionalChinese {
-		t.Fatalf("legacy settings = %#v, %v", settings, err)
-	}
-	if err := store.SaveSettings(ctx, settings); err != nil {
-		t.Fatal(err)
-	}
-	var retainedPath string
-	if err := store.db.QueryRowContext(ctx, `SELECT mpv_path FROM settings WHERE id = 1`).Scan(&retainedPath); err != nil || retainedPath != legacyPath {
-		t.Fatalf("legacy path changed during settings save: %q, %v", retainedPath, err)
-	}
-}
-
 func TestPlaybackCheckpointRejectsMissingAnimeAndCancellation(t *testing.T) {
 	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
 	defer store.Close()
@@ -547,8 +525,8 @@ func TestPersistenceRejectsCorruptedStoredValues(t *testing.T) {
 	if _, err := store.db.ExecContext(ctx, "PRAGMA ignore_check_constraints = ON"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO settings(id, appearance, mpv_path, autoplay_next, resume_playback, language)
-		VALUES (1, 256, '', 256, 256, 256)`); err != nil {
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO settings(id, appearance, autoplay_next, resume_playback, language)
+		VALUES (1, 256, 256, 256, 256)`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.db.ExecContext(ctx, "PRAGMA ignore_check_constraints = OFF"); err != nil {

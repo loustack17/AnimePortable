@@ -9,7 +9,7 @@ if (Test-Path -LiteralPath $Output) {
     throw "Output already exists: $Output"
 }
 
-$records = @(go list -deps -tags production -f '{{if .Module}}{{.Module.Path}}|{{.Module.Version}}|{{.Module.Dir}}{{end}}' ./apps/desktop)
+$records = @(go list -deps -f '{{if .Module}}{{.Module.Path}}|{{.Module.Version}}|{{.Module.Dir}}{{end}}' ./apps/desktop)
 if ($LASTEXITCODE -ne 0) {
     throw 'Cannot determine Windows desktop Go dependencies'
 }

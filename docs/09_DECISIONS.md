@@ -108,7 +108,7 @@ Decision: the Windows desktop is Go with FLTK, and playback is in-process libmpv
 
 Why: the Fyne build missed the idle resource target (169.50 MiB private working set after 15 minutes minimized, against a goal under 100 MiB). The FLTK and libmpv prototype was lighter.
 
-Package and license decision (settled, owner, 2026-09-28): the portable ZIP bundles the SHA-256-pinned `libmpv-2.dll` that is byte-identical to OneAnime 1.4.7's. The ZIP includes a disclosure of its upstream release, known build inputs and unverified license and source details. The owner accepted prior resource and interaction evidence for Loop 28. Source files stay MPL-2.0. GPL distribution is acceptable if ever required. Agents must not re-research or re-litigate libmpv licensing unless the owner reopens it. The strict packaging verifier (provenance JSON and corresponding-source ZIP) stays available for a future fully documented build. Related criterion: CI-010.
+Package and license decision (settled, owner, 2026-09-28): the portable ZIP bundles the SHA-256-pinned `libmpv-2.dll` that is byte-identical to OneAnime 1.4.7's. The ZIP includes a disclosure of its upstream release, known build inputs and unverified license and source details. The owner accepted prior resource and interaction evidence for Loop 28. Source files stay MPL-2.0. GPL distribution is acceptable if ever required. Agents must not re-research or re-litigate libmpv licensing unless the owner reopens it. The unused strict packaging mode (provenance JSON and corresponding-source ZIP) was removed on 2026-10-13 by owner decision. Related criterion: CI-010.
 
 Open items:
 

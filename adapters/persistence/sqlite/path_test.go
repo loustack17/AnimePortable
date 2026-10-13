@@ -72,7 +72,7 @@ func TestOpenRoundTripsSpecialDatabasePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.ExecContext(ctx, "INSERT INTO settings(id, appearance, mpv_path, autoplay_next, resume_playback, language) VALUES (1, 0, '', 0, 0, 0)"); err != nil {
+	if _, err := store.db.ExecContext(ctx, "INSERT INTO settings(id, appearance, autoplay_next, resume_playback, language) VALUES (1, 0, 0, 0, 0)"); err != nil {
 		_ = store.Close()
 		t.Fatal(err)
 	}

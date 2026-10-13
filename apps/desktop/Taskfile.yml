@@ -3,7 +3,6 @@
 version: '3'
 
 vars:
-  APP_NAME: animeportable
   BIN_DIR: bin
   TARGET_ARCH: '{{.TARGET_ARCH | default .ARCH}}'
 

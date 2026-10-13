@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -147,6 +148,86 @@ func TestMigrationRejectsPreexistingPartialDomainSchema(t *testing.T) {
 	}
 	if tableExists(t, db, "schema_migrations") {
 		t.Fatal("partial source schema was incorrectly certified")
+	}
+}
+
+func settingsColumns(t *testing.T, db *sql.DB) []string {
+	t.Helper()
+	rows, err := db.Query("SELECT name FROM pragma_table_info('settings') ORDER BY cid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		columns = append(columns, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return columns
+}
+
+func TestMigrationDropsLegacySettingsMPVPathPreservingSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	var previous []migration
+	for version, name := range map[int]string{1: "0001_initial.sql", 2: "0002_episode_mappings.sql"} {
+		contents, err := migrationFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous = append(previous, migration{version: version, name: name, sql: string(contents)})
+	}
+	store, err := open(context.Background(), path, migrationSource{migrations: previous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(settingsColumns(t, store.db), "mpv_path") {
+		t.Fatal("previous schema is missing mpv_path")
+	}
+	if _, err := store.db.Exec(`INSERT INTO settings(id, appearance, mpv_path, autoplay_next, resume_playback, language)
+		VALUES (1, 3, 'C:/private/old-mpv.exe', 2, 1, 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err = Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	want := []string{"id", "appearance", "autoplay_next", "resume_playback", "language"}
+	if got := settingsColumns(t, store.db); !slices.Equal(got, want) {
+		t.Fatalf("settings columns = %v, want %v", got, want)
+	}
+	var appearance, autoplay, resume, language int
+	if err := store.db.QueryRow("SELECT appearance, autoplay_next, resume_playback, language FROM settings WHERE id = 1").
+		Scan(&appearance, &autoplay, &resume, &language); err != nil {
+		t.Fatal(err)
+	}
+	if appearance != 3 || autoplay != 2 || resume != 1 || language != 1 {
+		t.Fatalf("preserved settings = %d %d %d %d, want 3 2 1 1", appearance, autoplay, resume, language)
+	}
+	if _, err := store.db.Exec("INSERT INTO settings(id, appearance, autoplay_next, resume_playback, language) VALUES (2, 0, 0, 0, 0)"); err == nil {
+		t.Fatal("rebuilt settings table lost its id = 1 constraint")
+	}
+	if _, err := store.db.Exec("UPDATE settings SET language = 3"); err == nil {
+		t.Fatal("rebuilt settings table lost its language constraint")
+	}
+}
+
+func TestFreshSchemaHasNoSettingsMPVPath(t *testing.T) {
+	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
+	defer store.Close()
+	want := []string{"id", "appearance", "autoplay_next", "resume_playback", "language"}
+	if got := settingsColumns(t, store.db); !slices.Equal(got, want) {
+		t.Fatalf("settings columns = %v, want %v", got, want)
 	}
 }
 

@@ -9,13 +9,13 @@ schema_version: 2
 instruction_version: "3.0"
 status: IN_PROGRESS
 branch: main
-observed_head: e8f0640790e0abaa620d5c3db32f453de2c91ba3  # last commit; the docs restructure is not committed yet
+observed_head: f790dfc  # docs restructure; the legacy cleanup commit follows it (run git log)
 active_work: >
-  The docs restructure (D1) is finished and uncommitted. The new docs are in docs/ and the old
-  docs are unchanged in docs/archive/. It waits for the owner to review the diff and approve the commit.
-active_acceptance: The D1 checks listed in docs/loops/DOCS_RESTRUCTURE.md.
+  The docs restructure (D1) and the legacy cleanup (D2) are committed locally and not pushed.
+  Pushing needs owner approval; GitHub Windows CI must then pass for the pushed commit.
+active_acceptance: The checks listed in docs/loops/LEGACY_CLEANUP.md.
 budgets: >
-  D1 clarity rounds used: 2 of 2. D1 review-fix rounds used: 2 of 2.
+  D1 is complete. D2 corrections used: 1 of 5.
   Loop 30 corrections are counted in docs/loops/LOOP30.md section 7.
 loop30:
   state: Loop 30 (anime detail and episode UI) is in progress, not PASS, and is paused until the docs commit.
@@ -27,8 +27,8 @@ loop30:
     CI run 38444662617 for it is green. No improvement is claimed until the owner tests it.
   details: docs/loops/LOOP30.md
 next_actions:
-  - 1. The owner reviews the docs diff and approves the docs commit.
-  - 2. Remove legacy code and directories as a separate verified change; keep docs/archive/.
+  - 1. Docs restructure is committed (f790dfc) and legacy cleanup is committed after it (docs/loops/LEGACY_CLEANUP.md). Ask the owner to approve the push, then confirm GitHub Windows CI is green for the pushed commit; classify any failure with the ci-log template.
+  - 2. Note for users: after migration 0003 an older app version refuses to open the database; keep a backup before downgrading.
   - 3. Resume Loop 30. Deliver the CI-built exe and launcher of e8f0640, remove old binaries and caches (keep data/ and evidence), and ask the owner for one 30 to 60 second test of the same clip.
   - 4. After that test, judge the new diagnostic report with TypeSafe (de-identified numbers only) before any further fix. If there is no improvement, record that.
 do_not_repeat:

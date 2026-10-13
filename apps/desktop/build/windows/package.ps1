@@ -24,8 +24,7 @@ try {
         '--os', 'windows', '--arch', $Arch,
         '--binary', $Binary, '--output', $Output,
         '--license', '../../LICENSE', '--notices', $notices,
-        '--libmpv', $dll, '--libmpv-sha256', $digest, '--libmpv-license', $license,
-        '--community-runtime'
+        '--libmpv', $dll, '--libmpv-sha256', $digest, '--libmpv-license', $license
     )
     & go @arguments
     if ($LASTEXITCODE -ne 0) { throw "Windows packaging failed with exit code $LASTEXITCODE" }

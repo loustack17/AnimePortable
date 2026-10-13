@@ -30,7 +30,6 @@ The Windows UI is FLTK. It calls typed Go application actions. Playback is in-pr
 | `tools/*.ps1` | Build helpers (Go license notices, test execution helper). |
 | `tests/architecture/` | Import-rule tests. |
 | `tests/contract/` | Shared adapter contract tests and fakes. |
-| `tests/integration/`, `testdata/` | Integration tests and fixtures (currently placeholders). |
 | `docs/` | Project documents. |
 
 Files with `_windows` in the name build on Windows only. Native FLTK tests run only in GitHub Windows CI (see `06_ACCEPTANCE.md`).

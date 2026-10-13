@@ -6,7 +6,6 @@ import (
 	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,42 +13,48 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"animeportable/internal/runtimepin"
 )
 
-func TestCLIPackageRequiresEmbeddedRuntimePin(t *testing.T) {
-	if err := validatePinnedRuntime(request{OS: "windows", Arch: "amd64"}); err == nil {
-		t.Fatal("Windows package accepted without libmpv runtime")
+func TestPackageRequiresLibMPVMatchingExecutablePin(t *testing.T) {
+	root := t.TempDir()
+	req := communityFixture(t, root)
+
+	req.Output = filepath.Join(root, "unpinned.zip")
+	if err := packageArtifact(req, strings.Repeat("0", 64)); err == nil || !strings.Contains(err.Error(), "differs from the executable pin") {
+		t.Fatalf("digest differing from pin: err = %v", err)
 	}
-	if err := validatePinnedRuntime(request{OS: "windows", Arch: "amd64", LibMPV: "libmpv-2.dll", LibMPVSHA256: strings.Repeat("0", 64)}); err == nil {
-		t.Fatal("different runtime digest accepted")
+	if _, err := os.Stat(req.Output); !os.IsNotExist(err) {
+		t.Fatalf("rejected package left archive: %v", err)
 	}
-	if err := validatePinnedRuntime(request{OS: "windows", Arch: "amd64", LibMPV: "libmpv-2.dll", LibMPVSHA256: strings.ToUpper(runtimepin.LibMPVSHA256)}); err != nil {
-		t.Fatalf("matching runtime digest rejected: %v", err)
+
+	noRuntime := req
+	noRuntime.Output = filepath.Join(root, "no-runtime.zip")
+	noRuntime.LibMPV = ""
+	if err := packageArtifact(noRuntime, runtimeDigest); err == nil {
+		t.Fatal("package without libmpv accepted")
 	}
-	if err := validatePinnedRuntime(request{OS: "windows", Arch: "arm64", LibMPV: "libmpv-2.dll", LibMPVSHA256: runtimepin.LibMPVSHA256}); err == nil {
+
+	upper := req
+	upper.Output = filepath.Join(root, "upper.zip")
+	upper.LibMPVSHA256 = strings.ToUpper(runtimeDigest)
+	upper.LibMPVLicense = writeFile(t, root, "upper-notice.txt", communityNotice(upper.LibMPVSHA256))
+	if err := packageArtifact(upper, runtimeDigest); err != nil {
+		t.Fatalf("matching upper-case digest rejected: %v", err)
+	}
+
+	arm := req
+	arm.Output = filepath.Join(root, "arm.zip")
+	arm.Arch = "arm64"
+	if err := packageArtifact(arm, runtimeDigest); err == nil {
 		t.Fatal("amd64 runtime accepted for another architecture")
-	}
-	if err := validatePinnedRuntime(request{}); err != nil {
-		t.Fatalf("package without libmpv rejected: %v", err)
 	}
 }
 
 func TestPortableArchivesContainOnlyExtractedAppPayload(t *testing.T) {
 	root := t.TempDir()
-	binary := writeFile(t, root, "animeportable.exe", "native executable")
-	license := writeFile(t, root, "LICENSE", "license")
-	notices := writeFile(t, root, "THIRD_PARTY_NOTICES.md", "notices")
-	dll := writeFile(t, root, "libmpv-2.dll", "runtime")
-	dllLicense := writeFile(t, root, "libmpv-license", "runtime license")
-	digest := sha256.Sum256([]byte("runtime"))
-	req := request{
-		OS: "windows", Arch: "amd64", Binary: binary, Output: filepath.Join(root, "windows.zip"), License: license, Notices: notices,
-		LibMPV: dll, LibMPVSHA256: hex.EncodeToString(digest[:]), LibMPVLicense: dllLicense,
-	}
-	attachProvenance(t, root, &req)
-	if err := packageArtifact(req); err != nil {
+	req := communityFixture(t, root)
+	req.Output = filepath.Join(root, "windows.zip")
+	if err := packageArtifact(req, runtimeDigest); err != nil {
 		t.Fatal(err)
 	}
 	entries, contents, err := readZip(req.Output)
@@ -57,7 +62,7 @@ func TestPortableArchivesContainOnlyExtractedAppPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	sort.Strings(entries)
-	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv-provenance.json", "licenses/libmpv.txt", "sources/fltk-1.4.5.tar.gz", "sources/fltk-1.4.patch", "sources/libmpv-sources.zip"}
+	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv.txt"}
 	if !reflect.DeepEqual(entries, want) {
 		t.Fatalf("entries = %v, want %v", entries, want)
 	}
@@ -93,33 +98,29 @@ func TestArchiveEntryNamesRejectTraversalAndPlatformSeparators(t *testing.T) {
 
 func TestPortablePackageRejectsSymlinkInputsAndNeverOverwrites(t *testing.T) {
 	root := t.TempDir()
-	binary := writeFile(t, root, "binary", "executable")
 	license := writeFile(t, root, "LICENSE", "original")
-	notices := writeFile(t, root, "notices", "notices")
 	link := filepath.Join(root, "linked-license")
 	if err := os.Symlink(license, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	output := filepath.Join(root, "package.zip")
-	dll := writeFile(t, root, "libmpv-2.dll", "runtime")
-	dllLicense := writeFile(t, root, "libmpv-license", "runtime license")
-	digest := sha256.Sum256([]byte("runtime"))
-	req := request{OS: "windows", Arch: "amd64", Binary: binary, Output: output, License: link, Notices: notices, LibMPV: dll, LibMPVSHA256: hex.EncodeToString(digest[:]), LibMPVLicense: dllLicense}
-	attachProvenance(t, root, &req)
-	if err := packageArtifact(req); err == nil {
+	req := communityFixture(t, root)
+	req.Output = output
+	req.License = link
+	if err := packageArtifact(req, runtimeDigest); err == nil {
 		t.Fatal("packageArtifact accepted symlink input")
 	}
 	if _, err := os.Stat(output); !os.IsNotExist(err) {
 		t.Fatalf("failed package left output: %v", err)
 	}
 	req.License = license
-	if err := packageArtifact(req); err != nil {
+	if err := packageArtifact(req, runtimeDigest); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(output, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := packageArtifact(req); err == nil {
+	if err := packageArtifact(req, runtimeDigest); err == nil {
 		t.Fatal("packageArtifact overwrote existing output")
 	}
 	contents, err := os.ReadFile(output)
@@ -137,13 +138,13 @@ func TestPackageRequiresWindowsZipAndRejectsPausedPlatforms(t *testing.T) {
 	license := writeFile(t, root, "license", "license")
 	notices := writeFile(t, root, "notices", "notices")
 	base := request{OS: "windows", Arch: "amd64", Binary: binary, Output: filepath.Join(root, "package.msi"), License: license, Notices: notices}
-	if err := packageArtifact(base); err == nil {
+	if err := packageArtifact(base, runtimeDigest); err == nil {
 		t.Fatal("windows installer format accepted")
 	}
 	for _, target := range []string{"darwin", "linux"} {
 		base.OS = target
 		base.Output = filepath.Join(root, target+".zip")
-		if err := packageArtifact(base); err == nil {
+		if err := packageArtifact(base, runtimeDigest); err == nil {
 			t.Fatalf("paused %s platform accepted", target)
 		}
 	}
@@ -151,72 +152,11 @@ func TestPackageRequiresWindowsZipAndRejectsPausedPlatforms(t *testing.T) {
 
 func TestWindowsPackagePinsBundledLibMPVAndIncludesLicense(t *testing.T) {
 	root := t.TempDir()
-	binary := writeFile(t, root, "binary", "application")
-	license := writeFile(t, root, "license", "application license")
-	notices := writeFile(t, root, "notices", "third-party notices")
-	dll := writeFile(t, root, "libmpv-2.dll", "libmpv runtime")
-	dllLicense := writeFile(t, root, "libmpv-license", "libmpv license")
-	digest := sha256.Sum256([]byte("libmpv runtime"))
-	req := request{
-		OS: "windows", Arch: "amd64", Binary: binary, Output: filepath.Join(root, "portable.zip"),
-		License: license, Notices: notices, LibMPV: dll, LibMPVSHA256: hex.EncodeToString(digest[:]), LibMPVLicense: dllLicense,
-	}
-	attachProvenance(t, root, &req)
-	if err := packageArtifact(req); err != nil {
-		t.Fatal(err)
-	}
-	entries, contents, err := readZip(req.Output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sort.Strings(entries)
-	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv-provenance.json", "licenses/libmpv.txt", "sources/fltk-1.4.5.tar.gz", "sources/fltk-1.4.patch", "sources/libmpv-sources.zip"}
-	if !reflect.DeepEqual(entries, want) {
-		t.Fatalf("entries = %v, want %v", entries, want)
-	}
-	if contents["libmpv-2.dll"] != "libmpv runtime" || contents["licenses/libmpv.txt"] != "libmpv license" {
-		t.Fatal("bundled runtime or license changed")
-	}
-	if contents["licenses/libmpv-provenance.json"] == "" || contents["sources/libmpv-sources.zip"] == "" || contents["sources/fltk-1.4.5.tar.gz"] == "" || contents["sources/fltk-1.4.patch"] == "" {
-		t.Fatal("provenance manifest or corresponding sources missing")
-	}
-	req.Output = filepath.Join(root, "bad.zip")
-	req.LibMPVSHA256 = strings.Repeat("0", 64)
-	if err := packageArtifact(req); err == nil {
-		t.Fatal("incorrect runtime digest accepted")
-	}
-	if _, err := os.Stat(req.Output); !os.IsNotExist(err) {
-		t.Fatalf("failed package left archive: %v", err)
-	}
-	req.LibMPVSHA256 = hex.EncodeToString(digest[:])
-	req.LibMPVLicense = ""
-	if err := packageArtifact(req); err == nil {
-		t.Fatal("runtime without license accepted")
-	}
-	req.LibMPVLicense = dllLicense
-	req.OS = "linux"
-	req.Output = filepath.Join(root, "bad.tar.gz")
-	if err := packageArtifact(req); err == nil {
-		t.Fatal("Windows runtime accepted in Linux package")
-	}
-}
-
-func TestCommunityRuntimePackageDisclosesUnverifiedSourceAndPinsDLL(t *testing.T) {
-	root := t.TempDir()
-	runtimeBytes := []byte("runtime")
-	digest := sha256.Sum256(runtimeBytes)
-	runtimeHash := hex.EncodeToString(digest[:])
-	req := request{
-		OS: "windows", Arch: "amd64", CommunityRuntime: true,
-		Binary:        writeFile(t, root, "animeportable.exe", "application"),
-		Output:        filepath.Join(root, "community.zip"),
-		License:       writeFile(t, root, "LICENSE", "application license"),
-		Notices:       writeFile(t, root, "THIRD_PARTY_NOTICES.md", "third-party notices"),
-		LibMPV:        writeFile(t, root, "libmpv-2.dll", string(runtimeBytes)),
-		LibMPVSHA256:  runtimeHash,
-		LibMPVLicense: writeFile(t, root, "libmpv-notice.txt", runtimeHash+"\nhttps://example.org/upstream\nsource unverified\n"),
-	}
-	if err := packageArtifact(req); err != nil {
+	req := communityFixture(t, root)
+	req.Output = filepath.Join(root, "portable.zip")
+	dllLicense := req.LibMPVLicense
+	runtimeHash := req.LibMPVSHA256
+	if err := packageArtifact(req, runtimeDigest); err != nil {
 		t.Fatal(err)
 	}
 	entries, contents, err := readZip(req.Output)
@@ -225,279 +165,90 @@ func TestCommunityRuntimePackageDisclosesUnverifiedSourceAndPinsDLL(t *testing.T
 	}
 	sort.Strings(entries)
 	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv.txt"}
-	if !reflect.DeepEqual(entries, want) || contents["libmpv-2.dll"] != string(runtimeBytes) {
+	if !reflect.DeepEqual(entries, want) {
+		t.Fatalf("entries = %v, want %v", entries, want)
+	}
+	if contents["libmpv-2.dll"] != "runtime" || contents["licenses/libmpv.txt"] != communityNotice(runtimeHash) {
+		t.Fatal("bundled runtime or license changed")
+	}
+	assertWrongDLLDigestRejected(t, root, req)
+	req.LibMPVLicense = ""
+	if err := packageArtifact(req, runtimeDigest); err == nil {
+		t.Fatal("runtime without license accepted")
+	}
+	req.LibMPVLicense = dllLicense
+	req.OS = "linux"
+	req.Output = filepath.Join(root, "bad.tar.gz")
+	if err := packageArtifact(req, runtimeDigest); err == nil {
+		t.Fatal("Windows runtime accepted in Linux package")
+	}
+}
+
+func TestCommunityRuntimePackageDisclosesUnverifiedSourceAndPinsDLL(t *testing.T) {
+	root := t.TempDir()
+	req := communityFixture(t, root)
+	runtimeHash := req.LibMPVSHA256
+	req.Output = filepath.Join(root, "community.zip")
+	if err := packageArtifact(req, runtimeDigest); err != nil {
+		t.Fatal(err)
+	}
+	entries, contents, err := readZip(req.Output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(entries)
+	want := []string{"LICENSE", "THIRD_PARTY_NOTICES.md", "animeportable.exe", "libmpv-2.dll", "licenses/libmpv.txt"}
+	if !reflect.DeepEqual(entries, want) || contents["libmpv-2.dll"] != "runtime" {
 		t.Fatalf("community entries = %v, want %v", entries, want)
 	}
 	req.Output = filepath.Join(root, "missing-disclosure.zip")
 	req.LibMPVLicense = writeFile(t, root, "bad-notice.txt", "https://example.org/upstream\n")
-	if err := packageArtifact(req); err == nil {
+	if err := packageArtifact(req, runtimeDigest); err == nil {
 		t.Fatal("community package accepted notice without matching runtime hash and disclosure")
 	}
-	req.LibMPVLicense = writeFile(t, root, "valid-notice.txt", runtimeHash+"\nhttps://example.org/upstream\nsource unverified\n")
-	req.Output = filepath.Join(root, "mixed-inputs.zip")
-	req.LibMPVManifest = writeFile(t, root, "provenance.json", "{}")
-	if err := packageArtifact(req); err == nil {
-		t.Fatal("community package accepted strict source inputs")
-	}
-	req.LibMPVManifest = ""
+	req.LibMPVLicense = writeFile(t, root, "valid-notice.txt", communityNotice(runtimeHash))
+	assertWrongDLLDigestRejected(t, root, req)
+}
+
+// assertWrongDLLDigestRejected declares a digest the DLL does not have, with a
+// matching notice and pin, so only the DLL byte check can fail.
+func assertWrongDLLDigestRejected(t *testing.T, root string, req request) {
+	t.Helper()
+	wrong := strings.Repeat("0", 64)
 	req.Output = filepath.Join(root, "wrong-dll.zip")
-	req.LibMPVSHA256 = strings.Repeat("0", 64)
-	if err := packageArtifact(req); err == nil {
-		t.Fatal("community package accepted a mismatched DLL digest")
+	req.LibMPVSHA256 = wrong
+	req.LibMPVLicense = writeFile(t, root, "wrong-dll-notice.txt", communityNotice(wrong))
+	err := packageArtifact(req, wrong)
+	if err == nil || !strings.Contains(err.Error(), "SHA-256 mismatch for libmpv-2.dll") {
+		t.Fatalf("mismatched DLL digest: err = %v", err)
+	}
+	if _, err := os.Stat(req.Output); !os.IsNotExist(err) {
+		t.Fatalf("failed package left archive: %v", err)
 	}
 }
 
-func TestPortablePackageFailsClosedOnIncompleteOrMismatchedProvenance(t *testing.T) {
-	valid := provenanceFixture(t, t.TempDir())
-	if err := packageArtifact(valid); err != nil {
-		t.Fatalf("valid provenance rejected: %v", err)
-	}
-
-	cases := []struct {
-		name   string
-		want   string
-		mutate func(*request)
-	}{
-		{name: "missing manifest", want: "requires libmpv provenance manifest", mutate: func(req *request) { req.LibMPVManifest = "" }},
-		{name: "missing sources", want: "requires libmpv provenance manifest", mutate: func(req *request) { req.LibMPVSources = "" }},
-		{name: "missing FLTK source", want: "requires FLTK source", mutate: func(req *request) { req.FLTKSource = "" }},
-		{name: "missing FLTK patch", want: "requires FLTK source", mutate: func(req *request) { req.FLTKPatch = "" }},
-		{name: "FLTK source digest mismatch", want: "SHA-256 mismatch for sources/fltk-1.4.5.tar.gz", mutate: func(req *request) {
-			req.FLTKSource = writeFile(t, filepath.Dir(req.FLTKSource), "wrong-fltk.tar.gz", "different source")
-		}},
-		{name: "FLTK patch digest mismatch", want: "SHA-256 mismatch for sources/fltk-1.4.patch", mutate: func(req *request) {
-			req.FLTKPatch = writeFile(t, filepath.Dir(req.FLTKPatch), "wrong-fltk.patch", "different patch")
-		}},
-		{name: "source archive digest mismatch", want: "SHA-256 does not match", mutate: func(req *request) {
-			req.LibMPVSources = writeFile(t, filepath.Dir(req.LibMPVSources), "bad-sources.zip", "changed")
-		}},
-		{name: "runtime digest mismatch", want: "digest does not match runtime", mutate: func(req *request) {
-			manifestBytes, err := os.ReadFile(req.LibMPVManifest)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var manifest provenanceManifest
-			if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-				t.Fatal(err)
-			}
-			manifest.LibMPVSHA256 = strings.Repeat("0", 64)
-			manifestBytes, err = json.Marshal(manifest)
-			if err != nil {
-				t.Fatal(err)
-			}
-			req.LibMPVManifest = writeFile(t, filepath.Dir(req.LibMPVManifest), "mismatched-runtime-provenance.json", string(manifestBytes))
-		}},
-		{name: "source traversal", want: "unsafe provenance source entry", mutate: func(req *request) {
-			writeProvenanceFixture(t, filepath.Dir(req.LibMPVSources), req, []provenanceComponent{
-				{Name: "mpv", Revision: "abc123", License: "LGPL-2.1-or-later", SourceEntry: "../mpv.tar.xz"},
-				{Name: "ffmpeg", Revision: "def456", License: "LGPL-2.1-or-later", SourceEntry: "source/ffmpeg.tar.xz"},
-			})
-		}},
-		{name: "archive entry traversal", want: "unsafe libmpv source entry", mutate: func(req *request) {
-			root := filepath.Dir(req.LibMPVSources)
-			sources := filepath.Join(root, "traversal-sources.zip")
-			file, err := os.Create(sources)
-			if err != nil {
-				t.Fatal(err)
-			}
-			writer := zip.NewWriter(file)
-			for _, name := range []string{"../outside", "source/mpv.tar.xz", "source/ffmpeg.tar.xz"} {
-				entry, err := writer.Create(name)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, err := io.WriteString(entry, "source"); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := writer.Close(); err != nil {
-				t.Fatal(err)
-			}
-			if err := file.Close(); err != nil {
-				t.Fatal(err)
-			}
-			sourceBytes, err := os.ReadFile(sources)
-			if err != nil {
-				t.Fatal(err)
-			}
-			sourceDigest := sha256.Sum256(sourceBytes)
-			manifestBytes, err := os.ReadFile(req.LibMPVManifest)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var manifest provenanceManifest
-			if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-				t.Fatal(err)
-			}
-			manifest.SourcesSHA256 = hex.EncodeToString(sourceDigest[:])
-			manifestBytes, err = json.Marshal(manifest)
-			if err != nil {
-				t.Fatal(err)
-			}
-			req.LibMPVManifest = writeFile(t, root, "traversal-provenance.json", string(manifestBytes))
-			req.LibMPVSources = sources
-		}},
-		{name: "corrupt source payload", want: "read libmpv source entry", mutate: func(req *request) {
-			root := filepath.Dir(req.LibMPVSources)
-			sources := writeSourceArchive(t, root, []sourceArchiveEntry{
-				{Name: "source/mpv.tar.xz", Body: strings.Repeat("mpv source payload ", 100)},
-				{Name: "source/ffmpeg.tar.xz", Body: "ffmpeg source"},
-			})
-			reader, err := zip.OpenReader(sources)
-			if err != nil {
-				t.Fatal(err)
-			}
-			dataOffset, err := reader.File[0].DataOffset()
-			if err != nil {
-				reader.Close()
-				t.Fatal(err)
-			}
-			if err := reader.Close(); err != nil {
-				t.Fatal(err)
-			}
-			archive, err := os.ReadFile(sources)
-			if err != nil {
-				t.Fatal(err)
-			}
-			archive[dataOffset] ^= 0xff
-			if err := os.WriteFile(sources, archive, 0o644); err != nil {
-				t.Fatal(err)
-			}
-			writeProvenanceManifest(t, root, req, sources, defaultProvenanceComponents())
-		}},
-		{name: "empty required source", want: "is empty", mutate: func(req *request) {
-			root := filepath.Dir(req.LibMPVSources)
-			sources := writeSourceArchive(t, root, []sourceArchiveEntry{
-				{Name: "source/mpv.tar.xz"},
-				{Name: "source/ffmpeg.tar.xz", Body: "ffmpeg source"},
-			})
-			writeProvenanceManifest(t, root, req, sources, defaultProvenanceComponents())
-		}},
-		{name: "missing ffmpeg", want: "requires mpv and FFmpeg", mutate: func(req *request) {
-			writeProvenanceFixture(t, filepath.Dir(req.LibMPVSources), req, []provenanceComponent{
-				{Name: "mpv", Revision: "abc123", License: "LGPL-2.1-or-later", SourceEntry: "source/mpv.tar.xz"},
-			})
-		}},
-		{name: "missing listed source", want: "missing required source entry", mutate: func(req *request) {
-			writeProvenanceFixture(t, filepath.Dir(req.LibMPVSources), req, []provenanceComponent{
-				{Name: "mpv", Revision: "abc123", License: "LGPL-2.1-or-later", SourceEntry: "source/not-present.tar.xz"},
-				{Name: "ffmpeg", Revision: "def456", License: "LGPL-2.1-or-later", SourceEntry: "source/ffmpeg.tar.xz"},
-			})
-		}},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			root := t.TempDir()
-			req := provenanceFixture(t, root)
-			req.Output = filepath.Join(root, "failed.zip")
-			test.mutate(&req)
-			err := packageArtifact(req)
-			if err == nil {
-				t.Fatal("invalid provenance accepted")
-			}
-			if !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("error = %q, want substring %q", err, test.want)
-			}
-			if _, err := os.Stat(req.Output); !os.IsNotExist(err) {
-				t.Fatalf("failed package left output: %v", err)
-			}
-		})
-	}
-}
-
-func provenanceFixture(t *testing.T, root string) request {
-	t.Helper()
-	binary := writeFile(t, root, "app.exe", "application")
-	license := writeFile(t, root, "LICENSE", "license")
-	notices := writeFile(t, root, "notices", "notices")
-	dll := writeFile(t, root, "runtime.dll", "runtime")
-	dllLicense := writeFile(t, root, "runtime-license", "runtime license")
+// runtimeDigest is the SHA-256 of the fixture libmpv DLL contents.
+var runtimeDigest = func() string {
 	digest := sha256.Sum256([]byte("runtime"))
-	req := request{OS: "windows", Arch: "amd64", Binary: binary, Output: filepath.Join(root, "valid.zip"), License: license, Notices: notices, LibMPV: dll, LibMPVSHA256: hex.EncodeToString(digest[:]), LibMPVLicense: dllLicense}
-	writeProvenanceFixture(t, root, &req, []provenanceComponent{
-		{Name: "mpv", Revision: "abc123", License: "LGPL-2.1-or-later", SourceEntry: "source/mpv.tar.xz"},
-		{Name: "ffmpeg", Revision: "def456", License: "LGPL-2.1-or-later", SourceEntry: "source/ffmpeg.tar.xz"},
-	})
-	return req
-}
+	return hex.EncodeToString(digest[:])
+}()
 
-func attachProvenance(t *testing.T, root string, req *request) {
+func communityFixture(t *testing.T, root string) request {
 	t.Helper()
-	writeProvenanceFixture(t, root, req, []provenanceComponent{
-		{Name: "mpv", Revision: "abc123", License: "LGPL-2.1-or-later", SourceEntry: "source/mpv.tar.xz"},
-		{Name: "ffmpeg", Revision: "def456", License: "LGPL-2.1-or-later", SourceEntry: "source/ffmpeg.tar.xz"},
-	})
+	return request{
+		OS: "windows", Arch: "amd64",
+		Binary:        writeFile(t, root, "animeportable.exe", "application"),
+		Output:        filepath.Join(root, "valid.zip"),
+		License:       writeFile(t, root, "LICENSE", "application license"),
+		Notices:       writeFile(t, root, "THIRD_PARTY_NOTICES.md", "third-party notices"),
+		LibMPV:        writeFile(t, root, "libmpv-2.dll", "runtime"),
+		LibMPVSHA256:  runtimeDigest,
+		LibMPVLicense: writeFile(t, root, "libmpv-notice.txt", communityNotice(runtimeDigest)),
+	}
 }
 
-func writeProvenanceFixture(t *testing.T, root string, req *request, components []provenanceComponent) {
-	t.Helper()
-	fltkSource := writeFile(t, root, "fltk-1.4.5.tar.gz", "FLTK source archive")
-	fltkPatch := writeFile(t, root, "fltk-1.4.patch", "Windows source patch")
-	sourceDigest := sha256.Sum256([]byte("FLTK source archive"))
-	patchDigest := sha256.Sum256([]byte("Windows source patch"))
-	req.FLTKSource = fltkSource
-	req.FLTKSourceSHA256 = hex.EncodeToString(sourceDigest[:])
-	req.FLTKPatch = fltkPatch
-	req.FLTKPatchSHA256 = hex.EncodeToString(patchDigest[:])
-	sources := writeSourceArchive(t, root, []sourceArchiveEntry{
-		{Name: "source/mpv.tar.xz", Body: "mpv source"},
-		{Name: "source/ffmpeg.tar.xz", Body: "ffmpeg source"},
-	})
-	writeProvenanceManifest(t, root, req, sources, components)
-}
-
-type sourceArchiveEntry struct {
-	Name string
-	Body string
-}
-
-func writeSourceArchive(t *testing.T, root string, entries []sourceArchiveEntry) string {
-	t.Helper()
-	sources := filepath.Join(root, "sources.zip")
-	file, err := os.Create(sources)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writer := zip.NewWriter(file)
-	for _, entry := range entries {
-		stream, err := writer.Create(entry.Name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := io.WriteString(stream, entry.Body); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return sources
-}
-
-func writeProvenanceManifest(t *testing.T, root string, req *request, sources string, components []provenanceComponent) {
-	t.Helper()
-	sourceBytes, err := os.ReadFile(sources)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sourceDigest := sha256.Sum256(sourceBytes)
-	manifest := provenanceManifest{Schema: 1, LibMPVSHA256: req.LibMPVSHA256, SourcesSHA256: hex.EncodeToString(sourceDigest[:]), Components: components}
-	manifestBytes, err := json.Marshal(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.LibMPVManifest = writeFile(t, root, "provenance.json", string(manifestBytes))
-	req.LibMPVSources = sources
-}
-
-func defaultProvenanceComponents() []provenanceComponent {
-	return []provenanceComponent{
-		{Name: "mpv", Revision: "abc123", License: "LGPL-2.1-or-later", SourceEntry: "source/mpv.tar.xz"},
-		{Name: "ffmpeg", Revision: "def456", License: "LGPL-2.1-or-later", SourceEntry: "source/ffmpeg.tar.xz"},
-	}
+func communityNotice(runtimeHash string) string {
+	return runtimeHash + "\nhttps://example.org/upstream\nsource unverified\n"
 }
 
 func writeFile(t *testing.T, root, name, contents string) string {
