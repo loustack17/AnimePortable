@@ -77,3 +77,11 @@ CI38355086703 passedMesa/setup/format/module but compilerfoundresizeDetailEpisod
 ## 2026-10-13 native fixture alignment
 
 CI38355710455 compiledWindows source; native testsfailedbecauseonefixture lackedselectedSearchstate andoldstartup testsassumednoEpisodeprefetch. Two native testfilesnowuse actualselectedPlay flowandwaitforDetail/Episodesready, retainzeroautoplay/exactID/twoexplicitretry assertions; Backwaitsforlatecompletion/eventdrain andassertsclosedDetail/clearedidentity/noPlay. No productionsourcechanges, no testsdeleted/skipped/weakened. Scoped simplify/independentPASS_REVIEW, format/diff PASS; exactnewCI remainsrequired. Rawnative-fixture-fix-judgments.json uncertaintywasindependentlyadjudicatedagainstassertionsandpendingnativegate. Correctionsused8underowneriterativeverificationdirective; priorcounter/checkpointnotes historical.
+
+## 2026-10-13 native verification and SDK security blocker
+
+Pushedebe7316 matchesGitHubmain. CI38356541646 passedallnativeGo,20repeatlifecycle/player,Anime1,raceandvet. Securityscanfailedon9reachableGostdlibissues(go1.26.8,allfixedgo1.26.9). Build/artifact/ownerNOT_RUN. OfficialGo releasehistory confirmssecuritypatch1.26.9; reviewedone-linego-versionpin draftretainsalltests/scans/perms andsameGo1.26family. Noactualworkfloweditappliedpendingexplicitscopeapproval. Rawproofanddraftstatearein artifacts/evidence/loop30/ci-go-security-refresh*; noLoopPASS.
+
+## 2026-10-13 Go SDK security repair authorized
+
+Owner approved reviewedone-lineCIgo-version1.26.9 pin andpush. Appliedworkflowexactlymatchesindependentreviewed draft, no test/security/permissionchanges. Theliteralsettingneedsnoadditionalrefactor; no hostSDKinstallation ormoduledependencychanges. Fullnative/race/vet/sourceproof existsforebe7316, butsecurity/build/ownerstillrequirethefreshpatchedSDKCI. Earlierapprovalpendingnotesarehistorical.

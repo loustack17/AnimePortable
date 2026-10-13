@@ -9,11 +9,11 @@ instruction_version: v2.4.1
 status: IN_PROGRESS
 repository:
   branch: main
-  observed_head: 7e156771b1b641fe0851c20311f154c26113e278
+  observed_head: ebe73162d349e5079c823400a629d5265376af58
   working_tree: "Approved17files committed/pushed; preserve unrelated AGENTS/.codex/data. Local CI recovery checkpoint pending."
 active_loop:
   number: 30
-  state: "CI38355710455 compiledsource but failedoldnativefixtures; testsalignedwithactualPhase24, scopedPASS_REVIEW; fixpushpending. Not PASS."
+  state: "PUSHEDebe7316; nativeGo/20repeat/Anime1/race/vet PASS; securityFAIL9stdlibissuesGo1.26.8. Ownerapprovedone-lineGo1.26.9 CIpatch; appliedexactdraft, pushpending. Not PASS."
   goal: "Phase24 Windows detail metadata/cover, ordered episodes, selected Play/Continue, Enter/Space/progress."
 completed:
   - "Loop29/player follow-up PASS with owner acceptance."
@@ -23,9 +23,9 @@ completed:
   - "Fresh simplify, scoped independent PASS_REVIEW and root corroboration; no further features or unresolved MUST_FIX."
 verification:
   - "Fresh CGO0 desktop/backend/architecture/contracts and backendvet PASS; format/diff PASS."
-  - "Unchanged pure-model tests/vet reuse prior hash-bound PASS. Added native tests NOT_RUN."
+  - "CI38356541646 fullnativeGo,20repeat lifecycle/player andAnime1acceptance PASS; exact ebe7316."
   - "TypeSafe scope/verification support; lifecycle uncertainty independently adjudicated against unchanged guards."
-  - "Local native cgo breaker closed; no native retries or host PASS. Native/build/race/owner NOT_RUN."
+  - "Localcgo breakerclosed; native Go PASS inisolatedCI. Race/vet PASS inCI; securityFAIL,build/ownerNOT_RUN. NohostPASS."
 budget:
   corrections_used: 8
   corrections_max: 8
@@ -34,9 +34,9 @@ boundaries:
   - "Owner authorized commit/push of reviewed scoped source/tests/docs after verification; exclude AGENTS/.codex/artifacts/data. Owner additionally approved exactly4line Mesa CI pin refresh; no release/Loop31 work."
   - "BWS memory-only key and necessary TypeSafe project uploads approved; no secrets/DB upload."
 next:
-  - "Pushreviewedtest-onlyfixturecorrections underowner iterativeverifydirective; observefreshfullCI before ownergate."
+  - "Commit/push approvedone-lineGo1.26.9 CIpatch plus recoverydocs, thenobservefullCI."
   - "After authorizedCIrepair and green exactCI prepare exe/ZIP, then owner acceptance. No blindrerun."
 references:
   - "docs/LOOP30_DETAIL.md; LOOP30_REQUIREMENTS_REVIEW.md final repair result; LOOP30_HUMAN_CHECK.md."
-  - "artifacts/evidence/loop30/cover-corrections.json; cover-repair-final-evidence.json; cover-repair-source-judgments.json; ci-failure-repair-state.json and ci-mesa-refresh.patch."
+  - "artifacts/evidence/loop30/cover-corrections.json; cover-repair-final-evidence.json; cover-repair-source-judgments.json; ci-failure-repair-state.json and ci-mesa-refresh.patch; ci-go-security-refresh.patch/state/judgments."
 ```
