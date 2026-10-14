@@ -491,7 +491,6 @@ func TestPlayForgetsProxyRejectionOfPreviousSession(t *testing.T) {
 	s.playMu.Unlock()
 	<-done
 	s.failures.PlayerFailed()
-	s.failures.Close()
 	lines := readFailureLines(t, directory)
 	// Line 0 is Play's own invalid_input; line 1 must not be attributed to the old session.
 	if len(lines) != 2 || !strings.HasSuffix(lines[1], " player_load - player_failed") {

@@ -57,7 +57,6 @@ func TestFailureLogNeverWritesErrorText(t *testing.T) {
 	log.recordPlayFailure(&stageError{stage: stageResolve, err: errors.New(secret)})
 	log.recordPlayFailure(fmt.Errorf("%s: %w", secret, libmpv.ErrPlayerFailed))
 	log.recordPlayFailure(fmt.Errorf("%s: %w", secret, &securehttp.Error{Kind: securehttp.KindStatus, Status: 502}))
-	log.Close()
 	lines := readFailureLines(t, directory)
 	want := []string{" resolve - unknown", " player_load - player_failed", " other 502 status"}
 	if len(lines) != len(want) {
@@ -82,7 +81,6 @@ func TestFailureLogSkipsCancellationAndShutdown(t *testing.T) {
 	log.recordPlayFailure(ErrClosed)
 	log.recordPlayFailure(&securehttp.Error{Kind: securehttp.KindCanceled})
 	log.recordPlayFailure(nil)
-	log.Close()
 	if _, err := os.Stat(filepath.Join(directory, failureLogName)); !os.IsNotExist(err) {
 		t.Fatalf("log should not exist: %v", err)
 	}
@@ -95,7 +93,6 @@ func TestFailureLogKeepsNewest50AcrossRestarts(t *testing.T) {
 		for range batch {
 			log.record(stageOther, 0, categoryUnknown)
 		}
-		log.Close()
 	}
 	if lines := readFailureLines(t, directory); len(lines) != failureLogMaxLines {
 		t.Fatalf("lines = %d", len(lines))
@@ -111,7 +108,6 @@ func TestFailureLogRotationDropsOldest(t *testing.T) {
 	for status := 100; status < 160; status++ {
 		log.record(stageResolve, status, failureCategory(securehttp.KindStatus))
 	}
-	log.Close()
 	lines := readFailureLines(t, directory)
 	if len(lines) != 50 || !strings.Contains(lines[0], " 110 ") || !strings.Contains(lines[49], " 159 ") {
 		t.Fatalf("first=%q last=%q n=%d", lines[0], lines[len(lines)-1], len(lines))
@@ -134,8 +130,6 @@ func TestFailureLogConcurrentWrites(t *testing.T) {
 		}()
 	}
 	wait.Wait()
-	log.Close()
-	log.record(stageOther, 0, categoryUnknown) // after close: no-op, not a panic
 	lines := readFailureLines(t, directory)
 	if len(lines) == 0 || len(lines) > failureLogMaxLines {
 		t.Fatalf("lines = %d", len(lines))
@@ -145,26 +139,6 @@ func TestFailureLogConcurrentWrites(t *testing.T) {
 			t.Fatalf("malformed line %q", line)
 		}
 	}
-}
-
-func TestFailureLogDoesNotBlockWhenQueueIsFull(t *testing.T) {
-	log := NewFailureLog(t.TempDir())
-	release := make(chan struct{})
-	log.writeFile = func(string, []string) error { <-release; return nil }
-	finished := make(chan struct{})
-	go func() {
-		for range failureLogQueue * 4 {
-			log.record(stageOther, 0, categoryUnknown)
-		}
-		close(finished)
-	}()
-	select {
-	case <-finished:
-	case <-time.After(5 * time.Second):
-		t.Fatal("record blocked on a stalled disk")
-	}
-	close(release)
-	log.Close()
 }
 
 func TestPlayerFailureIsAttributedToRecentProxyRejection(t *testing.T) {
@@ -183,7 +157,6 @@ func TestPlayerFailureIsAttributedToRecentProxyRejection(t *testing.T) {
 	log.PlayerFailed() // new attempt forgot it
 	log.UpstreamRejected(0)
 	log.PlayerFailed() // proxy_upstream, no status
-	log.Close()
 	want := []string{"proxy_upstream 502 status", "player_load - player_failed", "player_load - player_failed", "player_load - player_failed", "proxy_upstream - network"}
 	lines := readFailureLines(t, directory)
 	if len(lines) != len(want) {
@@ -203,7 +176,6 @@ func TestNilFailureLogIsNoOp(t *testing.T) {
 	log.beginAttempt()
 	log.UpstreamRejected(502)
 	log.PlayerFailed()
-	log.Close()
 }
 
 func TestStageSourceTagsResolveErrors(t *testing.T) {

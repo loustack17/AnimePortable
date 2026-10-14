@@ -20,7 +20,6 @@ import (
 const (
 	failureLogName     = "playback-failures.log"
 	failureLogMaxLines = 50
-	failureLogQueue    = 64
 	// A proxy rejection only explains a player failure that follows it closely.
 	upstreamFailureWindow = 30 * time.Second
 )
@@ -66,60 +65,44 @@ var allowedCategories = map[failureCategory]struct{}{
 }
 
 // FailureLog keeps the newest failureLogMaxLines playback failures next to the database.
-// Records are queued and written by one goroutine so callers (including the UI thread)
-// never wait for the disk. A full queue drops the record instead of blocking.
-// A nil *FailureLog is a valid no-op.
+// Each record reads and rewrites the small file, so callers on the UI thread must record
+// from a goroutine. A nil *FailureLog is a valid no-op.
 type FailureLog struct {
-	path  string
-	queue chan string
-	done  chan struct{}
-	now   func() time.Time
+	path string
+	now  func() time.Time
 
-	mu     sync.Mutex
-	closed bool
-	// The proxy rejection seen during the current attempt, if any.
+	mu sync.Mutex
+	// The proxy rejection seen during the current attempt, if any; zero upstreamAt means none.
 	upstreamStatus int
 	upstreamAt     time.Time
-	upstreamSeen   bool
-
-	// Owned by the writer goroutine.
-	lines     []string
-	loaded    bool
-	readFile  func(path string) ([]byte, error)
-	writeFile func(path string, lines []string) error
 }
 
 func NewFailureLog(directory string) *FailureLog {
-	log := &FailureLog{
-		path:      filepath.Join(directory, failureLogName),
-		queue:     make(chan string, failureLogQueue),
-		done:      make(chan struct{}),
-		now:       time.Now,
-		writeFile: writeLinesAtomically,
-		readFile:  os.ReadFile,
-	}
-	go log.run()
-	return log
+	return &FailureLog{path: filepath.Join(directory, failureLogName), now: time.Now}
 }
 
-// record queues one line. status outside 100..599 is written as "-".
+// record appends one line. status outside 100..599 is written as "-".
 func (log *FailureLog) record(stage failureStage, status int, category failureCategory) {
 	if log == nil {
 		return
 	}
-	log.enqueue(formatFailureLine(log.now(), stage, status, category))
-}
-
-func (log *FailureLog) enqueue(line string) {
+	line := formatFailureLine(log.now(), stage, status, category)
 	log.mu.Lock()
 	defer log.mu.Unlock()
-	if log.closed {
-		return
+	var lines []string
+	if data, err := os.ReadFile(log.path); err == nil {
+		for _, existing := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+			if existing != "" {
+				lines = append(lines, existing)
+			}
+		}
 	}
-	select {
-	case log.queue <- line:
-	default:
+	lines = append(lines, line)
+	if extra := len(lines) - failureLogMaxLines; extra > 0 {
+		lines = lines[extra:]
 	}
+	// Diagnostics must never break playback, so a failed write is dropped.
+	_ = writeLinesAtomically(log.path, lines)
 }
 
 // beginAttempt forgets any proxy rejection left over from an earlier attempt.
@@ -128,7 +111,7 @@ func (log *FailureLog) beginAttempt() {
 		return
 	}
 	log.mu.Lock()
-	log.upstreamSeen = false
+	log.upstreamAt = time.Time{}
 	log.mu.Unlock()
 }
 
@@ -141,7 +124,6 @@ func (log *FailureLog) UpstreamRejected(status int) {
 	log.mu.Lock()
 	log.upstreamStatus = status
 	log.upstreamAt = log.now()
-	log.upstreamSeen = true
 	log.mu.Unlock()
 }
 
@@ -152,8 +134,8 @@ func (log *FailureLog) PlayerFailed() {
 		return
 	}
 	log.mu.Lock()
-	status, recent := log.upstreamStatus, log.upstreamSeen && log.now().Sub(log.upstreamAt) <= upstreamFailureWindow
-	log.upstreamSeen = false
+	status, recent := log.upstreamStatus, !log.upstreamAt.IsZero() && log.now().Sub(log.upstreamAt) <= upstreamFailureWindow
+	log.upstreamAt = time.Time{}
 	log.mu.Unlock()
 	if recent {
 		log.record(stageProxyUpstream, status, upstreamCategory(status))
@@ -167,48 +149,6 @@ func upstreamCategory(status int) failureCategory {
 		return failureCategory(securehttp.KindNetwork)
 	}
 	return failureCategory(securehttp.KindStatus)
-}
-
-func (log *FailureLog) Close() {
-	if log == nil {
-		return
-	}
-	log.mu.Lock()
-	if log.closed {
-		log.mu.Unlock()
-		<-log.done
-		return
-	}
-	log.closed = true
-	close(log.queue)
-	log.mu.Unlock()
-	<-log.done
-}
-
-func (log *FailureLog) run() {
-	defer close(log.done)
-	for line := range log.queue {
-		log.append(line)
-	}
-}
-
-func (log *FailureLog) append(line string) {
-	if !log.loaded {
-		log.loaded = true
-		if data, err := log.readFile(log.path); err == nil {
-			for _, existing := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
-				if existing != "" {
-					log.lines = append(log.lines, existing)
-				}
-			}
-		}
-	}
-	log.lines = append(log.lines, line)
-	if extra := len(log.lines) - failureLogMaxLines; extra > 0 {
-		log.lines = append([]string(nil), log.lines[extra:]...)
-	}
-	// Diagnostics must never break playback, so a failed write is dropped.
-	_ = log.writeFile(log.path, log.lines)
 }
 
 func writeLinesAtomically(path string, lines []string) error {

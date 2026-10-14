@@ -71,19 +71,14 @@ func NewAt(databasePath string) *Service {
 	return &Service{operationSlots: make(chan struct{}, 16), shutdownDone: make(chan struct{}), lifecycleCtx: lifecycleCtx, lifecycleCancel: lifecycleCancel, newPlayer: func() (core.Player, error) { return nil, ErrUnavailable }, databasePath: databasePath}
 }
 
-func NewAtWithPlayerFactory(databasePath string, factory func() (core.Player, error)) *Service {
+// NewAtWithPlayback builds a Service with a player factory and a playback failure log.
+// The caller keeps using the log to report player-side failures; a nil log disables
+// failure logging.
+func NewAtWithPlayback(databasePath string, failures *FailureLog, factory func() (core.Player, error)) *Service {
 	service := NewAt(databasePath)
 	if factory != nil {
 		service.newPlayer = factory
 	}
-	return service
-}
-
-// NewAtWithPlayback is NewAtWithPlayerFactory plus a playback failure log that the
-// service closes on shutdown. The caller keeps using the log to report player-side
-// failures; a nil log disables failure logging.
-func NewAtWithPlayback(databasePath string, failures *FailureLog, factory func() (core.Player, error)) *Service {
-	service := NewAtWithPlayerFactory(databasePath, factory)
 	service.failures = failures
 	return service
 }
@@ -210,7 +205,6 @@ func (service *Service) Close() error {
 				}
 			}
 		}
-		service.failures.Close()
 		service.shutdownErr = safeError(first)
 		close(service.shutdownDone)
 	})

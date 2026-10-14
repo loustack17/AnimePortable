@@ -247,7 +247,7 @@ func main() {
 		Navigate: stop,
 	})
 	player.Window().SetCallback(func() { stop(0) })
-	// The failure log sits next to the database; the service closes it on shutdown.
+	// The failure log sits next to the database.
 	var failures *backend.FailureLog
 	if plan.DatabasePath != "" {
 		failures = backend.NewFailureLog(filepath.Dir(plan.DatabasePath))
@@ -290,7 +290,7 @@ func main() {
 				state.Playing = false
 				state.Loading = false
 				player.SetState(state)
-				failures.PlayerFailed()
+				go failures.PlayerFailed() // off the UI thread: the log writes to disk
 				fltk.MessageBox("播放失敗", "此集暫時無法播放。請重新選取該集或稍後再試。")
 			})
 			engineMu.Lock()
@@ -298,7 +298,7 @@ func main() {
 			engineMu.Unlock()
 			fltk.Awake(func() { player.SetRenderHook(func(width, height int) { _ = created.Render(width, height) }) })
 			return created, created, nil
-		}, libmpv.WithUpstreamFailureObserver(failures.UpstreamRejected)), nil
+		}, failures.UpstreamRejected), nil
 	})
 	defer func() { _ = service.Close(); player.Close() }()
 	play = func(request backend.PlayRequest) {
@@ -381,7 +381,7 @@ func main() {
 			}()
 		})
 	}
-	home, navigateHome, _ = fltkhome.NewWindow(plan, planErr, service, ctx, cancel, play, closeApp)
+	home, navigateHome = fltkhome.NewWindow(plan, planErr, service, ctx, cancel, play, closeApp)
 	home.Show()
 	fltk.Run()
 	cancel()

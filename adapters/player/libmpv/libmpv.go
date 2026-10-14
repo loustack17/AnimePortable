@@ -57,20 +57,10 @@ type Player struct {
 	newProxy func() (proxyService, error)
 }
 
-// Option customizes a Player.
-type Option func(*proxy.Config)
-
-// WithUpstreamFailureObserver reports the upstream HTTP status (0 when unknown) of every
-// response the playback proxy rejects. The observer must return quickly.
-func WithUpstreamFailureObserver(observer func(status int)) Option {
-	return func(config *proxy.Config) { config.OnUpstreamFailure = observer }
-}
-
-func NewPlayer(factory Factory, options ...Option) *Player {
-	var config proxy.Config
-	for _, option := range options {
-		option(&config)
-	}
+// NewPlayer builds a Player. onUpstreamFailure (nil allowed) receives the upstream HTTP
+// status (0 when unknown) of every response the playback proxy rejects; it must return quickly.
+func NewPlayer(factory Factory, onUpstreamFailure func(status int)) *Player {
+	config := proxy.Config{OnUpstreamFailure: onUpstreamFailure}
 	return &Player{factory: factory, newProxy: func() (proxyService, error) {
 		server, err := proxy.New(config)
 		if err != nil {

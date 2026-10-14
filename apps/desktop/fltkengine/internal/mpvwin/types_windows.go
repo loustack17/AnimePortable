@@ -72,24 +72,16 @@ func parsePropertyChange(data unsafe.Pointer) *PropertyChange {
 	}
 	raw := (*rawPropertyChange)(data)
 	change := &PropertyChange{Name: copyCString(raw.Name, 256), Format: Format(raw.Format)}
+	if raw.Data == nil {
+		change.Format = FormatNone
+		return change
+	}
 	switch change.Format {
 	case FormatString:
-		if raw.Data == nil {
-			change.Format = FormatNone
-			break
-		}
 		change.String = copyCString(*(*unsafe.Pointer)(raw.Data), 4096)
 	case FormatFlag:
-		if raw.Data == nil {
-			change.Format = FormatNone
-			break
-		}
 		change.Flag = *(*int32)(raw.Data) != 0
 	case FormatDouble:
-		if raw.Data == nil {
-			change.Format = FormatNone
-			break
-		}
 		change.Double = *(*float64)(raw.Data)
 	default:
 		change.Format = FormatNone

@@ -108,7 +108,7 @@ type view struct {
 	closing            bool
 }
 
-func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int), func(string)) {
+func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int)) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -126,15 +126,14 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 			}
 		})
 	})
-	showMessage := func(message string) { ui.message.SetLabel(message); ui.window.Redraw() }
 	window.SetCallback(ui.cancel)
 	ui.build()
 	if planErr != nil {
 		ui.showStartupError("無法使用這個資料夾，請將程式解壓到可寫入的位置後重新開啟。")
-		return window, ui.showSection, showMessage
+		return window, ui.showSection
 	}
 	ui.start()
-	return window, ui.navigate, showMessage
+	return window, ui.navigate
 }
 
 func (ui *view) build() {

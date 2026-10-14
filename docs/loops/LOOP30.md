@@ -42,7 +42,7 @@ Symptom: video was choppy while audio was normal, in every FLTK/libmpv build sin
 
 Root cause: the production `main` never called `fltk.Lock()`. FLTK only wakes its event loop for `Fl::awake` calls from other threads after the main thread has called `Fl::lock` once. libmpv signals "new frame ready" from its own thread through `Fl::awake`, so each frame waited 100 to 340 ms for an unrelated event (timer or mouse). libmpv then timed out after 200 ms ("mpv_render_context_render() not being called or stuck") and dropped frames. All native tests call `fltk.Lock()`, which is why tests were smooth and the app was not.
 
-How it was found: an opt-in local benchmark (`apps/desktop/fltkengine/playback_bench_windows_test.go`, `ANIMEPORTABLE_PLAYBACK_BENCH=1`) was smooth, the real app was not, and the new update-to-render latency histogram showed the delay was between the mpv callback and the FLTK awake handler, not in rendering.
+How it was found: an opt-in local benchmark (since removed) was smooth, the real app was not, and a temporary update-to-render latency histogram (since removed) showed the delay was between the mpv callback and the FLTK awake handler, not in rendering.
 
 Fixes kept:
 

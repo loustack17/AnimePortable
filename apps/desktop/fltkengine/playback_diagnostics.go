@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -21,12 +20,6 @@ type playbackDiagnostics struct {
 	firstRender time.Time
 	lastRender  time.Time
 	openGLOnce  sync.Once
-	// base anchors the monotonic offsets below, which are atomics because mpv's thread writes them.
-	base time.Time
-	// firstUpdate and awakeRan hold offsets from base (plus one, so zero means unset) of the oldest
-	// mpv update not yet rendered and of the latest FLTK awake callback not yet followed by a render.
-	firstUpdate atomic.Int64
-	awakeRan    atomic.Int64
 }
 
 type playbackDiagnosticReport struct {
@@ -44,45 +37,6 @@ type playbackDiagnosticReport struct {
 	GLVendor               string                          `json:"gl_vendor"`
 	GLRenderer             string                          `json:"gl_renderer"`
 	MPV                    playbackDiagnosticMPVProperties `json:"mpv"`
-	// UpdateToRender is the delay from the first unconsumed mpv update to the Render that consumed it.
-	UpdateToRender playbackDiagnosticLatency `json:"update_to_render"`
-	// AwakeToRender is the delay from the FLTK awake callback to the next Render start.
-	AwakeToRender playbackDiagnosticLatency `json:"awake_to_render"`
-}
-
-type playbackDiagnosticLatency struct {
-	Count    uint64                           `json:"count"`
-	MaxNanos uint64                           `json:"max_nanos"`
-	Buckets  playbackDiagnosticLatencyBuckets `json:"buckets"`
-}
-
-type playbackDiagnosticLatencyBuckets struct {
-	Under10ms  uint64 `json:"lt_10ms"`
-	Under25ms  uint64 `json:"lt_25ms"`
-	Under50ms  uint64 `json:"lt_50ms"`
-	Under100ms uint64 `json:"lt_100ms"`
-	Under200ms uint64 `json:"lt_200ms"`
-	AtLeast200 uint64 `json:"ge_200ms"`
-}
-
-func (latency *playbackDiagnosticLatency) add(delay time.Duration) {
-	delay = max(delay, 0)
-	latency.Count++
-	latency.MaxNanos = max(latency.MaxNanos, uint64(delay))
-	switch {
-	case delay < 10*time.Millisecond:
-		latency.Buckets.Under10ms++
-	case delay < 25*time.Millisecond:
-		latency.Buckets.Under25ms++
-	case delay < 50*time.Millisecond:
-		latency.Buckets.Under50ms++
-	case delay < 100*time.Millisecond:
-		latency.Buckets.Under100ms++
-	case delay < 200*time.Millisecond:
-		latency.Buckets.Under200ms++
-	default:
-		latency.Buckets.AtLeast200++
-	}
 }
 
 type playbackDiagnosticMPVProperties struct {
@@ -101,7 +55,6 @@ func newPlaybackDiagnostics(enabled bool, path string) *playbackDiagnostics {
 	}
 	return &playbackDiagnostics{
 		path:   path,
-		base:   time.Now(),
 		report: playbackDiagnosticReport{SchemaVersion: 1},
 	}
 }
@@ -114,8 +67,6 @@ func (diagnostics *playbackDiagnostics) recordMPVUpdateCallback() {
 	if diagnostics == nil {
 		return
 	}
-	// Only the first update since the last render is kept: that is the one that waited longest.
-	diagnostics.firstUpdate.CompareAndSwap(0, int64(time.Since(diagnostics.base))+1)
 	diagnostics.mu.Lock()
 	diagnostics.report.MPVUpdateCallbacks++
 	diagnostics.mu.Unlock()
@@ -125,7 +76,6 @@ func (diagnostics *playbackDiagnostics) recordFLTKAwakeCallback() {
 	if diagnostics == nil {
 		return
 	}
-	diagnostics.awakeRan.Store(int64(time.Since(diagnostics.base)) + 1)
 	diagnostics.mu.Lock()
 	diagnostics.report.FLTKAwakeCallbacks++
 	diagnostics.mu.Unlock()
@@ -144,16 +94,7 @@ func (diagnostics *playbackDiagnostics) renderStarted(at time.Time) {
 	if diagnostics == nil {
 		return
 	}
-	nowOffset := int64(at.Sub(diagnostics.base)) + 1
-	updateOffset := diagnostics.firstUpdate.Swap(0)
-	awakeOffset := diagnostics.awakeRan.Swap(0)
 	diagnostics.mu.Lock()
-	if updateOffset != 0 {
-		diagnostics.report.UpdateToRender.add(time.Duration(nowOffset - updateOffset))
-	}
-	if awakeOffset != 0 {
-		diagnostics.report.AwakeToRender.add(time.Duration(nowOffset - awakeOffset))
-	}
 	diagnostics.report.RenderCalls++
 	if diagnostics.firstRender.IsZero() {
 		diagnostics.firstRender = at
