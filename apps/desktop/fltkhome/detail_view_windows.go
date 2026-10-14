@@ -354,6 +354,5 @@ func episodeProgressLabel(history backend.History) string {
 	if history.Duration <= 0 {
 		return "已觀看 " + playbackPositionLabel(history.Position)
 	}
-	percent := min(100, max(0, int(float64(history.Position)*100/float64(history.Duration))))
-	return fmt.Sprintf("進度 %s / %s（%d%%）", playbackPositionLabel(history.Position), playbackPositionLabel(history.Duration), percent)
+	return fmt.Sprintf("%s / %s", playbackPositionLabel(history.Position), playbackPositionLabel(history.Duration))
 }

@@ -82,7 +82,10 @@ func (ui *view) styleButton(button *fltk.Button, selected func() bool) {
 		roundedRect(x+3, y+3, width-6, height-6, 11, background)
 		fltk.SetDrawColor(foreground)
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 15)
+		// Clip so a label longer than the button cannot paint over its neighbours.
+		fltk.PushClip(x+3, y+3, width-6, height-6)
 		fltk.Draw(button.Label(), x+18, y+3, width-26, height-6, fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE)
+		fltk.PopClip()
 	})
 }
 

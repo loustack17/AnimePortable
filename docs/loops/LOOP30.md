@@ -61,8 +61,10 @@ Reverted experiments: removing the early `ReportSwap` (e8f0640, kept), non-block
 
 ## 4b. Next steps
 
-1. Push the fix, confirm GitHub Windows CI, and deliver the CI build to `artifacts/test-build/`.
-2. Owner completes the remaining section 6 checks. Close Loop 30 only after all are accepted.
+1. Done: fix pushed as 3872166, CI 38523007303 green, CI build delivered to `artifacts/test-build/`.
+2. Owner checks 2026-10-14: keyboard, Continue/progress, back/recovery, window and mouse passed. Fixed after the check (owner retest passed): Home Continue Watching hid a series whose newest record was an unwatched episode; episode-row progress text overflowed the row; player menu labels sat below their highlight.
+3. Open: the detail page shows no cover or synopsis. Anime1 has neither, and the AniList/Bangumi adapters (Loops 17-18, ADR-009) were never wired into the app. Owner approved wiring them in Loop 30: a core metadata refresh use case, providers in the desktop backend, and a background lookup when the detail page opens without metadata.
+4. Close Loop 30 after the owner accepts the detail page.
 
 ## 5. Evidence index
 
@@ -83,14 +85,9 @@ Reverted experiments: removing the early `ReportSwap` (e8f0640, kept), non-block
 
 ## 6. Owner check (人工驗收)
 
-測試版：`artifacts/test-build/`（commit `ea7c87c`，CI run 38504519512 全部通過；EXE SHA-256 `396b4511…8127`；libmpv DLL 與固定雜湊一致；`data/` 是 3d58b0d 資料的複本，原資料保留在 `artifacts/evidence/loop30/data-before-migration-0003.db`）。
+測試版：`artifacts/test-build/AnimePortable.exe`（commit `3872166`，CI run 38523007303 全部通過；EXE SHA-256 `3324360B…0F8C`；libmpv DLL 與固定雜湊一致）。播放順暢度已於 2026-10-14 通過驗收。
 
-1. 雙擊 `artifacts/test-build/DiagnosePlayback.cmd`（會開啟本機播放量測；直接開 `AnimePortable.exe` 則不量測）。
-2. 播放先前會卡頓的同一個片段 30 至 60 秒（與 3d58b0d 基準相同）。
-3. 正常關閉整個 app，回報是否比之前順暢。量測報告會存在同一資料夾，只有數字，不需上傳。
-4. 3d58b0d 的報告 `artifacts/evidence/loop30/stutter-3d58b0d-report.json` 只當作比較基準。
-
-其餘尚未驗收的詳情與選集檢查：
+尚未驗收的詳情與選集檢查：
 
 | 項目 | 操作與預期結果 |
 | --- | --- |

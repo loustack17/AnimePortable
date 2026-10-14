@@ -65,8 +65,13 @@ func selectHomeRows(history []backend.History, library []backend.Anime, limit in
 	for _, item := range library {
 		titles[item.ID] = item.Title
 	}
+	// Pick the newest resumable episode per series, so opening another episode
+	// without watching it does not hide the series from Continue Watching.
 	newest := make(map[string]backend.History, len(history))
 	for _, item := range history {
+		if item.Completed || item.Position <= 0 || (item.Duration > 0 && item.Position >= item.Duration) {
+			continue
+		}
 		previous, exists := newest[item.AnimeID]
 		if !exists || newerHistory(item, previous) {
 			newest[item.AnimeID] = item
@@ -74,9 +79,7 @@ func selectHomeRows(history []backend.History, library []backend.Anime, limit in
 	}
 	ordered := make([]backend.History, 0, len(newest))
 	for _, item := range newest {
-		if !item.Completed && item.Position > 0 && (item.Duration <= 0 || item.Position < item.Duration) {
-			ordered = append(ordered, item)
-		}
+		ordered = append(ordered, item)
 	}
 	sort.Slice(ordered, func(i, j int) bool { return newerHistory(ordered[i], ordered[j]) })
 	if len(ordered) > limit {

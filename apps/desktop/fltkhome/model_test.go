@@ -41,6 +41,7 @@ func TestSelectHomeRowsUsesOnlyLatestResumableEpisodePerAnime(t *testing.T) {
 		{AnimeID: "same", EpisodeID: "new", Position: 2000, Duration: 10000, LastPlayed: "2026-02-01T00:00:00Z"},
 		{AnimeID: "completed", EpisodeID: "done", Position: 10000, Duration: 10000, LastPlayed: "2026-03-01T00:00:00Z"},
 		{AnimeID: "unstarted", EpisodeID: "zero", Position: 0, LastPlayed: "2026-03-02T00:00:00Z"},
+		{AnimeID: "same", EpisodeID: "opened-not-watched", Position: 0, Duration: 10000, LastPlayed: "2026-03-03T00:00:00Z"},
 	}
 	rows := selectHomeRows(history, nil, rowLimit)
 	if len(rows) != 1 || rows[0].History.EpisodeID != "new" {

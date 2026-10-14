@@ -111,7 +111,7 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
         for (int i = 0; i < 6; ++i) {
             if (selected == 0 && menu_cursor == i) { ink(0.22f, 0.27f, 0.44f); box(8, 72 + i * 46, 164, 39); ink(1, 1, 1); }
             std::string item = itemAt(menu_labels, i);
-            label(item.c_str(), 26, 110 + i * 46, 15);
+            label(item.c_str(), 26, 97 + i * 46, 15);
         }
     }
     if (episodes) {
