@@ -40,7 +40,7 @@ In development; there is no public release yet. Browsing, the detail page and pl
 
 - Detailed state: [docs/STATUS.md](docs/STATUS.md)
 - Engineering docs: [docs/README.md](docs/README.md)
-- Contributors and AI agents: [AGENTS.md](AGENTS.md)
+- Developers: [AGENTS.md](AGENTS.md)
 
 ## License
 

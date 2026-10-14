@@ -40,7 +40,7 @@ CGO_ENABLED=1 go test ./...
 
 - 詳細狀態：[docs/STATUS.md](docs/STATUS.md)
 - 工程文件：[docs/README.md](docs/README.md)
-- 貢獻者與 AI 代理：[AGENTS.md](AGENTS.md)
+- 開發者：[AGENTS.md](AGENTS.md)
 
 工程文件以英文撰寫。
 
