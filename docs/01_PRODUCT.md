@@ -13,7 +13,7 @@ The app is a clean library and controller. It is not a feature-heavy media platf
 - Unzip and watch. The portable ZIP contains the executable and the pinned libmpv DLL. No installer, no separate player install, no account.
 - Data lives in the extracted folder (`<folder>/data`). Moving the folder moves the user's data.
 - Find, open, play and resume must work with keyboard only and with mouse only.
-- The whole product should use fewer resources than OneAnime in comparable states (gate PERF-008, see `06_ACCEPTANCE.md`).
+- The whole product should use fewer resources than OneAnime in comparable states (see `06_ACCEPTANCE.md`, Resources and performance).
 
 ## Principles
 

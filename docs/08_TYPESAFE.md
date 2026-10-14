@@ -35,7 +35,7 @@ A typed answer is not proof. It never replaces a required test, independent revi
 
 | Template | Use at | Required `state` fields |
 | --- | --- | --- |
-| `failure-class.json` | Every failed check, before any fix (05_WORKFLOW step 5) | `failure`: command, exit status, smallest error, changed files |
+| `failure-class.json` | Every failed check, before any fix (05_WORKFLOW section 3) | `failure`: command, exit status, smallest error, changed files |
 | `ci-log.json` | Every failed CI run, before deciding the next action | `log_excerpt` |
 | `review-triage.json` | Every reviewer finding | `finding`, `requirement` |
 | `scope-check.json` | Before review and before final verification | `contract`, `change`, `evidence` |

@@ -113,7 +113,7 @@ Package and license decision (settled, owner, 2026-09-28): the portable ZIP bund
 Open items:
 
 - Linux and macOS are deferred.
-- PERF-008 (matched whole-product resource comparison with OneAnime under identical content and counters) is deferred. Do not infer a matched result from unmatched host samples, trim working sets, force GC or raise targets to pass.
+- The OneAnime resource comparison (matched whole-product resource comparison with OneAnime under identical content and counters) is deferred. Do not infer a matched result from unmatched host samples, trim working sets, force GC or raise targets to pass.
 - Both apps use the same libmpv DLL, so compare the application and UI overhead outside the shared player baseline.
 
 ## ADR template

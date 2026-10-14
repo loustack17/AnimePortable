@@ -20,7 +20,7 @@ Scope (ADR-023, Windows only):
 - Player controls (owner decision 2026-10-13): on-video controls auto-hide after 3 s of idle playback. Any key press or mouse movement shows them. Pause, loading and state changes show them. They stay visible while scrubbing, dragging volume, or with a menu or episode list open.
 - Not in scope: Schedule, Following, new settings, new dependencies, provider/core/schema changes, workflow or release changes.
 
-Acceptance IDs: FUNC-004, FUNC-005, UX-001 to UX-005, UX-008, UX-010, the relevant ARCH, SEC, PRIV and resource criteria, the loop-integrity criteria (LOOP-001 to LOOP-025 as applicable), and QUAL-001 to QUAL-012. Loop 29 behavior is preserved.
+Acceptance IDs (old numbering, retired 2026-10-14): FUNC-004, FUNC-005, UX-001 to UX-005, UX-008, UX-010, the relevant ARCH, SEC, PRIV and resource criteria, the loop-integrity criteria (LOOP-001 to LOOP-025 as applicable), and QUAL-001 to QUAL-012. Loop 29 behavior is preserved.
 
 Gates: pure Go tests, vet, backend/architecture/contract regression, formatting and diff check run locally. Native Windows tests, build and race run locally and in GitHub Windows CI. Owner acceptance is a separate gate.
 

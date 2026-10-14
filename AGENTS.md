@@ -2,7 +2,7 @@
 
 # AnimePortable — agent instructions
 
-Instruction version: 3.0 (2026-10-13)
+Instruction version: 3.1 (2026-10-14)
 
 These rules apply to every AI agent or human working in this repository, whatever tool or model they use. Deeper `AGENTS.md` files may add stricter rules, never weaker ones.
 
@@ -21,14 +21,14 @@ The full process is [docs/05_WORKFLOW.md](docs/05_WORKFLOW.md). It overrides any
 - Persistent writes only inside this repository. No global installs, sudo, host config, credential stores or other repositories. Never widen permissions to make something pass; report `ENVIRONMENT_BLOCKED` instead.
 - Commit, push, workflow edits (`.github/**`), CI reruns, releases, new dependencies, and changes to product, architecture, security or acceptance meaning need explicit owner approval first. Default push target is `main`.
 - Never weaken, skip or special-case a test, check or criterion to get PASS.
-- On failure: classify, diagnose with evidence, make the smallest causal fix, rerun the focused check, then regressions. Respect the budgets in the workflow and stop when they run out.
+- On failure: classify, diagnose with evidence, make the smallest causal fix, rerun the focused check, then regressions. After three failed attempts at the same problem, stop and report to the owner.
 - PASS needs final-state evidence: required checks, independent code-quality review with no `MUST_FIX`, and the owner's check when required.
 - Run the full native suite locally before pushing (`CGO_ENABLED=1 go test -count=1 ./...`, then `-race`, with an msvcrt MinGW gcc such as MSYS2 MINGW64 or nuwen MinGW on PATH). GitHub Windows CI confirms the pushed commit.
 - Preserve unrelated user files (`.codex/`, portable `data/`, `artifacts/` evidence).
 
 ## Roles
 
-The root agent owns the contract, integration, budgets, final verification and the handoff. It may delegate bounded, independent work to: explorer (read-only search), librarian (external docs), oracle (independent read-only review and debugging), fixer (implementation with a stated write set), designer (UI work). Workers get disjoint write sets, never start agents, and never edit the handoff. Reviewers are read-only and never approve their own code. Delegate only when it saves usage or adds independence.
+The root agent owns the plan, integration, final verification and the handoff. It may delegate bounded, independent work to: explorer (read-only search), librarian (external docs), oracle (independent read-only review and debugging), fixer (implementation with a stated write set), designer (UI work). Workers get disjoint write sets, never start agents, and never edit the handoff. Reviewers are read-only and never approve their own code. Delegate only when it saves usage or adds independence.
 
 ## TypeSafe
 

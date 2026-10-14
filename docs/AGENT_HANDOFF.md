@@ -2,19 +2,18 @@
 
 # Agent Handoff
 
-Recovery index only. Git, CI, tests and the linked docs override it. Rules for this file: [05_WORKFLOW.md section 10](05_WORKFLOW.md).
+Recovery index only. Git, CI, tests and the linked docs override it. Rules for this file: [05_WORKFLOW.md section 9](05_WORKFLOW.md).
 
 ```yaml
 schema_version: 2
-instruction_version: "3.0"
+instruction_version: "3.1"
 status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 30 passed on 2026-10-14 (docs/loops/LOOP30.md). Loop 31 (Schedule UI) is next and needs owner
+  None. Loop 30 passed on 2026-10-14 (docs/loops/LOOP30.md). Loop 31 (Following UI) is next and needs owner
   approval to start.
 active_acceptance: none
-budgets: none
 next_actions:
   - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
   - 2. Ask the owner before starting Loop 31; the owner has asked for simpler docs, so propose that first.
