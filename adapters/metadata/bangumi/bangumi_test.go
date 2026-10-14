@@ -26,6 +26,7 @@ const (
 	testSearchURL            = "https://api.bgm.tv/v0/search/subjects?limit=10&offset=0"
 	testUserAgent            = "loustack17/AnimePortable/0.0.1 (https://github.com/loustack17/AnimePortable)"
 	testCoverURL             = "https://lain.bgm.tv/pic/cover/l/12/34/1234_abc.jpg"
+	testResizedCoverURL      = "https://lain.bgm.tv/r/400/pic/cover/l/12/34/1234_abc.jpg"
 	testMaxResponseBodyBytes = 1 << 20
 	testMaxTitleTextBytes    = 4 << 10
 	testMaxDescriptionBytes  = 64 << 10
@@ -154,7 +155,7 @@ func TestBangumiAdapterAcceptance(t *testing.T) {
 				Title:        "中文標題",
 				NativeTitle:  "日本語タイトル",
 				Description:  "Synopsis with a link",
-				CoverURL:     testCoverURL,
+				CoverURL:     testResizedCoverURL,
 				Year:         2024,
 				EpisodeCount: 24,
 			},
@@ -672,8 +673,9 @@ func TestBangumiCoverPriorityAndSafeFallback(t *testing.T) {
 		images    map[string]any
 		wantCover string
 	}{
-		{name: "large takes priority", images: map[string]any{"large": largeURL, "common": commonURL}, wantCover: largeURL},
-		{name: "empty large falls back to common", images: map[string]any{"large": "", "common": commonURL}, wantCover: commonURL},
+		{name: "large takes priority, resized", images: map[string]any{"large": largeURL, "common": commonURL}, wantCover: "https://lain.bgm.tv/r/400/pic/cover/l/56/78/5678_large.jpg"},
+		{name: "empty large falls back to common", images: map[string]any{"large": "", "common": commonURL}, wantCover: testResizedCoverURL},
+		{name: "non-original path is kept", images: map[string]any{"large": "https://lain.bgm.tv/pic/cover/c/12/34/1234_abc.jpg"}, wantCover: "https://lain.bgm.tv/pic/cover/c/12/34/1234_abc.jpg"},
 		{name: "invalid large does not fall back", images: map[string]any{"large": "https://evil.example/cover.jpg", "common": commonURL}},
 	}
 	for _, test := range cases {
@@ -820,3 +822,27 @@ func TestLiveBangumiAdapter(t *testing.T) {
 }
 
 var _ core.MetadataProvider = (*Client)(nil)
+
+func TestBangumiChineseTextIsConvertedToTaiwanTraditional(t *testing.T) {
+	summary := "尤尔是一名住在山中小村庄的猎人少年，喜欢用软件。\n[简介原文]\n山奥の小さな村で暮らす"
+	description, ok := mapDescription(&summary)
+	if !ok || description != "尤爾是一名住在山中小村莊的獵人少年，喜歡用軟體。" {
+		t.Fatalf("description = %q ok=%t", description, ok)
+	}
+	nameCN, name := "葬送的芙莉莲 第二季", "葬送のフリーレン 第2期"
+	title, native, ok := mapTitles(&nameCN, &name)
+	if !ok || title != "葬送的芙莉蓮 第二季" || native != name {
+		t.Fatalf("title=%q native=%q ok=%t", title, native, ok)
+	}
+}
+
+func TestBangumiJapaneseOnlySummaryIsKeptUnconverted(t *testing.T) {
+	japanese := "趣味でヒーローを始めた男、サイタマ。3年間の特訓により無敵のパワーを手に入れ、国を守るヒーローである。"
+	if description, ok := mapDescription(&japanese); !ok || description != japanese {
+		t.Fatalf("description = %q ok=%t", description, ok)
+	}
+	chinese := "因為興趣而開始當英雄的男人「埼玉」，他的口頭禪是「ワンパンマン」。"
+	if description, ok := mapDescription(&chinese); !ok || description == "" {
+		t.Fatalf("Chinese summary with a kana name was dropped: ok=%t", ok)
+	}
+}

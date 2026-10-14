@@ -23,16 +23,47 @@ func (ui *view) loadDetailResources(generation uint64, animeID string) {
 	if coverService, ok := ui.service.(interface {
 		GetCover(context.Context, string) (backend.Cover, error)
 	}); ok {
+		metadataService, canRefresh := ui.service.(interface {
+			RefreshMetadata(context.Context, string) (bool, error)
+		})
+		// Anime1 has no covers or synopses: look the anime up when nothing is stored for it yet.
+		hasMetadata := ui.searchModel.preview != nil && ui.searchModel.preview.Metadata != nil
+		canRefresh = canRefresh && !hasMetadata && !ui.metadataLookedUp[animeID]
+		if canRefresh {
+			if ui.metadataLookedUp == nil {
+				ui.metadataLookedUp = make(map[string]bool)
+			}
+			ui.metadataLookedUp[animeID] = true
+		}
 		go func() {
 			cover, err := coverService.GetCover(ctx, animeID)
+			var refreshed *backend.Detail
+			var refreshErr error
+			if errors.Is(err, core.ErrNotFound) && canRefresh {
+				var found bool
+				if found, refreshErr = metadataService.RefreshMetadata(ctx, animeID); refreshErr == nil && found {
+					if detail, detailErr := ui.service.Detail(ctx, animeID); detailErr == nil {
+						refreshed = &detail
+					}
+					cover, err = coverService.GetCover(ctx, animeID)
+				}
+			}
 			noCover := errors.Is(err, core.ErrNotFound)
 			var pixels []byte
 			if err == nil {
 				pixels, err = decodeDetailCover(cover.Bytes, cover.MediaType)
 			}
 			fltk.Awake(func() {
+				if canRefresh && (ctx.Err() != nil || refreshErr != nil) {
+					// The user left, or the providers failed; allow another lookup on the next open.
+					// Only a completed lookup with no confident match is not repeated this session.
+					delete(ui.metadataLookedUp, animeID)
+				}
 				if !ui.detailRequestCurrent(generation, animeID) || ctx.Err() != nil {
 					return
+				}
+				if refreshed != nil && ui.searchModel.preview != nil && ui.searchModel.preview.Anime.ID == animeID {
+					ui.searchModel.preview = refreshed
 				}
 				if noCover {
 					ui.detailCoverErr = false
@@ -285,7 +316,7 @@ func (ui *view) renderDetailEpisodes() {
 	} else if len(ui.detailModel.episodes) == 0 {
 		ui.previewStatus.SetLabel("沒有可播放集數。")
 	} else {
-		ui.previewStatus.SetLabel("集數順序依來源資料排列。")
+		ui.previewStatus.SetLabel("")
 	}
 	if ui.detailHistoryErr {
 		ui.previewStatus.SetLabel(ui.previewStatus.Label() + "　觀看進度暫時無法載入。")

@@ -9,7 +9,7 @@ Status: IN_PROGRESS. Not PASS. Run `git log -1` for the current HEAD.
 Scope (ADR-023, Windows only):
 
 - Detail screen: cover, title, native title, short synopsis, season, year, studio, episode count. Fields appear only when metadata exists. Missing metadata or a missing cover is shown neutrally, not as an error.
-- Episodes: shown in source order, in bounded pages (page size 8). Episode rows show visible current/progress state (watched, progress, completed).
+- Episodes: shown in ascending episode-number order (owner 2026-10-14; Anime1 lists some series newest first), specials after numbered episodes, in bounded pages (page size 8). Episode rows show visible current/progress state (watched, progress, completed).
 - Click on an episode row plays that exact episode immediately. There is no separate Play button for a selected episode.
 - Enter and Space on a focused episode row play that exact episode. Arrow keys start from the focused row.
 - Continue appears only when there is valid, resumable progress for the same series. Completed, missing, zero-position or other-series history does not show Continue. Continue uses the stored position in milliseconds.
@@ -63,8 +63,9 @@ Reverted experiments: removing the early `ReportSwap` (e8f0640, kept), non-block
 
 1. Done: fix pushed as 3872166, CI 38523007303 green, CI build delivered to `artifacts/test-build/`.
 2. Owner checks 2026-10-14: keyboard, Continue/progress, back/recovery, window and mouse passed. Fixed after the check (owner retest passed): Home Continue Watching hid a series whose newest record was an unwatched episode; episode-row progress text overflowed the row; player menu labels sat below their highlight.
-3. Open: the detail page shows no cover or synopsis. Anime1 has neither, and the AniList/Bangumi adapters (Loops 17-18, ADR-009) were never wired into the app. Owner approved wiring them in Loop 30: a core metadata refresh use case, providers in the desktop backend, and a background lookup when the detail page opens without metadata.
-4. Close Loop 30 after the owner accepts the detail page.
+3. Done (owner check passed 2026-10-14): AniList/Bangumi metadata wired into the app (core `RefreshMetadata`, background lookup when a detail page has no metadata). Bangumi Chinese text is converted to Taiwan Traditional with embedded OpenCC s2twp dictionaries (a Go OpenCC library was rejected: it links GPL-2.0 code); Japanese-only synopses are shown unconverted (owner decision). Covers use Bangumi's 400 px resize. The heading keeps the Anime1 title; no Japanese title line. Episodes sort ascending. Synopsis wraps CJK text and scrolls.
+4. Open: many popular titles get no metadata because the matcher rejects Taiwan/mainland naming and season-notation differences (間諜家家酒/間諜過家家, 貳之章(第二季)/二之章). Next slice: normalize season notation and accept a season-consistent Bangumi match, without accepting wrong works (e.g. a movie matched to its TV series).
+5. Close Loop 30 after the owner accepts the matching slice.
 
 ## 5. Evidence index
 

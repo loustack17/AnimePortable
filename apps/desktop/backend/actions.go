@@ -5,6 +5,10 @@ package backend
 import (
 	"context"
 	"errors"
+	"math"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"animeportable/adapters/player/libmpv"
@@ -118,6 +122,35 @@ func (service *Service) Detail(ctx context.Context, animeID string) (Detail, err
 	return result, nil
 }
 
+// metadataLookupTimeout bounds a background lookup so a slow provider cannot hold an operation slot.
+const metadataLookupTimeout = 20 * time.Second
+
+// RefreshMetadata looks up and stores cover and synopsis metadata for an anime, replacing
+// any stored record. It reports whether metadata was stored; false means no provider had a
+// confident match.
+func (service *Service) RefreshMetadata(ctx context.Context, animeID string) (bool, error) {
+	operationCtx, done, err := service.begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer done()
+	localAnimeID, err := localID(animeID)
+	if err != nil {
+		return false, err
+	}
+	app, _, _, err := service.appSnapshot()
+	if err != nil {
+		return false, err
+	}
+	service.mu.Lock()
+	providers := service.metadata
+	service.mu.Unlock()
+	lookupCtx, cancel := context.WithTimeout(operationCtx, metadataLookupTimeout)
+	defer cancel()
+	found, err := app.RefreshMetadata(lookupCtx, localAnimeID, providers)
+	return found, safeError(err)
+}
+
 func (service *Service) Episodes(ctx context.Context, animeID string) ([]Episode, error) {
 	operationCtx, done, err := service.begin(ctx)
 	if err != nil {
@@ -158,7 +191,26 @@ func (service *Service) Episodes(ctx context.Context, animeID string) ([]Episode
 	if err != nil {
 		return nil, safeError(err)
 	}
+	orderEpisodes(episodesDTO)
 	return episodesDTO, nil
+}
+
+// orderEpisodes sorts episodes by number, ascending. Anime1 lists some series newest first.
+// Episodes without a plain number (specials) keep their relative order after the numbered ones.
+func orderEpisodes(episodes []Episode) {
+	sort.SliceStable(episodes, func(left, right int) bool {
+		leftNumber, leftOK := episodeNumberValue(episodes[left].Number)
+		rightNumber, rightOK := episodeNumberValue(episodes[right].Number)
+		if leftOK != rightOK {
+			return leftOK
+		}
+		return leftOK && leftNumber < rightNumber
+	})
+}
+
+func episodeNumberValue(number string) (float64, bool) {
+	value, err := strconv.ParseFloat(strings.TrimSpace(number), 64)
+	return value, err == nil && !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func (service *Service) Following(ctx context.Context) ([]Following, error) {

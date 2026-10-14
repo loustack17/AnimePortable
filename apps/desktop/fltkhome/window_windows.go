@@ -70,6 +70,9 @@ type view struct {
 	detailEpisodesErr  bool
 	detailHistoryErr   bool
 	detailCoverErr     bool
+	// metadataLookedUp holds anime looked up on AniList/Bangumi this session, so an anime
+	// with no match is not queried again on every open. Touched only on the UI thread.
+	metadataLookedUp   map[string]bool
 	searchPage         *fltk.Group
 	searchInput        *fltk.Input
 	searchButton       *fltk.Button
@@ -83,8 +86,8 @@ type view struct {
 	previewGroup       *fltk.Group
 	previewBack        *fltk.Button
 	previewTitle       *fltk.Box
-	previewNative      *fltk.Box
 	previewDescription *fltk.Box
+	previewSynopsis    *scrollingText
 	previewMeta        *fltk.Box
 	previewCover       *fltk.Box
 	previewEpisodes    *fltk.Scroll

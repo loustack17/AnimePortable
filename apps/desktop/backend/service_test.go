@@ -497,3 +497,42 @@ func TestPlayForgetsProxyRejectionOfPreviousSession(t *testing.T) {
 		t.Fatalf("lines = %q", lines)
 	}
 }
+
+type stubMetadataProvider struct{}
+
+func (stubMetadataProvider) Search(context.Context, core.MetadataQuery) ([]core.MetadataCandidate, error) {
+	return []core.MetadataCandidate{{Ref: core.MetadataRef{Provider: "bangumi", ID: "1"}, Title: "Frieren"}}, nil
+}
+func (stubMetadataProvider) Get(_ context.Context, ref core.MetadataRef) (core.AnimeMetadata, error) {
+	return core.AnimeMetadata{Ref: ref, Title: "Frieren", Description: "synopsis"}, nil
+}
+
+func TestRefreshMetadataStoresMatchAndDetailShowsIt(t *testing.T) {
+	st := newFakeStore()
+	st.anime["anime"] = core.Anime{ID: "anime", Title: "Frieren"}
+	s := newWithDependencies(dependencies{store: st, source: &fakeSource{}, metadata: []core.MetadataProvider{stubMetadataProvider{}}})
+	defer s.Close()
+	found, err := s.RefreshMetadata(context.Background(), "anime")
+	if err != nil || !found {
+		t.Fatalf("found=%t err=%v", found, err)
+	}
+	detail, err := s.Detail(context.Background(), "anime")
+	if err != nil || detail.Metadata == nil || detail.Metadata.Description != "synopsis" {
+		t.Fatalf("detail=%+v err=%v", detail, err)
+	}
+	if _, err := s.RefreshMetadata(context.Background(), " "); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("blank id err = %v", err)
+	}
+}
+
+func TestOrderEpisodesSortsByNumberAndKeepsSpecialsAfter(t *testing.T) {
+	episodes := []Episode{{ID: "c", Number: "12"}, {ID: "sp", Number: "SP"}, {ID: "a", Number: "00"}, {ID: "b", Number: "2"}, {ID: "d", Number: "12.5"}}
+	orderEpisodes(episodes)
+	var got []string
+	for _, episode := range episodes {
+		got = append(got, episode.ID)
+	}
+	if strings.Join(got, ",") != "a,b,c,d,sp" {
+		t.Fatalf("order = %v", got)
+	}
+}

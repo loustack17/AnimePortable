@@ -200,7 +200,6 @@ func TestNativeSearchViewBoundsRowsParentsFooterAndReflows(t *testing.T) {
 		{name: "retry action", x: ui.previewRetry.X(), y: ui.previewRetry.Y(), w: ui.previewRetry.W(), h: ui.previewRetry.H()},
 		{name: "title", x: ui.previewTitle.X(), y: ui.previewTitle.Y(), w: ui.previewTitle.W(), h: ui.previewTitle.H()},
 		{name: "cover", x: ui.previewCover.X(), y: ui.previewCover.Y(), w: ui.previewCover.W(), h: ui.previewCover.H()},
-		{name: "native metadata", x: ui.previewNative.X(), y: ui.previewNative.Y(), w: ui.previewNative.W(), h: ui.previewNative.H()},
 		{name: "metadata", x: ui.previewMeta.X(), y: ui.previewMeta.Y(), w: ui.previewMeta.W(), h: ui.previewMeta.H()},
 		{name: "synopsis", x: ui.previewDescription.X(), y: ui.previewDescription.Y(), w: ui.previewDescription.W(), h: ui.previewDescription.H()},
 	} {
@@ -371,10 +370,13 @@ func TestNativeRemoteSubmitShowsLoadingAndDisablesDuplicateSubmit(t *testing.T) 
 }
 
 func TestNativePreviewDescriptionUsesBoundedNormalizedExcerpt(t *testing.T) {
-	input := "  " + strings.Repeat("作品說明\n", 100) + "  "
+	input := "  " + strings.Repeat("作品說明\n", 300) + "  "
 	got := truncateSearchDescription(input)
-	if utf8.RuneCountInString(got) > 320 || !strings.HasSuffix(got, "…") || strings.Contains(got, "\n") {
+	if utf8.RuneCountInString(got) > maxSynopsisRunes || !strings.HasSuffix(got, "…") || !strings.HasPrefix(got, "作品說明\n作品說明") {
 		t.Fatalf("preview excerpt is not bounded and normalized: %d runes, %q", utf8.RuneCountInString(got), got)
+	}
+	if got := truncateSearchDescription(" a   b \n\n\n  c "); got != "a b\nc" {
+		t.Fatalf("paragraphs = %q, want blank lines dropped and breaks kept", got)
 	}
 }
 

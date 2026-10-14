@@ -99,15 +99,12 @@ func (ui *view) buildSearchView() {
 			defaultDraw()
 		}
 	})
-	ui.previewNative = fltk.NewBox(fltk.NO_BOX, 434, 212, 226, 34, "")
-	ui.previewNative.SetLabelSize(14)
-	ui.previewNative.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
-	ui.previewMeta = fltk.NewBox(fltk.NO_BOX, 434, 249, 226, 65, "")
+	ui.previewMeta = fltk.NewBox(fltk.NO_BOX, 434, 212, 226, 65, "")
 	ui.previewMeta.SetLabelSize(13)
 	ui.previewMeta.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_TOP | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
-	ui.previewDescription = fltk.NewBox(fltk.NO_BOX, 434, 318, 226, 182, "")
+	ui.previewDescription = fltk.NewBox(fltk.NO_BOX, 434, 285, 226, 215, "")
 	ui.previewDescription.SetLabelSize(14)
-	ui.previewDescription.SetAlign(fltk.ALIGN_TOP | fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
+	ui.previewSynopsis = newScrollingText(ui.previewDescription, func() fltk.Color { return ui.colors().background })
 	ui.previewStatus = fltk.NewBox(fltk.NO_BOX, 684, 166, 273, 28, "")
 	ui.previewStatus.SetLabelSize(12)
 	ui.previewStatus.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
@@ -431,7 +428,8 @@ func (ui *view) renderPreview() {
 		return
 	}
 	item := ui.searchModel.previewItem
-	title, native, description := item.Title, item.NativeTitle, item.Description
+	// Only the source's Traditional Chinese title is shown; native (Japanese) titles are not.
+	title, description := item.Title, item.Description
 	metadata := ""
 	status := ""
 	if ui.searchModel.phase == searchPhaseLoading {
@@ -452,19 +450,11 @@ func (ui *view) renderPreview() {
 		if strings.TrimSpace(detail.Anime.Title) != "" {
 			title = detail.Anime.Title
 		}
-		if strings.TrimSpace(detail.Anime.NativeTitle) != "" {
-			native = detail.Anime.NativeTitle
-		}
 		if strings.TrimSpace(detail.Anime.Description) != "" {
 			description = detail.Anime.Description
 		}
 		if detail.Metadata != nil {
-			if strings.TrimSpace(detail.Metadata.Title) != "" {
-				title = detail.Metadata.Title
-			}
-			if strings.TrimSpace(detail.Metadata.NativeTitle) != "" {
-				native = detail.Metadata.NativeTitle
-			}
+			// The heading keeps the title the user searched for; metadata titles can differ in wording.
 			if strings.TrimSpace(detail.Metadata.Description) != "" {
 				description = detail.Metadata.Description
 			}
@@ -473,13 +463,11 @@ func (ui *view) renderPreview() {
 	}
 	ui.previewTitle.SetLabel(title)
 	ui.previewTitle.SetTooltip(title)
-	ui.previewNative.SetLabel(native)
-	ui.previewNative.SetTooltip(native)
 	ui.previewMeta.SetLabel(metadata)
 	if status != "" && description != "" {
 		status += "\n\n"
 	}
-	ui.previewDescription.SetLabel(status + truncateSearchDescription(description))
+	ui.previewSynopsis.SetLabel(status + truncateSearchDescription(description))
 	if ui.previewCoverImage == nil && ui.previewCover.Label() == "" {
 		ui.previewCover.SetLabel("目前沒有封面")
 	}
@@ -673,9 +661,8 @@ func (ui *view) resizeSearch() {
 	metaWidth := max(150, episodeX-metaX-20)
 	ui.previewTitle.Resize(252, 166, max(250, episodeX-272), 42)
 	ui.previewCover.Resize(252, 215, coverWidth, min(286, max(160, height-239)))
-	ui.previewNative.Resize(metaX, 212, metaWidth, 34)
-	ui.previewMeta.Resize(metaX, 249, metaWidth, 65)
-	ui.previewDescription.Resize(metaX, 318, metaWidth, max(100, 110+height-318-24))
+	ui.previewMeta.Resize(metaX, 212, metaWidth, 65)
+	ui.previewDescription.Resize(metaX, 285, metaWidth, max(100, 110+height-285-24))
 	ui.previewStatus.Resize(episodeX, 166, episodeWidth, 28)
 	episodeFooterY := 110 + height - 76
 	ui.previewEpisodes.Resize(episodeX, 197, episodeWidth, max(120, episodeFooterY-205))
@@ -688,10 +675,21 @@ func (ui *view) resizeSearch() {
 	}
 }
 
+// truncateSearchDescription normalizes spacing within each paragraph, keeps paragraph breaks
+// for the scrolling synopsis, and bounds its length.
 func truncateSearchDescription(value string) string {
-	runes := []rune(strings.Join(strings.Fields(value), " "))
-	if len(runes) <= 320 {
+	var paragraphs []string
+	for _, paragraph := range strings.Split(value, "\n") {
+		if words := strings.Fields(paragraph); len(words) > 0 {
+			paragraphs = append(paragraphs, strings.Join(words, " "))
+		}
+	}
+	runes := []rune(strings.Join(paragraphs, "\n"))
+	if len(runes) <= maxSynopsisRunes {
 		return string(runes)
 	}
-	return string(runes[:319]) + "…"
+	return string(runes[:maxSynopsisRunes-1]) + "…"
 }
+
+// maxSynopsisRunes bounds the synopsis; the box scrolls, so it can hold more than fits.
+const maxSynopsisRunes = 1000

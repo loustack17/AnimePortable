@@ -251,6 +251,17 @@ func mapSubject(subject subjectResponse) (mappedSubject, bool) {
 }
 
 func mapTitles(nameCN, name *string) (string, string, bool) {
+	if nameCN != nil {
+		// Size is checked before conversion so oversized remote text never reaches the converter.
+		if len(*nameCN) > maxTitleTextBytes {
+			return "", "", false
+		}
+		converted, ok := toTraditional(*nameCN)
+		if !ok {
+			return "", "", false
+		}
+		nameCN = &converted
+	}
 	chinese, ok := boundedText(nameCN, maxTitleTextBytes, maxTitleTextRunes)
 	if !ok {
 		return "", "", false
@@ -269,7 +280,37 @@ func mapDescription(summary *string) (string, bool) {
 	if summary == nil {
 		return "", true
 	}
-	return metadatapolicy.NormalizePlainText(*summary, metadatapolicy.DescriptionLimits())
+	if len(*summary) > maxDescriptionBytes {
+		return "", false
+	}
+	// Some summaries append the Japanese original after this marker; only the Chinese part is shown.
+	chinese, _, _ := strings.Cut(*summary, "[简介原文]")
+	if isJapanese(chinese) {
+		// Some subjects only have the Japanese original. It is shown as is (owner decision
+		// 2026-10-14): converting it would turn Japanese kanji such as 国 into Chinese forms.
+		return metadatapolicy.NormalizePlainText(chinese, metadatapolicy.DescriptionLimits())
+	}
+	converted, ok := toTraditional(chinese)
+	if !ok {
+		return "", false
+	}
+	return metadatapolicy.NormalizePlainText(converted, metadatapolicy.DescriptionLimits())
+}
+
+// isJapanese reports Japanese prose: hiragana (particles such as の, を, に) make up over a tenth
+// of its Han and hiragana characters. Chinese summaries may quote katakana names but hardly
+// use hiragana.
+func isJapanese(value string) bool {
+	hiragana, han := 0, 0
+	for _, character := range value {
+		switch {
+		case unicode.Is(unicode.Hiragana, character):
+			hiragana++
+		case unicode.Is(unicode.Han, character):
+			han++
+		}
+	}
+	return hiragana > 0 && hiragana*10 > hiragana+han
 }
 
 func mapCoverURL(images *subjectImages) string {
@@ -281,11 +322,21 @@ func mapCoverURL(images *subjectImages) string {
 			continue
 		}
 		if validCoverURL(*value) {
-			return *value
+			return resizedCoverURL(*value)
 		}
 		return ""
 	}
 	return ""
+}
+
+// Bangumi's large cover is the full-size original (often around 2000x2800), which is over the
+// cover loader's pixel limit. Bangumi's own resize path serves the same image 400 px wide.
+func resizedCoverURL(value string) string {
+	const original = "https://lain.bgm.tv/pic/cover/l/"
+	if strings.HasPrefix(value, original) {
+		return "https://lain.bgm.tv/r/400/pic/cover/l/" + strings.TrimPrefix(value, original)
+	}
+	return value
 }
 
 func boundedText(value *string, maxBytes, maxRunes int) (string, bool) {

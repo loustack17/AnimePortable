@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"animeportable/adapters/metadata/anilist"
+	"animeportable/adapters/metadata/bangumi"
 	"animeportable/adapters/metadata/cover"
 	"animeportable/adapters/network/securehttp"
 	"animeportable/adapters/persistence/sqlite"
@@ -32,6 +34,7 @@ type dependencies struct {
 	store     core.Store
 	source    core.AnimeSource
 	cover     *cover.Loader
+	metadata  []core.MetadataProvider
 	newPlayer func() (core.Player, error)
 	close     func() error
 }
@@ -53,6 +56,7 @@ type Service struct {
 	store           core.Store
 	source          core.AnimeSource
 	cover           *cover.Loader
+	metadata        []core.MetadataProvider
 	closeDeps       func() error
 	newPlayer       func() (core.Player, error)
 	databasePath    string
@@ -88,6 +92,7 @@ func newWithDependencies(deps dependencies) *Service {
 	service.store = deps.store
 	service.source = stageSource{deps.source}
 	service.cover = deps.cover
+	service.metadata = deps.metadata
 	service.closeDeps = deps.close
 	if deps.newPlayer != nil {
 		service.newPlayer = deps.newPlayer
@@ -145,6 +150,7 @@ func (service *Service) Start(ctx context.Context) error {
 	service.store = deps.store
 	service.source = stageSource{deps.source}
 	service.cover = deps.cover
+	service.metadata = deps.metadata
 	service.closeDeps = deps.close
 	service.app = core.NewApp(service.source, nil, service.store)
 	service.mu.Unlock()
@@ -300,9 +306,16 @@ func openProduction(ctx context.Context, databasePath string) (dependencies, err
 		_ = store.Close()
 		return dependencies{}, err
 	}
+	metadataClient, err := securehttp.New(securehttp.Config{AllowedOrigins: append(anilist.AllowedOrigins(), bangumi.AllowedOrigins()...)})
+	if err != nil {
+		client.CloseIdleConnections()
+		_ = store.Close()
+		return dependencies{}, err
+	}
 	loader, err := cover.New()
 	if err != nil {
 		client.CloseIdleConnections()
+		metadataClient.CloseIdleConnections()
 		_ = store.Close()
 		return dependencies{}, err
 	}
@@ -310,8 +323,11 @@ func openProduction(ctx context.Context, databasePath string) (dependencies, err
 		store:  store,
 		source: anime1.New(client),
 		cover:  loader,
+		// AniList first: it is the primary provider (ADR-009).
+		metadata: []core.MetadataProvider{anilist.New(metadataClient), bangumi.New(metadataClient)},
 		close: func() error {
 			client.CloseIdleConnections()
+			metadataClient.CloseIdleConnections()
 			return nil
 		},
 	}, nil
