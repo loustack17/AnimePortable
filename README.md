@@ -2,44 +2,48 @@
 
 # AnimePortable
 
-A lightweight, keyboard-first Windows anime player inspired by [OneAnime](https://github.com/Predidit/oneAnime). Find an anime, pick an episode, watch it in the built-in player, and resume later. Unzip and run: no installer, no account, no telemetry.
+繁體中文 | [English](README.en.md)
 
-## What it does
+輕量、以鍵盤操作為主的 Windows 動畫播放器，靈感來自 [OneAnime](https://github.com/Predidit/oneAnime)。搜尋動畫、選集數、在內建播放器觀看，下次從上次的位置繼續。解壓縮即可執行：不用安裝、不用帳號、不回傳任何使用資料。
 
-- Browse and search the Anime1 catalog.
-- Anime detail page with cover and synopsis from Bangumi (AniList as a cross-check), shown in Traditional Chinese.
-- Episodes in order, with watch progress on each episode.
-- Built-in player (libmpv) with auto-hiding controls, episode switching and fullscreen.
-- Continue Watching on Home, resuming where you stopped.
-- Mouse and keyboard both work.
+## 功能
 
-Following, history, schedule, settings and autoplay are in progress; see the [roadmap](docs/04_ROADMAP.md).
+- 瀏覽與搜尋 Anime1 的作品。
+- 作品詳情頁：封面與簡介來自 Bangumi（以 AniList 交叉確認），一律以繁體中文顯示。
+- 集數依序排列，每一集顯示觀看進度。
+- 內建播放器（libmpv）：控制列會自動隱藏，可切換集數與全螢幕。
+- 首頁的「繼續觀看」，從上次停下的位置接著播放。
+- 滑鼠與鍵盤都能操作。
 
-## Run it
+追蹤、歷史紀錄、時間表、設定與自動播放下一集正在開發中，請見[開發計畫](docs/04_ROADMAP.md)。
 
-Unzip the portable ZIP and run `AnimePortable.exe`. The ZIP includes `libmpv-2.dll`; the app checks its SHA-256 before loading it. Your data (history, progress, cached metadata) lives in the `data/` folder next to the executable, so the whole folder can be moved or copied.
+## 執行
 
-Windows only for now. Linux and macOS come after the Windows release.
+解壓縮後執行 `AnimePortable.exe`。壓縮檔內附 `libmpv-2.dll`，程式載入前會先核對它的 SHA-256。你的資料（歷史紀錄、觀看進度、作品資料快取）存放在執行檔旁的 `data/` 資料夾，整個資料夾可以直接搬移或複製。
 
-## Build from source
+目前只支援 Windows。Linux 與 macOS 會在 Windows 版發布之後進行。
 
-Requirements: Go (version in `go.mod`), cgo, and an msvcrt MinGW gcc on `PATH` (MSYS2 MINGW64 or nuwen MinGW; a UCRT MinGW cannot link the FLTK libraries).
+## 從原始碼建置
+
+需要：Go（版本見 `go.mod`）、cgo，以及 `PATH` 上的 msvcrt 版 MinGW gcc（MSYS2 MINGW64 或 nuwen MinGW；UCRT 版 MinGW 無法連結 FLTK 函式庫）。
 
 ```
 CGO_ENABLED=1 go build -trimpath -o AnimePortable.exe ./apps/desktop
 CGO_ENABLED=1 go test ./...
 ```
 
-Put the pinned `libmpv-2.dll` (see [docs/LIBMPV_RUNTIME_NOTICE.txt](docs/LIBMPV_RUNTIME_NOTICE.txt)) next to the executable to play video.
+要播放影片，請把固定版本的 `libmpv-2.dll`（見 [docs/LIBMPV_RUNTIME_NOTICE.txt](docs/LIBMPV_RUNTIME_NOTICE.txt)）放在執行檔旁。
 
-## Project status
+## 目前進度
 
-In development; there is no public release yet. Browsing, the detail page and playback work. Before the first Windows release come: following, history, schedule, full keyboard navigation, offline startup from saved data, autoplay of the next episode, settings, and a security and release pass.
+開發中，尚未公開發布。瀏覽、作品詳情與播放已完成。第一個 Windows 版本發布前還有：追蹤、歷史紀錄、時間表、完整鍵盤操作、離線時用已存資料啟動、自動播放下一集、設定，以及安全與發布檢查。
 
-- Detailed state: [docs/STATUS.md](docs/STATUS.md)
-- Engineering docs: [docs/README.md](docs/README.md)
-- Contributors and AI agents: [AGENTS.md](AGENTS.md)
+- 詳細狀態：[docs/STATUS.md](docs/STATUS.md)
+- 工程文件：[docs/README.md](docs/README.md)
+- 貢獻者與 AI 代理：[AGENTS.md](AGENTS.md)
 
-## License
+工程文件以英文撰寫。
 
-Mozilla Public License 2.0. See `LICENSE`, and `THIRD_PARTY_NOTICES.md` for dependencies, the bundled libmpv DLL and remote-service content.
+## 授權
+
+Mozilla Public License 2.0。相依套件、內附的 libmpv DLL 與遠端服務內容的授權說明，請見 `LICENSE` 與 `THIRD_PARTY_NOTICES.md`。
