@@ -22,17 +22,30 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: 1.26.9
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884
+        id: msys2
+        with:
+          # go-fltk's prebuilt FLTK libraries are built for msvcrt, so the runner's UCRT MinGW cannot link them.
+          # No full system upgrade: install only gcc, reused from the action's package cache when possible.
+          msystem: MINGW64
+          update: false
+          cache: true
+          install: mingw-w64-x86_64-gcc
       - name: Select C toolchain
         shell: pwsh
+        env:
+          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         run: |
-          # The runner image ships MinGW-w64 at C:\mingw64; using it avoids package-mirror downloads.
-          $gcc = 'C:\mingw64\bin\gcc.exe'
-          $gxx = 'C:\mingw64\bin\g++.exe'
-          if (-not (Test-Path -LiteralPath $gcc) -or -not (Test-Path -LiteralPath $gxx)) { throw 'Runner MinGW toolchain missing' }
-          & $gcc -dumpmachine
+          $bin = Join-Path $env:MSYS2_ROOT 'mingw64\bin'
+          $gcc = Join-Path $bin 'gcc.exe'
+          $gxx = Join-Path $bin 'g++.exe'
+          if (-not (Test-Path -LiteralPath $gcc) -or -not (Test-Path -LiteralPath $gxx)) { throw 'MSVCRT C toolchain missing' }
+          $target = & $gcc -dumpmachine
+          if ($target -ne 'x86_64-w64-mingw32') { throw "Unexpected C toolchain target: $target" }
           & $gcc --version
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CC=$gcc"
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CXX=$gxx"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "ANIMEPORTABLE_OBJDUMP=$(Join-Path $bin 'objdump.exe')"
           $goVerifierTemp = Join-Path $env:RUNNER_TEMP 'go-native-verifier'
           New-Item -ItemType Directory -Force -Path $goVerifierTemp | Out-Null
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "GOTMPDIR=$goVerifierTemp"
@@ -77,7 +90,7 @@ jobs:
         shell: pwsh
         run: |
           $launcher = 'pwsh -NoProfile -File "' + (Join-Path $env:GITHUB_WORKSPACE 'tools\windows-mesa-test-exec.ps1') + '"'
-          go test -exec $launcher -race ./...
+          go test -exec $launcher -race -count=1 ./...
           exit $LASTEXITCODE
       - name: Vet Go
         run: go vet ./...
@@ -95,7 +108,7 @@ jobs:
         run: |
           go build -trimpath -buildvcs=false -o "$env:RUNNER_TEMP\animeportable.exe" ./apps/desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $imports = & 'C:\mingw64\bin\objdump.exe' -p (Join-Path $env:RUNNER_TEMP 'animeportable.exe')
+          $imports = & $env:ANIMEPORTABLE_OBJDUMP -p (Join-Path $env:RUNNER_TEMP 'animeportable.exe')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $dllNames = @($imports | Select-String 'DLL Name:' | ForEach-Object { $_.Line.Trim() })
           $dllNames
