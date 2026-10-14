@@ -23,7 +23,7 @@ The full process is [docs/05_WORKFLOW.md](docs/05_WORKFLOW.md). It overrides any
 - Never weaken, skip or special-case a test, check or criterion to get PASS.
 - On failure: classify, diagnose with evidence, make the smallest causal fix, rerun the focused check, then regressions. Respect the budgets in the workflow and stop when they run out.
 - PASS needs final-state evidence: required checks, independent code-quality review with no `MUST_FIX`, and the owner's check when required.
-- Native Windows tests run only in GitHub Windows CI. The local native cgo build is a known blocker; do not retry it.
+- Run the full native suite locally before pushing (`CGO_ENABLED=1 go test -count=1 ./...`, then `-race`, with an msvcrt MinGW gcc such as MSYS2 MINGW64 or nuwen MinGW on PATH). GitHub Windows CI confirms the pushed commit.
 - Preserve unrelated user files (`.codex/`, portable `data/`, `artifacts/` evidence).
 
 ## Roles

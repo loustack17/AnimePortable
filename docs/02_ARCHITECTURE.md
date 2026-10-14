@@ -32,7 +32,7 @@ The Windows UI is FLTK. It calls typed Go application actions. Playback is in-pr
 | `tests/contract/` | Shared adapter contract tests and fakes. |
 | `docs/` | Project documents. |
 
-Files with `_windows` in the name build on Windows only. Native FLTK tests run only in GitHub Windows CI (see `06_ACCEPTANCE.md`).
+Files with `_windows` in the name build on Windows only. Native FLTK tests need cgo with an msvcrt MinGW gcc; they run locally and in GitHub Windows CI (see `05_WORKFLOW.md`).
 
 ## Dependency rule
 

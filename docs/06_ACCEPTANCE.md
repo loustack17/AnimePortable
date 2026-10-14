@@ -29,7 +29,7 @@ Verifier types say who may decide PASS:
 
 - "Automated + review (A/Y)" means Automated for the mechanical part plus review for the rest. "Review (Y)" means review only.
 - A reviewer is read-only. A reviewer cannot turn a deterministic FAIL into PASS.
-- Native Windows tests (cgo, FLTK, libmpv) run only in GitHub Windows CI.
+- Native Windows tests (cgo, FLTK, libmpv) run locally before push and in GitHub Windows CI for the pushed commit.
 - If a platform or runner is unavailable, the criterion is `BLOCKED`, not PASS.
 - Cross-compiling proves only that the code builds, not that it runs.
 - "Negative tests" means failure-path and adversarial cases, not only the happy path.

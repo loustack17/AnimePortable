@@ -9,16 +9,15 @@ schema_version: 2
 instruction_version: "3.0"
 status: IN_PROGRESS
 branch: main
-observed_head: f790dfc  # docs restructure; the legacy cleanup commit follows it (run git log)
+observed_head: see git log; CI speed-up (D3) merged to main  # check `gh run list --limit 1` for the latest result
 active_work: >
-  The docs restructure (D1) and the legacy cleanup (D2) are committed locally and not pushed.
-  Pushing needs owner approval; GitHub Windows CI must then pass for the pushed commit.
-active_acceptance: The checks listed in docs/loops/LEGACY_CLEANUP.md.
-budgets: >
-  D1 is complete. D2 corrections used: 1 of 5.
+  Loop 30 is next. CI speed-up (D3) is done: local native suite (plain, race, 20x repeat) passes in about 90 s;
+  CI uses MSYS2 MINGW64 gcc without system upgrade plus pinned mesa-dist-win 26.2.4, about 3.3 min (run 38504108599).
+active_acceptance: Loop 30 checks in docs/loops/LOOP30.md.budgets: >
+  D1, D2 and D3 are complete.
   Loop 30 corrections are counted in docs/loops/LOOP30.md section 7.
 loop30:
-  state: Loop 30 (anime detail and episode UI) is in progress, not PASS, and is paused until the docs commit.
+  state: Loop 30 (anime detail and episode UI) is in progress, not PASS, and is resumed.
   owner_accepted: Player controls hide after idle time and reappear on input.
   owner_pending: Detail page, cover, episode click/Enter/Space, Continue, back/retry and minimum window size.
   open_problem: >
@@ -27,12 +26,11 @@ loop30:
     CI run 38444662617 for it is green. No improvement is claimed until the owner tests it.
   details: docs/loops/LOOP30.md
 next_actions:
-  - 1. Docs restructure is committed (f790dfc) and legacy cleanup is committed after it (docs/loops/LEGACY_CLEANUP.md). Ask the owner to approve the push, then confirm GitHub Windows CI is green for the pushed commit; classify any failure with the ci-log template.
   - 2. Note for users: after migration 0003 an older app version refuses to open the database; keep a backup before downgrading.
-  - 3. Resume Loop 30. Deliver the CI-built exe and launcher of e8f0640, remove old binaries and caches (keep data/ and evidence), and ask the owner for one 30 to 60 second test of the same clip.
+  - 3. Resume Loop 30. Deliver the latest green CI build of main (it contains e8f0640), remove old binaries and caches (keep data/ and evidence), and ask the owner for one 30 to 60 second test of the same clip.
   - 4. After that test, judge the new diagnostic report with TypeSafe (de-identified numbers only) before any further fix. If there is no improvement, record that.
 do_not_repeat:
-  - Do not run the local native cgo build; it is a known environment failure.
+  - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt (CI run 38503790967 link failure).
   - Do not research libmpv licensing again; the owner settled it in ADR-023.
   - Do not tune playback options without a measured cause.
 boundaries:

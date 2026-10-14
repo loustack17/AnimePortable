@@ -8,7 +8,7 @@ Updated 2026-10-13. Branch `main`. Docs restructure committed as `f790dfc`; lega
 
 Loops 1 to 29 pass. Loop 30 (anime detail and episode UI) is in progress: it builds and CI is green, but the owner has accepted only the player controls. Video stutter is still open; the latest fix (`e8f0640`) has not been tested by the owner. The docs restructure and the legacy cleanup are committed locally. They need owner approval to push, then a green GitHub Windows CI run.
 
-Platform: Windows amd64 only. Native Windows tests run only in GitHub Windows CI. The local cgo build is blocked; do not retry it.
+Platform: Windows amd64 only. Native tests run locally (about 90 seconds including race) and in GitHub Windows CI.
 
 ## Loops
 

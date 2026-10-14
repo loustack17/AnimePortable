@@ -222,7 +222,7 @@ Use the first capable environment:
 2. GitHub-hosted Windows runner for this repository. This is the authoritative verifier for native Windows tests.
 3. Another isolated CI environment the owner approves.
 
-Known blocker: the local native cgo build fails. Do not retry it. Native Windows tests run only in GitHub Windows CI. Local runs still cover pure Go packages and static checks.
+Run the full native suite locally before pushing (`CGO_ENABLED=1 go test -count=1 ./...`, then `-race`, with an msvcrt MinGW gcc such as MSYS2 MINGW64 or nuwen MinGW on PATH). GitHub Windows CI confirms the pushed commit. The owner's machine has a real GPU, so local native tests need no Mesa. go-fltk's prebuilt FLTK libraries are built for msvcrt; a UCRT MinGW cannot link them. The git-ignored `artifacts/` folder has its own `go.mod` so `./...` skips local evidence files.
 
 A host run outside the approved boundary is diagnostic only. It can help tell a repository failure from an environment limit, but it never counts as PASS.
 

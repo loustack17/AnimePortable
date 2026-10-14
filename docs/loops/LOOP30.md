@@ -22,7 +22,7 @@ Scope (ADR-023, Windows only):
 
 Acceptance IDs: FUNC-004, FUNC-005, UX-001 to UX-005, UX-008, UX-010, the relevant ARCH, SEC, PRIV and resource criteria, the loop-integrity criteria (LOOP-001 to LOOP-025 as applicable), and QUAL-001 to QUAL-012. Loop 29 behavior is preserved.
 
-Gates: pure Go tests, vet, backend/architecture/contract regression, formatting and diff check run locally. Native Windows tests, build and race run only in GitHub Windows CI (local cgo build is blocked; do not retry). Owner acceptance is a separate gate.
+Gates: pure Go tests, vet, backend/architecture/contract regression, formatting and diff check run locally. Native Windows tests, build and race run locally and in GitHub Windows CI. Owner acceptance is a separate gate.
 
 ## 2. Done
 
