@@ -25,7 +25,7 @@ AnimePortable source code, documentation, and build configuration are licensed u
 | [modernc.org/libc](https://pkg.go.dev/modernc.org/libc) | BSD-3-Clause; module also carries third-party notices |
 | [modernc.org/mathutil](https://pkg.go.dev/modernc.org/mathutil) | BSD-3-Clause |
 | [modernc.org/memory](https://pkg.go.dev/modernc.org/memory) | BSD-3-Clause; module also carries upstream notices |
-| [OpenCC](https://github.com/BYVoid/OpenCC) dictionaries (STPhrases, STCharacters, TWPhrases, TWVariants) | Apache-2.0; embedded in `adapters/metadata/bangumi/opencc/` with its license, used for Simplified to Taiwan Traditional conversion |
+| [OpenCC](https://github.com/BYVoid/OpenCC) dictionaries (STPhrases, STCharacters, TWPhrases, TWVariants; TSCharacters) | Apache-2.0; embedded with its license in `adapters/metadata/bangumi/opencc/` (Simplified to Taiwan Traditional display text) and `core/opencc/` (title comparison) |
 
 AnimePortable is based in part on the work of the FLTK project (https://www.fltk.org).
 

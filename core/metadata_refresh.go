@@ -5,6 +5,9 @@ package core
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strings"
+	"unicode"
 )
 
 // ErrMetadataUnavailable means every metadata provider failed, so the lookup can be retried later.
@@ -22,7 +25,7 @@ func (app *App) RefreshMetadata(ctx context.Context, animeID AnimeID, providers 
 	if err != nil {
 		return false, err
 	}
-	query := MetadataQuery{Title: anime.Title, NativeTitle: anime.NativeTitle}
+	query := metadataQueryFor(anime)
 	var candidates []MetadataCandidate
 	sources := make(map[string]MetadataProvider, len(providers))
 	failed := 0
@@ -58,4 +61,29 @@ func (app *App) RefreshMetadata(ctx context.Context, animeID AnimeID, providers 
 		return false, err
 	}
 	return true, nil
+}
+
+var bracketedName = regexp.MustCompile(`^(.+?)\s*[(（]([^()（）]+)[)）]\s*$`)
+
+// metadataQueryFor builds the lookup query. Anime1 sometimes gives a Latin-script title with its
+// Chinese name in brackets, as in "RELEASE THE SPYCE (月影特工)"; the bracketed name is then
+// matched as the alternative title. Brackets on a Chinese title are left alone: they hold edition
+// markers such as "(劇場版)" or "(第二季)", and dropping those would match the wrong work.
+func metadataQueryFor(anime Anime) MetadataQuery {
+	query := MetadataQuery{Title: anime.Title, NativeTitle: anime.NativeTitle}
+	match := bracketedName.FindStringSubmatch(anime.Title)
+	if query.NativeTitle != "" || match == nil || containsHan(match[1]) || !containsHan(match[2]) {
+		return query
+	}
+	query.Title, query.NativeTitle = strings.TrimSpace(match[1]), strings.TrimSpace(match[2])
+	return query
+}
+
+func containsHan(value string) bool {
+	for _, character := range value {
+		if unicode.Is(unicode.Han, character) {
+			return true
+		}
+	}
+	return false
 }

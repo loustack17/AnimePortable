@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-29 are complete. Loops 30-42 remain. Criteria are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). Loop rules and budgets are in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-30 are complete. Loops 31-42 remain. Criteria are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). Loop rules and budgets are in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (Loops 30-39, 41, 42 on Windows), then Linux once Windows is stable, then macOS once Linux is stable. Each platform needs its own native runtime, keyboard and mouse, portability, resource and human acceptance before it is called supported. Linux and macOS builds are diagnostics only until then.
 
@@ -46,7 +46,7 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 
 ## Remaining loops
 
-Loop 30 is in progress. Loops 31-42 are not started. Every loop uses the same fields. "Criteria" lists acceptance criteria that must pass, each with a short label; full wording is in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). "Owner check" is the simple manual check the owner performs.
+Loop 30 passed on 2026-10-14. Loops 31-42 are not started. Every loop uses the same fields. "Criteria" lists acceptance criteria that must pass, each with a short label; full wording is in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). "Owner check" is the simple manual check the owner performs.
 
 ### Loop 30 - Anime detail and episode UI
 

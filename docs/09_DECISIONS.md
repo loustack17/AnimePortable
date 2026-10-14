@@ -16,7 +16,7 @@ An ADR (architecture decision record) fixes a design choice. Changing an Active 
 | 006 | Secure local playback proxy | Active | libmpv gets a loopback session URL, never remote credentials. |
 | 007 | Minimal Ports & Adapters | Active | Four ports: AnimeSource, MetadataProvider, Player, Store. |
 | 008 | Anime1 as adapter | Active | Anime1 is one AnimeSource adapter; local data survives replacement. |
-| 009 | AniList primary, Bangumi fallback | Active | No metadata beats wrong metadata. |
+| 009 | Bangumi primary, AniList cross-check | Active | No metadata beats wrong metadata. |
 | 010 | SQLite local-first | Active | SQLite holds mappings, following, history, progress, settings, metadata; no credentials. |
 | 011 | Cache-first startup | Active | Render cached state at once; refresh in the background. |
 | 012 | No danmaku | Active | Danmaku is permanently out of scope. |
@@ -60,7 +60,7 @@ Anime1 lives in `adapters/source/anime1`. Core and local user data must survive 
 
 ### ADR-009 Metadata
 
-AniList is primary. Bangumi improves Chinese and Japanese matching and acts as fallback and cross-check. No metadata is preferable to wrong metadata.
+Bangumi is primary (owner decision 2026-10-14): its record has the Chinese synopsis the app shows, converted to Taiwan Traditional. AniList (English) is a cross-check and the fallback when Bangumi has no match. Score ties go to Bangumi. No metadata is preferable to wrong metadata.
 
 ### ADR-010 SQLite
 

@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -39,7 +40,10 @@ const (
 	maxEpisodeCount      = 100000
 	maxYear              = 3000
 	maxMetadataIDDigits  = 10
+	maxAliases           = 16
 )
+
+var regionTag = regexp.MustCompile(`\s*[(（](?:港|台|港/台|台/港|港台)[)）]\s*$`)
 
 var (
 	errMetadataUnavailable  = errors.New("bangumi: metadata unavailable")
@@ -195,6 +199,7 @@ func mapCandidate(subject subjectResponse) (core.MetadataCandidate, bool) {
 		Ref:          core.MetadataRef{Provider: providerID, ID: mapped.id},
 		Title:        mapped.title,
 		NativeTitle:  mapped.nativeTitle,
+		Aliases:      subjectAliases(subject.Infobox),
 		Year:         mapped.year,
 		EpisodeCount: mapped.episodeCount,
 	}, true
@@ -248,6 +253,49 @@ func mapSubject(subject subjectResponse) (mappedSubject, bool) {
 		year:         year,
 		episodeCount: episodeCount(subject.TotalEpisodes, subject.Eps),
 	}, true
+}
+
+// subjectAliases returns the subject's alternative names (别名). They often include the Taiwan
+// title, which lets an Anime1 name such as 間諜家家酒 match Bangumi's 间谍过家家. Malformed
+// entries are skipped, never fatal.
+func subjectAliases(raw json.RawMessage) []string {
+	var entries []struct {
+		Key   string          `json:"key"`
+		Value json.RawMessage `json:"value"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &entries) != nil {
+		return nil
+	}
+	var aliases []string
+	for _, entry := range entries {
+		if entry.Key != "别名" {
+			continue
+		}
+		var values []string
+		var single string
+		var list []struct {
+			V string `json:"v"`
+		}
+		if json.Unmarshal(entry.Value, &single) == nil {
+			values = append(values, single)
+		} else if json.Unmarshal(entry.Value, &list) == nil {
+			for _, item := range list {
+				values = append(values, item.V)
+			}
+		}
+		for _, value := range values {
+			alias, ok := boundedText(&value, maxTitleTextBytes, maxTitleTextRunes)
+			if !ok || alias == "" || len(aliases) >= maxAliases {
+				continue
+			}
+			// Some aliases carry a region tag such as "(港/台)"; script differences are folded by
+			// the core matcher.
+			if alias = strings.TrimSpace(regionTag.ReplaceAllString(alias, "")); alias != "" {
+				aliases = append(aliases, alias)
+			}
+		}
+	}
+	return aliases
 }
 
 func mapTitles(nameCN, name *string) (string, string, bool) {
@@ -490,6 +538,8 @@ type subjectResponse struct {
 	Eps           *int            `json:"eps"`
 	TotalEpisodes *int            `json:"total_episodes"`
 	Images        *subjectImages  `json:"images"`
+	// Infobox is decoded leniently by subjectAliases; a malformed infobox must not reject the subject.
+	Infobox json.RawMessage `json:"infobox"`
 }
 
 type subjectImages struct {

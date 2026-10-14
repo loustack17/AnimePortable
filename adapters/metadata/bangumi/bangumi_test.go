@@ -846,3 +846,13 @@ func TestBangumiJapaneseOnlySummaryIsKeptUnconverted(t *testing.T) {
 		t.Fatalf("Chinese summary with a kana name was dropped: ok=%t", ok)
 	}
 }
+
+func TestBangumiAliasesComeFromInfoboxAndToleratesMalformedValues(t *testing.T) {
+	raw := json.RawMessage(`[{"key":"中文名","value":"间谍过家家"},{"key":"别名","value":[{"v":"SPY×FAMILY 間諜家家酒"},{"v":""},{"k":"x","v":"Spy x Family"}]},{"key":"别名","value":"單一別名"},{"key":"别名","value":{"bad":1}}]`)
+	if got := subjectAliases(raw); !reflect.DeepEqual(got, []string{"SPY×FAMILY 間諜家家酒", "Spy x Family", "單一別名"}) {
+		t.Fatalf("aliases = %q", got)
+	}
+	if got := subjectAliases(json.RawMessage(`{"not":"a list"}`)); got != nil {
+		t.Fatalf("malformed infobox aliases = %q", got)
+	}
+}

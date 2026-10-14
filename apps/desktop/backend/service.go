@@ -320,10 +320,9 @@ func openProduction(ctx context.Context, databasePath string) (dependencies, err
 		return dependencies{}, err
 	}
 	return dependencies{
-		store:  store,
-		source: anime1.New(client),
-		cover:  loader,
-		// AniList first: it is the primary provider (ADR-009).
+		store:    store,
+		source:   anime1.New(client),
+		cover:    loader,
 		metadata: []core.MetadataProvider{anilist.New(metadataClient), bangumi.New(metadataClient)},
 		close: func() error {
 			client.CloseIdleConnections()

@@ -109,7 +109,7 @@ Remote failure is not application failure.
 
 ## Metadata
 
-AniList is primary. Bangumi is fallback and cross-check. Providers return candidates only. Core policy decides which candidate is acceptable. Never accept `searchResults[0]` blindly. No metadata is better than wrong metadata.
+Bangumi is primary (Chinese synopsis). AniList is cross-check and fallback (ADR-009). Providers return candidates only. Core policy decides which candidate is acceptable. Never accept `searchResults[0]` blindly. No metadata is better than wrong metadata.
 
 Matching may use normalized and native titles, Traditional/Simplified, punctuation and full-width normalization, season/year, episode count and provider cross-check. The core matcher returns one of: accepted (high confidence), awaiting cross-check (medium confidence), or no metadata (low confidence, ambiguous or conflicting).
 

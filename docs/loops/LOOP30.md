@@ -2,7 +2,7 @@
 
 # Loop 30: anime detail and episode UI (Phase 24)
 
-Status: IN_PROGRESS. Not PASS. Run `git log -1` for the current HEAD.
+Status: PASS (owner accepted 2026-10-14). Run `git log -1` for the final commit.
 
 ## 1. Scope and acceptance IDs
 
@@ -64,8 +64,7 @@ Reverted experiments: removing the early `ReportSwap` (e8f0640, kept), non-block
 1. Done: fix pushed as 3872166, CI 38523007303 green, CI build delivered to `artifacts/test-build/`.
 2. Owner checks 2026-10-14: keyboard, Continue/progress, back/recovery, window and mouse passed. Fixed after the check (owner retest passed): Home Continue Watching hid a series whose newest record was an unwatched episode; episode-row progress text overflowed the row; player menu labels sat below their highlight.
 3. Done (owner check passed 2026-10-14): AniList/Bangumi metadata wired into the app (core `RefreshMetadata`, background lookup when a detail page has no metadata). Bangumi Chinese text is converted to Taiwan Traditional with embedded OpenCC s2twp dictionaries (a Go OpenCC library was rejected: it links GPL-2.0 code); Japanese-only synopses are shown unconverted (owner decision). Covers use Bangumi's 400 px resize. The heading keeps the Anime1 title; no Japanese title line. Episodes sort ascending. Synopsis wraps CJK text and scrolls.
-4. Open: many popular titles get no metadata because the matcher rejects Taiwan/mainland naming and season-notation differences (間諜家家酒/間諜過家家, 貳之章(第二季)/二之章). Next slice: normalize season notation and accept a season-consistent Bangumi match, without accepting wrong works (e.g. a movie matched to its TV series).
-5. Close Loop 30 after the owner accepts the matching slice.
+4. Done (owner accepted 2026-10-14): general title matching. Titles split into main title, ～subtitle～, season (anywhere: 第N季, II/Ⅱ, N之章, Nth season, season followed by an arc name) and part; script folding with OpenCC's full T→S character table; Bangumi aliases (Taiwan titles) as weak exact matches; Bangumi preferred on ties (ADR-009 updated). Live check: 32 of 32 popular titles matched, none wrong. Known limits: titles Bangumi search does not return (e.g. some movies, 孤獨搖滾！) or seasons named without a number (咒術迴戰 第二季) stay without metadata, by design.
 
 ## 5. Evidence index
 

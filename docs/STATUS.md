@@ -2,11 +2,11 @@
 
 # Status
 
-Updated 2026-10-13. Branch `main`. Docs restructure committed as `f790dfc`; legacy cleanup committed after it (not yet pushed).
+Updated 2026-10-14. Branch `main`.
 
 ## Current state
 
-Loops 1 to 29 pass. Loop 30 (anime detail and episode UI) is in progress: it builds and CI is green, but the owner has accepted only the player controls. The video stutter is fixed (missing `fltk.Lock()`; the owner confirmed smooth playback on 2026-10-14). Playback-start failures now show a dialog and are recorded in `playback-failures.log`.
+Loops 1 to 30 pass. Loop 30 (anime detail and episode UI) was accepted on 2026-10-14: smooth playback (missing `fltk.Lock()` fixed), playback failures shown and logged in `playback-failures.log`, AniList/Bangumi cover and synopsis in Taiwan Traditional Chinese, general title matching, ascending episodes. Next is Loop 31 (Schedule UI), which needs owner approval to start.
 
 Platform: Windows amd64 only. Native tests run locally (about 90 seconds including race) and in GitHub Windows CI.
 
@@ -14,8 +14,7 @@ Platform: Windows amd64 only. Native tests run locally (about 90 seconds includi
 
 | Loops | Status |
 | --- | --- |
-| 1 to 29 | PASS |
-| 30 | IN_PROGRESS. Details: [loops/LOOP30.md](loops/LOOP30.md) |
+| 1 to 30 | PASS. Loop 30 details: [loops/LOOP30.md](loops/LOOP30.md) |
 | 31 to 42 | NOT_STARTED |
 
 ## Open items
@@ -23,7 +22,6 @@ Platform: Windows amd64 only. Native tests run locally (about 90 seconds includi
 | Item | Next action |
 | --- | --- |
 | Playback failures (suspected intermittent Anime1 HTTP 502) | Read `playback-failures.log` after the next failure; decide on an automatic retry from the recorded stage and status. |
-| Loop 30 owner checks | Owner checks the detail page, episode click/Enter/Space, Continue, back/retry, cover and minimum window size. |
 
 ## Settled owner decisions (2026-10-13)
 

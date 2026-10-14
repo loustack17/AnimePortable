@@ -13,9 +13,11 @@ type MetadataQuery struct {
 }
 
 type MetadataCandidate struct {
-	Ref          MetadataRef
-	Title        string
-	NativeTitle  string
+	Ref         MetadataRef
+	Title       string
+	NativeTitle string
+	// Aliases are the provider's alternative names; they often include the Taiwan title.
+	Aliases      []string
 	Season       string
 	Year         int
 	EpisodeCount int

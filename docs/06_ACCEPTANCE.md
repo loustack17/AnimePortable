@@ -167,8 +167,8 @@ Evidence for PASS:
 
 | ID | Requirement | Verifier |
 | --- | --- | --- |
-| META-001 | AniList is the primary metadata provider. | Automated + review (Y) |
-| META-002 | Bangumi can be used as fallback or cross-check. | Automated + review (Y) |
+| META-001 | Bangumi is the primary metadata provider (ADR-009). | Automated + review (Y) |
+| META-002 | AniList can be used as fallback or cross-check. | Automated + review (Y) |
 | META-003 | The matcher does not blindly choose the first search result. | Automated + review (Y) |
 | META-004 | Traditional and Simplified Chinese, punctuation and full-width normalization are handled. | Automated + review (Y) |
 | META-005 | A low-confidence match yields missing metadata rather than incorrect metadata. | Automated + review (Y) |
