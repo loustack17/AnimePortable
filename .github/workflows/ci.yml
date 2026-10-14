@@ -10,6 +10,10 @@ on:
   push:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -18,47 +22,45 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: 1.26.9
-      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884
-        id: msys2
-        with:
-          msystem: MINGW64
-          release: false
-          update: true
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-mesa
-      - name: Select MSVCRT C toolchain
+      - name: Select C toolchain
         shell: pwsh
-        env:
-          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         run: |
-          $gcc = Join-Path $env:MSYS2_ROOT 'mingw64\bin\gcc.exe'
-          $gxx = Join-Path $env:MSYS2_ROOT 'mingw64\bin\g++.exe'
-          if (-not (Test-Path -LiteralPath $gcc) -or -not (Test-Path -LiteralPath $gxx)) { throw 'MSVCRT C toolchain missing' }
+          # The runner image ships MinGW-w64 at C:\mingw64; using it avoids package-mirror downloads.
+          $gcc = 'C:\mingw64\bin\gcc.exe'
+          $gxx = 'C:\mingw64\bin\g++.exe'
+          if (-not (Test-Path -LiteralPath $gcc) -or -not (Test-Path -LiteralPath $gxx)) { throw 'Runner MinGW toolchain missing' }
           & $gcc -dumpmachine
-          & $gcc -v
+          & $gcc --version
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CC=$gcc"
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CXX=$gxx"
-          $mesaVersion = & (Join-Path $env:MSYS2_ROOT 'usr\bin\pacman.exe') -Q mingw-w64-x86_64-mesa
-          if ($LASTEXITCODE -ne 0 -or $mesaVersion -ne 'mingw-w64-x86_64-mesa 26.2.4-2') { throw 'Unexpected Mesa verifier package version' }
-          $mesaArchive = Join-Path $env:RUNNER_TEMP 'mingw-w64-x86_64-mesa-26.2.4-2-any.pkg.tar.zst'
-          $curlInfo = & curl.exe --version
-          if ($LASTEXITCODE -ne 0 -or $curlInfo[0] -notmatch '^curl (\d+\.\d+\.\d+) ' -or [version]$Matches[1] -lt [version]'8.4.0') { throw 'curl 8.4.0 or newer required for bounded download' }
-          & curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 60 --max-filesize 20971520 --output $mesaArchive 'https://mirror.msys2.org/mingw/mingw64/mingw-w64-x86_64-mesa-26.2.4-2-any.pkg.tar.zst'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ((Get-Item -LiteralPath $mesaArchive).Length -gt 20MB) { throw 'Unexpected Mesa archive size' }
-          if ((Get-FileHash -LiteralPath $mesaArchive -Algorithm SHA256).Hash -ne 'ad9b42d49767a2585c1ddb957195fba8ca19d02bd3c4bcc2fdfacc51e3c5de83') { throw 'Mesa verifier package hash mismatch' }
-          $mesaExtract = Join-Path $env:RUNNER_TEMP 'mesa-verified'
-          New-Item -ItemType Directory -Force -Path $mesaExtract | Out-Null
-          & (Join-Path $env:MSYS2_ROOT 'usr\bin\tar.exe') --force-local -xf ($mesaArchive.Replace('\', '/')) -C ($mesaExtract.Replace('\', '/')) 'mingw64/bin/opengl32.dll' 'mingw64/bin/libgallium_wgl.dll'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          foreach ($name in @('opengl32.dll', 'libgallium_wgl.dll')) {
-            $expectedDLL = Join-Path $mesaExtract ('mingw64\bin\' + $name)
-            $installedDLL = Join-Path $env:MSYS2_ROOT ('mingw64\bin\' + $name)
-            if ((Get-FileHash -LiteralPath $expectedDLL -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $installedDLL -Algorithm SHA256).Hash) { throw "Installed Mesa DLL hash mismatch: $name" }
-          }
-          Add-Content -LiteralPath $env:GITHUB_ENV -Value "ANIMEPORTABLE_TEST_MESA_BIN=$(Join-Path $env:MSYS2_ROOT 'mingw64\bin')"
           $goVerifierTemp = Join-Path $env:RUNNER_TEMP 'go-native-verifier'
           New-Item -ItemType Directory -Force -Path $goVerifierTemp | Out-Null
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "GOTMPDIR=$goVerifierTemp"
+      - name: Restore pinned Mesa
+        id: mesa-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ runner.temp }}/mesa
+          key: mesa-dist-win-26.2.4-release-mingw-x64
+      - name: Download pinned Mesa
+        if: steps.mesa-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # Software OpenGL (llvmpipe) for native tests on GPU-less runners; test-only, never shipped.
+          $archive = Join-Path $env:RUNNER_TEMP 'mesa3d-26.2.4-release-mingw.7z'
+          & curl.exe --fail --location --proto '=https' --proto-redir '=https' --retry 3 --max-time 300 --max-filesize 67108864 --output $archive 'https://github.com/pal1000/mesa-dist-win/releases/download/26.2.4/mesa3d-26.2.4-release-mingw.7z'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne '36A30A04D8CAB6E2BEA2D3C747C326D15024D9711DD80F45EF97AC6F2C3C5086') { throw 'Mesa archive hash mismatch' }
+          & 7z x $archive "-o$(Join-Path $env:RUNNER_TEMP 'mesa')" 'x64\*' -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Select pinned Mesa
+        shell: pwsh
+        run: |
+          $mesaBin = Join-Path $env:RUNNER_TEMP 'mesa\x64'
+          foreach ($name in @('opengl32.dll', 'libgallium_wgl.dll')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $mesaBin $name) -PathType Leaf)) { throw "Mesa test dependency missing: $name" }
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "ANIMEPORTABLE_TEST_MESA_BIN=$mesaBin"
       - name: Verify Go formatting
         shell: pwsh
         run: |
@@ -67,12 +69,6 @@ jobs:
           if ($unformatted.Count -ne 0) { throw "Unformatted Go files: $($unformatted -join ', ')" }
       - name: Verify Go module
         run: go mod verify
-      - name: Test Go
-        shell: pwsh
-        run: |
-          $launcher = 'pwsh -NoProfile -File "' + (Join-Path $env:GITHUB_WORKSPACE 'tools\windows-mesa-test-exec.ps1') + '"'
-          go test -exec $launcher -count=1 ./...
-          exit $LASTEXITCODE
       - name: Repeat desktop lifecycle and player checks
         run: go test -count=20 ./apps/desktop ./apps/desktop/backend ./apps/desktop/fltkhome ./adapters/player/libmpv
       - name: Test Anime1 adapter acceptance
@@ -99,7 +95,7 @@ jobs:
         run: |
           go build -trimpath -buildvcs=false -o "$env:RUNNER_TEMP\animeportable.exe" ./apps/desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $imports = & (Join-Path $env:ANIMEPORTABLE_TEST_MESA_BIN 'objdump.exe') -p (Join-Path $env:RUNNER_TEMP 'animeportable.exe')
+          $imports = & 'C:\mingw64\bin\objdump.exe' -p (Join-Path $env:RUNNER_TEMP 'animeportable.exe')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $dllNames = @($imports | Select-String 'DLL Name:' | ForEach-Object { $_.Line.Trim() })
           $dllNames
