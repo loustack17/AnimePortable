@@ -24,6 +24,6 @@ These docs are the source of truth. If code and docs disagree, the docs win unle
 ## Layout rules
 
 - Numbered docs hold current rules only. No history narration.
-- `loops/` holds one file per active or recent loop: contract, state, evidence index, owner check.
+- `loops/` holds one short file per active or recent loop: scope, how it is tested, the owner check, the result.
 - `STATUS.md` is one page. Detailed history goes to `archive/`.
 - Every new or rewritten doc is checked with the `doc-quality` TypeSafe template.
