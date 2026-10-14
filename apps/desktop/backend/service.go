@@ -59,6 +59,7 @@ type Service struct {
 	app             *core.App
 	player          core.Player
 	session         core.PlaybackSession
+	failures        *FailureLog
 }
 
 func New() *Service {
@@ -78,10 +79,19 @@ func NewAtWithPlayerFactory(databasePath string, factory func() (core.Player, er
 	return service
 }
 
+// NewAtWithPlayback is NewAtWithPlayerFactory plus a playback failure log that the
+// service closes on shutdown. The caller keeps using the log to report player-side
+// failures; a nil log disables failure logging.
+func NewAtWithPlayback(databasePath string, failures *FailureLog, factory func() (core.Player, error)) *Service {
+	service := NewAtWithPlayerFactory(databasePath, factory)
+	service.failures = failures
+	return service
+}
+
 func newWithDependencies(deps dependencies) *Service {
 	service := New()
 	service.store = deps.store
-	service.source = deps.source
+	service.source = stageSource{deps.source}
 	service.cover = deps.cover
 	service.closeDeps = deps.close
 	if deps.newPlayer != nil {
@@ -138,7 +148,7 @@ func (service *Service) Start(ctx context.Context) error {
 		return ErrClosed
 	}
 	service.store = deps.store
-	service.source = deps.source
+	service.source = stageSource{deps.source}
 	service.cover = deps.cover
 	service.closeDeps = deps.close
 	service.app = core.NewApp(service.source, nil, service.store)
@@ -200,6 +210,7 @@ func (service *Service) Close() error {
 				}
 			}
 		}
+		service.failures.Close()
 		service.shutdownErr = safeError(first)
 		close(service.shutdownDone)
 	})

@@ -48,6 +48,11 @@ type Config struct {
 	MaxSessions          int
 	MaxConcurrentStreams int
 	MaxStreamsPerSession int
+	// OnUpstreamFailure, when set, is told the upstream HTTP status (0 when no
+	// response arrived) each time the proxy rejects an upstream response. It runs on
+	// the request goroutine, so it must return quickly and must not retain anything
+	// but the number.
+	OnUpstreamFailure func(status int)
 }
 
 type remoteClient interface {
@@ -594,6 +599,10 @@ func (server *Server) serveSession(writer http.ResponseWriter, request *http.Req
 	upstream := session.remoteRequest(ctx, request.Method, rangeRequested, rangeHeader)
 	response, err := session.client.Open(upstream)
 	if err != nil || response == nil || response.Body == nil {
+		// mpv aborts ranges while seeking or stopping; that is not an upstream rejection.
+		if ctx.Err() == nil && !isCanceled(err) {
+			server.upstreamFailed(0)
+		}
 		writer.WriteHeader(http.StatusBadGateway)
 		return
 	}
@@ -608,14 +617,17 @@ func (server *Server) serveSession(writer http.ResponseWriter, request *http.Req
 			writer.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 			return
 		}
+		server.upstreamFailed(response.StatusCode)
 		writer.WriteHeader(http.StatusBadGateway)
 		return
 	}
 	if !validStatusAndRange(response, rangeSpec, rangeRequested) || !validVideoType(response.Header.Get("Content-Type")) || !validContentEncoding(response.Header) {
+		server.upstreamFailed(response.StatusCode)
 		writer.WriteHeader(http.StatusBadGateway)
 		return
 	}
 	if !copyResponseHeaders(writer.Header(), response, rangeRequested) {
+		server.upstreamFailed(response.StatusCode)
 		writer.WriteHeader(http.StatusBadGateway)
 		return
 	}
@@ -624,6 +636,17 @@ func (server *Server) serveSession(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	_, _ = io.Copy(writer, body)
+}
+
+func isCanceled(err error) bool {
+	var secure *securehttp.Error
+	return errors.Is(err, context.Canceled) || (errors.As(err, &secure) && secure.Kind == securehttp.KindCanceled)
+}
+
+func (server *Server) upstreamFailed(status int) {
+	if observer := server.config.OnUpstreamFailure; observer != nil {
+		observer(status)
+	}
 }
 
 func tryAcquire(semaphore chan struct{}) bool {

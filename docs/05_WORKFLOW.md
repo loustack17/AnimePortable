@@ -269,7 +269,7 @@ A human gate is required when [Acceptance](06_ACCEPTANCE.md) marks a criterion `
 The packet contains:
 
 - Goal and criteria IDs.
-- Exact build or ZIP path, already prepared and launchable. The owner must not hunt for it. Include build identity (commit) and startup steps.
+- Exact build path, already prepared and launchable. The current owner test build always lives in `artifacts/test-build/` alone; each delivery replaces it and older build folders are deleted (archive reports and data backups under `artifacts/evidence/<loop>/` first). The owner must not hunt for it. Include build identity (commit) and startup steps.
 - Numbered steps using only visible actions (click, type, press a key, watch). Never ask for internal IDs, database or AppData edits, fixtures, adapters, IPC or repository internals.
 - Expected result for each step, as an observable outcome.
 - Deterministic evidence summary, review findings, known issues and residual risk.

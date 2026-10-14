@@ -2,7 +2,7 @@
 
 # Loop 30: anime detail and episode UI (Phase 24)
 
-Status: IN_PROGRESS. Not PASS. Current HEAD: e8f0640790e0abaa620d5c3db32f453de2c91ba3.
+Status: IN_PROGRESS. Not PASS. Run `git log -1` for the current HEAD.
 
 ## 1. Scope and acceptance IDs
 
@@ -36,48 +36,33 @@ Gates: pure Go tests, vet, backend/architecture/contract regression, formatting 
 | Hidden controls stay hidden while keyboard focus is retained; owner confirmed controls hide and show correctly | Commit 3022551; CI 38438012680 green; owner PASS on overlay hide/show |
 | Default-off playback diagnostic | Commit 07851b1; fixed in 3d58b0d; CI 38441971359 all checks green |
 
-## 3. Open: video stutter
+## 3. Video stutter: root cause fixed
 
-Symptom: video is not smooth while audio is normal. The owner confirmed this with the 3d58b0d diagnostic build.
+Symptom: video was choppy while audio was normal, in every FLTK/libmpv build since Loop 28.
 
-Baseline (owner run of the 3d58b0d diagnostic build, derived values saved locally):
+Root cause: the production `main` never called `fltk.Lock()`. FLTK only wakes its event loop for `Fl::awake` calls from other threads after the main thread has called `Fl::lock` once. libmpv signals "new frame ready" from its own thread through `Fl::awake`, so each frame waited 100 to 340 ms for an unrelated event (timer or mouse). libmpv then timed out after 200 ms ("mpv_render_context_render() not being called or stuck") and dropped frames. All native tests call `fltk.Lock()`, which is why tests were smooth and the app was not.
 
-| Measure | Value |
-| --- | --- |
-| Render rate | 8.0103 per second |
-| Output drops | 308 |
-| Decoder drops | 0 |
-| OpenGL errors | 0 |
-| Mean render time | 9.1887 ms |
-| Max render time | 42.3879 ms |
-| Max interval | 876.8368 ms |
+How it was found: an opt-in local benchmark (`apps/desktop/fltkengine/playback_bench_windows_test.go`, `ANIMEPORTABLE_PLAYBACK_BENCH=1`) was smooth, the real app was not, and the new update-to-render latency histogram showed the delay was between the mpv callback and the FLTK awake handler, not in rendering.
 
-Hypothesis: `Engine.Render` reported "frame swapped" to libmpv before the FLTK flip happened. The order is render hook, then overlay, then FLTK flip. The early `ReportSwap` told libmpv a flip had completed when it had not, which may disturb its output scheduling.
+Fixes kept:
 
-Change in e8f0640 (two files):
+- `apps/desktop/main_fltk_windows.go`: call `fltk.Lock()` at startup.
+- mpv properties (position, duration, pause, resolution) are observed through mpv events instead of synchronous reads on the render thread, which libmpv forbids.
 
-- Remove the optional `ReportSwap` call inside `Engine.Render`, before the FLTK flip.
-- The native test now requires at least 2 new frame updates (`RenderUpdateFrames >= 2`). All earlier assertions are kept.
+Measured on the real app (40 s, same stream, owner's PC): 5.8 to 23.0 new frames per second (source 23.976), 610 to 0 dropped frames, update-to-render latency under 25 ms. The owner confirmed smooth playback on 2026-10-14.
 
-Status of that change: CI run 38444662617 for e8f0640 passed all steps (checked 2026-10-13). CI cannot show whether the stutter is fixed; only the owner test can.
+Reverted experiments: removing the early `ReportSwap` (e8f0640, kept), non-blocking render (`BLOCK_FOR_TARGET_TIME=0`, reverted: default is equally smooth and keeps A/V sync), vsync off, UI-thread stall recorder, diagnostic autoplay, mpv verbose log (removed: it wrote the proxy session token to disk).
 
-Not claimed:
+## 4. Playback failure visibility
 
-- No performance improvement.
-- The cause of the stutter is not proven. Total render wall time alone does not identify a GPU bottleneck.
-- No Loop 30 PASS.
-- No tuning beyond this change.
+- An owner-seen Continue failure went back to Home with only a small grey label that a late Home reload could clear. Playback-start failures now show a "播放失敗" dialog after Home is shown.
+- `playback-failures.log` (next to the database, newest 50 lines, always on, never uploaded) records one line per failed attempt: UTC time, stage (`resolve`, `proxy_upstream`, `player_load`, `other`), HTTP status or `-`, and a fixed error category. No URLs, tokens, titles or IDs. Canceled requests are not recorded.
+- Retry behavior is unchanged. Decide on an automatic retry only after the log shows the failure stage (suspected intermittent Anime1 HTTP 502).
 
-Process notes: the raw owner report and GPU identity were not sent to any API. Only de-identified conditions and code were sent to TypeSafe. Judgments supported investigating output scheduling and this isolated change (raw values are in the evidence files below).
+## 4b. Next steps
 
-## 4. Next steps
-
-1. Finish the docs restructure (see `DOCS_RESTRUCTURE.md` in this folder).
-2. Done: CI run 38444662617 for e8f0640 is green.
-3. CI is green: deliver the CI build (new executable and launcher), delete old binaries and caches, and keep `data/` and evidence. Ask the owner for the same-clip comparison once.
-4. Read the new owner report. Use TypeSafe with de-identified conditions before any further causal change.
-5. If there is no improvement, record that. Do not claim improvement from CI alone.
-6. Close Loop 30 only after all checks in section 6 are accepted by the owner.
+1. Push the fix, confirm GitHub Windows CI, and deliver the CI build to `artifacts/test-build/`.
+2. Owner completes the remaining section 6 checks. Close Loop 30 only after all are accepted.
 
 ## 5. Evidence index
 
@@ -86,7 +71,7 @@ Process notes: the raw owner report and GPU identity were not sent to any API. O
 | Owner baseline report (local only) | `artifacts/evidence/loop30/owner-stutter-baseline.json` |
 | Derived stats (local only) | `artifacts/evidence/loop30/stutter-derived-local.json` |
 | TypeSafe assessment and repair | `artifacts/evidence/loop30/stutter-assessment-state.json`, `stutter-assessment-judgments.json`, `stutter-repair-state.json`, `stutter-repair-judgments.json` |
-| 3d58b0d diagnostic build | `artifacts/loop30/3d58b0d/` (`AnimePortable.exe`, `DiagnosePlayback.cmd`, ZIP); proof in `artifacts/evidence/loop30/3d58b0d-test-object.json` |
+| 3d58b0d diagnostic build | Removed; its report is `artifacts/evidence/loop30/stutter-3d58b0d-report.json`, proof in `artifacts/evidence/loop30/3d58b0d-test-object.json` |
 | Build 1158671 | `artifacts/evidence/loop30/1158671-test-object.json` |
 | Build dbb191f | `artifacts/evidence/loop30/dbb191f-test-object.json` |
 | Other Loop 30 evidence | `artifacts/evidence/loop30/` |
@@ -98,11 +83,12 @@ Process notes: the raw owner report and GPU identity were not sent to any API. O
 
 ## 6. Owner check (人工驗收)
 
-等 CI 全部通過、拿到新版後：
+測試版：`artifacts/test-build/`（commit `ea7c87c`，CI run 38504519512 全部通過；EXE SHA-256 `396b4511…8127`；libmpv DLL 與固定雜湊一致；`data/` 是 3d58b0d 資料的複本，原資料保留在 `artifacts/evidence/loop30/data-before-migration-0003.db`）。
 
-1. 用新版播放先前會卡頓的同一個片段 30 至 60 秒（與 3d58b0d 基準相同的片段）。
-2. 正常關閉整個 app，回報是否比之前順暢。不需要找內部資料或上傳檔案。
-3. 3d58b0d 的量測只當作比較基準，不再用它驗收。
+1. 雙擊 `artifacts/test-build/DiagnosePlayback.cmd`（會開啟本機播放量測；直接開 `AnimePortable.exe` 則不量測）。
+2. 播放先前會卡頓的同一個片段 30 至 60 秒（與 3d58b0d 基準相同）。
+3. 正常關閉整個 app，回報是否比之前順暢。量測報告會存在同一資料夾，只有數字，不需上傳。
+4. 3d58b0d 的報告 `artifacts/evidence/loop30/stutter-3d58b0d-report.json` 只當作比較基準。
 
 其餘尚未驗收的詳情與選集檢查：
 

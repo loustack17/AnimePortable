@@ -44,6 +44,7 @@ type Engine struct {
 	position         time.Duration
 	duration         time.Duration
 	paused           bool
+	observed         observedProperties
 	pending          bool
 	pendingStarted   bool
 	failed           bool
@@ -79,13 +80,18 @@ func New(ctx context.Context, video *fltk.GlWindow) (*Engine, error) {
 		if err != nil {
 			return libmpv.ErrPlayerFailed
 		}
-		for _, option := range [][2]string{{"config", "no"}, {"vo", "libmpv"}, {"hwdec", "auto"}, {"demuxer-max-bytes", "16MiB"}, {"cache-secs", "5"}} {
+		options := [][2]string{{"config", "no"}, {"vo", "libmpv"}, {"hwdec", "auto"}, {"demuxer-max-bytes", "16MiB"}, {"cache-secs", "5"}}
+		for _, option := range options {
 			if err := core.SetOptionString(option[0], option[1]); err != nil {
 				core.TerminateDestroy()
 				return libmpv.ErrPlayerFailed
 			}
 		}
 		if err := core.Initialize(); err != nil {
+			core.TerminateDestroy()
+			return libmpv.ErrPlayerFailed
+		}
+		if err := observeProperties(core, playbackDiagnosticsEnabled(os.Getenv)); err != nil {
 			core.TerminateDestroy()
 			return libmpv.ErrPlayerFailed
 		}
@@ -217,10 +223,15 @@ func (engine *Engine) Load(ctx context.Context, url string, startAt time.Duratio
 		if engine.isClosed() {
 			return ErrClosed
 		}
+		// Drop events of the previous file, but keep the property cache current.
 		for index := 0; index < 128; index++ {
-			if event := engine.core.WaitEvent(0); event == nil || event.EventID == mpv.EventNone {
+			event := engine.core.WaitEvent(0)
+			if event == nil || event.EventID == mpv.EventNone {
 				break
 			}
+			engine.mu.Lock()
+			engine.applyProperty(event)
+			engine.mu.Unlock()
 		}
 		command := []string{"loadfile", url, "replace"}
 		if startAt > 0 {
@@ -233,12 +244,12 @@ func (engine *Engine) Load(ctx context.Context, url string, startAt time.Duratio
 		engine.generation = generation
 		engine.position = startAt
 		engine.duration = 0
-		engine.paused = false
 		engine.pending = true
 		engine.pendingStarted = false
 		engine.failed = false
 		engine.seekPending = false
 		engine.seekStarted = false
+		engine.forgetObservedPlayback()
 		onLoad := engine.onLoad
 		engine.mu.Unlock()
 		if onLoad != nil {
@@ -290,6 +301,11 @@ func (engine *Engine) Snapshot(ctx context.Context) (core.PlaybackSnapshot, erro
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			// mpv never confirmed the seek (for example an unseekable stream); stop waiting for it
+			// so later snapshots and position updates are not blocked until the next load.
+			engine.mu.Lock()
+			engine.seekPending, engine.seekStarted = false, false
+			engine.mu.Unlock()
 			return core.PlaybackSnapshot{}, ctx.Err()
 		case <-timer.C:
 		}
@@ -313,21 +329,24 @@ func (engine *Engine) snapshot(ctx context.Context) (core.PlaybackSnapshot, erro
 			return errSeekPending
 		}
 		snapshot = core.PlaybackSnapshot{Position: engine.position, Duration: engine.duration, Paused: engine.paused}
+		// While a load is pending the observed values still describe the previous file.
+		positionKnown := engine.observed.positionKnown && !engine.pending
+		durationKnown := engine.observed.durationKnown && !engine.pending
+		positionSeconds, durationSeconds := engine.observed.positionSeconds, engine.observed.durationSeconds
 		engine.mu.Unlock()
 		var err error
-		snapshot.Position, err = snapshotDuration(engine.core.GetPropertyString("time-pos"), snapshot.Position)
-		if err != nil {
-			return err
+		if positionKnown {
+			if snapshot.Position, err = secondsToDuration(positionSeconds); err != nil {
+				return err
+			}
 		}
-		snapshot.Duration, err = snapshotDuration(engine.core.GetPropertyString("duration"), snapshot.Duration)
-		if err != nil {
-			return err
-		}
-		if paused := engine.core.GetPropertyString("pause"); paused != "" {
-			snapshot.Paused = paused == "yes"
+		if durationKnown {
+			if snapshot.Duration, err = secondsToDuration(durationSeconds); err != nil {
+				return err
+			}
 		}
 		engine.mu.Lock()
-		engine.position, engine.duration, engine.paused = snapshot.Position, snapshot.Duration, snapshot.Paused
+		engine.position, engine.duration = snapshot.Position, snapshot.Duration
 		engine.mu.Unlock()
 		return nil
 	})
@@ -337,17 +356,122 @@ func (engine *Engine) snapshot(ctx context.Context) (core.PlaybackSnapshot, erro
 	return snapshot, nil
 }
 
-func snapshotDuration(value string, fallback time.Duration) (time.Duration, error) {
-	if value == "" {
-		return fallback, nil
-	}
-	seconds, err := strconv.ParseFloat(value, 64)
-	if err != nil || math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds < 0 || seconds >= float64(1<<63)/float64(time.Second) {
+func secondsToDuration(seconds float64) (time.Duration, error) {
+	if math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds < 0 || seconds >= float64(1<<63)/float64(time.Second) {
 		return 0, libmpv.ErrPlayerFailed
 	}
 	return time.Duration(seconds * float64(time.Second)), nil
 }
 
+// observedProperties caches the values mpv pushes through property-change events,
+// so the UI thread never has to ask the core synchronously.
+type observedProperties struct {
+	positionSeconds float64
+	positionKnown   bool
+	durationSeconds float64
+	durationKnown   bool
+	videoHeight     int
+	diagnostics     playbackDiagnosticMPVProperties
+}
+
+const observePropertyReply = 1
+
+var coreObservedProperties = []struct {
+	name   string
+	format mpv.Format
+}{
+	{"time-pos", mpv.FormatDouble},
+	{"duration", mpv.FormatDouble},
+	{"pause", mpv.FormatFlag},
+	{"video-params/h", mpv.FormatString},
+}
+
+var diagnosticObservedProperties = []string{
+	"frame-drop-count", "decoder-frame-drop-count", "hwdec-current", "display-fps",
+	"estimated-display-fps", "vo-delayed-frame-count", "estimated-vf-fps",
+}
+
+func observeProperties(core *mpv.Mpv, diagnostics bool) error {
+	for _, property := range coreObservedProperties {
+		if err := core.ObserveProperty(observePropertyReply, property.name, property.format); err != nil {
+			return err
+		}
+	}
+	if !diagnostics {
+		return nil
+	}
+	for _, name := range diagnosticObservedProperties {
+		if err := core.ObserveProperty(observePropertyReply, name, mpv.FormatString); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applyProperty stores a property-change event in the cache; the caller holds engine.mu.
+func (engine *Engine) applyProperty(event *mpv.Event) {
+	if event.EventID != mpv.EventPropertyChange || event.Property == nil {
+		return
+	}
+	change := event.Property
+	observed := &engine.observed
+	switch change.Name {
+	case "time-pos":
+		// Positions queued before mpv starts the seek predate it; the seek target is cached instead.
+		if engine.seekPending && !engine.seekStarted {
+			return
+		}
+		observed.positionSeconds, observed.positionKnown = change.Double, change.Format == mpv.FormatDouble
+	case "duration":
+		observed.durationSeconds, observed.durationKnown = change.Double, change.Format == mpv.FormatDouble
+	case "pause":
+		if change.Format == mpv.FormatFlag {
+			engine.paused = change.Flag
+		}
+	case "video-params/h":
+		observed.videoHeight, _ = strconv.Atoi(propertyText(change))
+	case "frame-drop-count":
+		observed.diagnostics.FrameDropCount = parseDiagnosticCount(propertyText(change))
+	case "decoder-frame-drop-count":
+		observed.diagnostics.DecoderFrameDropCount = parseDiagnosticCount(propertyText(change))
+	case "hwdec-current":
+		observed.diagnostics.HWDecCurrent = propertyText(change)
+	case "display-fps":
+		observed.diagnostics.DisplayFPS = parseDiagnosticFPS(propertyText(change))
+	case "estimated-display-fps":
+		observed.diagnostics.EstimatedDisplayFPS = parseDiagnosticFPS(propertyText(change))
+	case "vo-delayed-frame-count":
+		observed.diagnostics.VODelayedFrameCount = parseDiagnosticCount(propertyText(change))
+	case "estimated-vf-fps":
+		observed.diagnostics.VideoFPS = parseDiagnosticFPS(propertyText(change))
+	}
+}
+
+// forgetObservedPlayback drops cached time-pos and duration so the previous file's
+// values are never reported for a new one. The caller holds engine.mu.
+func (engine *Engine) forgetObservedPlayback() {
+	engine.observed.positionKnown, engine.observed.durationKnown = false, false
+	engine.observed.positionSeconds, engine.observed.durationSeconds = 0, 0
+}
+
+// advanceSeek clears a pending seek once mpv restarts playback after it. seek() already
+// cached the target position, so Snapshot does not need to wait for a time-pos change,
+// which mpv omits when the target equals the current position. The caller holds engine.mu.
+func (engine *Engine) advanceSeek(event *mpv.Event) {
+	if !engine.seekPending {
+		return
+	}
+	switch event.EventID {
+	case mpv.EventSeek:
+		engine.seekStarted = true
+	case mpv.EventPlaybackRestart:
+		if engine.seekStarted {
+			engine.seekPending, engine.seekStarted = false, false
+		}
+	case mpv.EventEnd:
+		engine.seekPending, engine.seekStarted = false, false
+	}
+}
 func (engine *Engine) pollEvents() {
 	for index := 0; index < 128; index++ {
 		event := engine.core.WaitEvent(0)
@@ -358,15 +482,12 @@ func (engine *Engine) pollEvents() {
 		generation := engine.generation
 		pending := engine.pending
 		started := engine.pendingStarted
-		if event.EventID == mpv.EventSeek && engine.seekPending {
-			engine.seekStarted = true
-		}
-		if (event.EventID == mpv.EventPlaybackRestart && engine.seekStarted) || event.EventID == mpv.EventEnd {
-			engine.seekPending = false
-			engine.seekStarted = false
-		}
+		engine.applyProperty(event)
+		engine.advanceSeek(event)
 		if event.EventID == mpv.EventStart && pending {
 			engine.pendingStarted = true
+			// Property changes of the previous file may still have been queued behind loadfile.
+			engine.forgetObservedPlayback()
 		}
 		if event.EventID == mpv.EventFileLoaded {
 			engine.pending = false
@@ -418,42 +539,34 @@ func (engine *Engine) tick() {
 		fltk.RepeatTimeout(0.5, engine.tick)
 		return
 	}
-	if engine.diagnostics != nil {
-		engine.diagnosticsTicks++
-		if engine.diagnosticsTicks >= 10 {
-			engine.diagnosticsTicks = 0
-			engine.diagnostics.recordMPVProperties(playbackDiagnosticMPVProperties{
-				FrameDropCount:        parseDiagnosticCount(engine.core.GetPropertyString("frame-drop-count")),
-				DecoderFrameDropCount: parseDiagnosticCount(engine.core.GetPropertyString("decoder-frame-drop-count")),
-				HWDecCurrent:          engine.core.GetPropertyString("hwdec-current"),
-				DisplayFPS:            parseDiagnosticFPS(engine.core.GetPropertyString("display-fps")),
-				EstimatedDisplayFPS:   parseDiagnosticFPS(engine.core.GetPropertyString("estimated-display-fps")),
-				VODelayedFrameCount:   parseDiagnosticCount(engine.core.GetPropertyString("vo-delayed-frame-count")),
-				VideoFPS:              parseDiagnosticFPS(engine.core.GetPropertyString("video-params/fps")),
-			})
-		}
-	}
-	position, _ := strconv.ParseFloat(engine.core.GetPropertyString("time-pos"), 64)
-	duration, _ := strconv.ParseFloat(engine.core.GetPropertyString("duration"), 64)
-	paused := engine.core.GetPropertyString("pause") == "yes"
-	if position < 0 {
-		position = 0
-	}
-	if duration < 0 {
-		duration = 0
-	}
 	engine.mu.Lock()
+	sample := engine.observed.diagnostics
+	// Until mpv reports a position, keep the requested start so resume progress is not reset to 0.
+	position, duration := engine.position.Seconds(), 0.0
+	if engine.observed.positionKnown {
+		position = math.Max(engine.observed.positionSeconds, 0)
+	}
+	if engine.observed.durationKnown {
+		duration = math.Max(engine.observed.durationSeconds, 0)
+	}
+	paused := engine.paused
+	resolution := engine.observed.videoHeight
 	engine.position = time.Duration(position * float64(time.Second))
 	engine.duration = time.Duration(duration * float64(time.Second))
-	engine.paused = paused
 	onState := engine.onState
 	event := libmpv.Event{Generation: engine.generation, Kind: libmpv.EventProgress, Position: engine.position, Duration: engine.duration}
 	if paused {
 		event.Kind = libmpv.EventPaused
 	}
 	engine.mu.Unlock()
+	if engine.diagnostics != nil {
+		engine.diagnosticsTicks++
+		if engine.diagnosticsTicks >= 10 {
+			engine.diagnosticsTicks = 0
+			engine.diagnostics.recordMPVProperties(sample)
+		}
+	}
 	if onState != nil && event.Generation != 0 {
-		resolution, _ := strconv.Atoi(engine.core.GetPropertyString("video-params/h"))
 		onState(event.Position, event.Duration, paused, resolution)
 	}
 	if event.Generation != 0 {
@@ -501,7 +614,8 @@ func (engine *Engine) Control(ctx context.Context, command string, value int) er
 		}
 		switch command {
 		case "pause":
-			return engine.core.SetProperty("pause", mpv.FormatFlag, engine.core.GetPropertyString("pause") != "yes")
+			engine.pollEvents()
+			return engine.setPaused(!engine.pausedState())
 		case "seek":
 			return engine.seek(value, "relative")
 		case "seek_absolute":
@@ -510,7 +624,7 @@ func (engine *Engine) Control(ctx context.Context, command string, value int) er
 			}
 			return engine.seek(value, "absolute")
 		case "stop":
-			if err := engine.core.SetProperty("pause", mpv.FormatFlag, true); err != nil {
+			if err := engine.setPaused(true); err != nil {
 				return err
 			}
 			return engine.seek(0, "absolute")
@@ -522,15 +636,61 @@ func (engine *Engine) Control(ctx context.Context, command string, value int) er
 	})
 }
 
+func (engine *Engine) pausedState() bool {
+	engine.mu.Lock()
+	defer engine.mu.Unlock()
+	return engine.paused
+}
+
+// setPaused also updates the cache at once: mpv confirms through a property-change
+// event later, and callers (toggle, Snapshot) must see their own write meanwhile.
+func (engine *Engine) setPaused(paused bool) error {
+	if err := engine.core.SetProperty("pause", mpv.FormatFlag, paused); err != nil {
+		return err
+	}
+	engine.mu.Lock()
+	engine.paused = paused
+	engine.mu.Unlock()
+	return nil
+}
+
+func propertyText(change *mpv.PropertyChange) string {
+	if change.Format != mpv.FormatString {
+		return ""
+	}
+	return change.String
+}
+
+// cacheSeekTarget records where a seek will land so progress reads stay correct even when
+// mpv sends no time-pos change for it. The caller holds engine.mu.
+func (engine *Engine) cacheSeekTarget(value int, mode string) {
+	target := float64(value)
+	if mode != "absolute" {
+		current := engine.position.Seconds()
+		if engine.observed.positionKnown {
+			current = engine.observed.positionSeconds
+		}
+		target += current
+	}
+	target = math.Max(target, 0)
+	if engine.observed.durationKnown {
+		target = math.Min(target, engine.observed.durationSeconds)
+	}
+	engine.observed.positionSeconds, engine.observed.positionKnown = target, true
+}
+
 func (engine *Engine) seek(value int, mode string) error {
 	engine.pollEvents()
 	engine.mu.Lock()
 	engine.seekPending = true
 	engine.seekStarted = false
+	previousSeconds, previousKnown := engine.observed.positionSeconds, engine.observed.positionKnown
+	engine.cacheSeekTarget(value, mode)
 	engine.mu.Unlock()
 	if err := engine.core.Command([]string{"seek", strconv.Itoa(value), mode}); err != nil {
 		engine.mu.Lock()
-		engine.seekPending = false
+		engine.seekPending, engine.seekStarted = false, false
+		engine.observed.positionSeconds, engine.observed.positionKnown = previousSeconds, previousKnown
 		engine.mu.Unlock()
 		return err
 	}

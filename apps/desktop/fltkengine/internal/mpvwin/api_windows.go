@@ -23,6 +23,7 @@ type api struct {
 	setProperty              func(uintptr, string, int32, unsafe.Pointer) int32
 	getPropertyString        func(uintptr, string) unsafe.Pointer
 	waitEvent                func(uintptr, float64) unsafe.Pointer
+	observeProperty          func(uintptr, uint64, string, int32) int32
 	wakeup                   func(uintptr)
 	free                     func(unsafe.Pointer)
 	renderContextCreate      func(*uintptr, uintptr, unsafe.Pointer) int32
@@ -42,6 +43,7 @@ var requiredSymbols = []string{
 	"mpv_set_property",
 	"mpv_get_property_string",
 	"mpv_wait_event",
+	"mpv_observe_property",
 	"mpv_wakeup",
 	"mpv_free",
 	"mpv_render_context_create",
@@ -74,6 +76,7 @@ func bindAPI(handle uintptr, resolve func(uintptr, string) (uintptr, error)) (ap
 		{"mpv_set_property", &bound.setProperty},
 		{"mpv_get_property_string", &bound.getPropertyString},
 		{"mpv_wait_event", &bound.waitEvent},
+		{"mpv_observe_property", &bound.observeProperty},
 		{"mpv_wakeup", &bound.wakeup},
 		{"mpv_free", &bound.free},
 		{"mpv_render_context_create", &bound.renderContextCreate},
@@ -244,7 +247,24 @@ func (mpv *Mpv) WaitEvent(timeout float64) *Event {
 	if raw.Error < 0 {
 		event.Error = ErrPlayerFailed
 	}
+	if event.EventID == EventPropertyChange {
+		// The payload is only valid until the next wait, so copy it now.
+		event.Property = parsePropertyChange(raw.Data)
+	}
 	return event
+}
+
+// ObserveProperty asks mpv to queue a property-change event, tagged with reply, whenever the property changes.
+func (mpv *Mpv) ObserveProperty(reply uint64, name string, format Format) error {
+	if mpv == nil || mpv.isClosed() || !validCString(name) {
+		return ErrPlayerClosed
+	}
+	switch format {
+	case FormatString, FormatFlag, FormatDouble:
+	default:
+		return ErrPlayerFailed
+	}
+	return resultError(mpv.library.api.observeProperty(mpv.handle, reply, name, int32(format)))
 }
 
 func (mpv *Mpv) Wakeup() {
@@ -429,10 +449,10 @@ func copyCString(pointer unsafe.Pointer, maximum int) string {
 	if pointer == nil {
 		return ""
 	}
-	bytes := unsafe.Slice((*byte)(pointer), maximum)
-	for index, value := range bytes {
-		if value == 0 {
-			return string(bytes[:index])
+	// Scan byte by byte: the string may be shorter than maximum, so a maximum-sized slice could span past its allocation.
+	for index := 0; index < maximum; index++ {
+		if *(*byte)(unsafe.Add(pointer, index)) == 0 {
+			return string(unsafe.Slice((*byte)(pointer), index))
 		}
 	}
 	return ""

@@ -682,3 +682,14 @@ func (t *idleClosingTransport) CloseIdleConnections() { t.closed = true }
 type errorReader struct{}
 
 func (errorReader) Read([]byte) (int, error) { return 0, errors.New("secret read") }
+
+func TestRequireSuccessReportsStatusCode(t *testing.T) {
+	var statusErr *Error
+	err := (&Response{StatusCode: http.StatusBadGateway}).RequireSuccess()
+	if !errors.As(err, &statusErr) || statusErr.Kind != KindStatus || statusErr.Status != http.StatusBadGateway {
+		t.Fatalf("err = %#v", err)
+	}
+	if err := (&Response{StatusCode: http.StatusOK}).RequireSuccess(); err != nil {
+		t.Fatal(err)
+	}
+}

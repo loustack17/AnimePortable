@@ -48,8 +48,10 @@ const (
 )
 
 type Error struct {
-	Kind  Kind
-	cause error
+	Kind Kind
+	// Status is the HTTP status code for KindStatus errors, otherwise zero.
+	Status int
+	cause  error
 }
 
 func (e *Error) Error() string {
@@ -108,8 +110,11 @@ type StreamResponse struct {
 }
 
 func (r *Response) RequireSuccess() error {
-	if r == nil || r.StatusCode < http.StatusOK || r.StatusCode >= http.StatusMultipleChoices {
+	if r == nil {
 		return &Error{Kind: KindStatus}
+	}
+	if r.StatusCode < http.StatusOK || r.StatusCode >= http.StatusMultipleChoices {
+		return &Error{Kind: KindStatus, Status: r.StatusCode}
 	}
 	return nil
 }

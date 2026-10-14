@@ -6,7 +6,7 @@ Updated 2026-10-13. Branch `main`. Docs restructure committed as `f790dfc`; lega
 
 ## Current state
 
-Loops 1 to 29 pass. Loop 30 (anime detail and episode UI) is in progress: it builds and CI is green, but the owner has accepted only the player controls. Video stutter is still open; the latest fix (`e8f0640`) has not been tested by the owner. The docs restructure and the legacy cleanup are committed locally. They need owner approval to push, then a green GitHub Windows CI run.
+Loops 1 to 29 pass. Loop 30 (anime detail and episode UI) is in progress: it builds and CI is green, but the owner has accepted only the player controls. The video stutter is fixed (missing `fltk.Lock()`; the owner confirmed smooth playback on 2026-10-14). Playback-start failures now show a dialog and are recorded in `playback-failures.log`.
 
 Platform: Windows amd64 only. Native tests run locally (about 90 seconds including race) and in GitHub Windows CI.
 
@@ -22,8 +22,7 @@ Platform: Windows amd64 only. Native tests run locally (about 90 seconds includi
 
 | Item | Next action |
 | --- | --- |
-| Push docs restructure and legacy cleanup | Owner approves the push; then confirm GitHub Windows CI is green. Details: [loops/LEGACY_CLEANUP.md](loops/LEGACY_CLEANUP.md) |
-| Loop 30 stutter fix `e8f0640` (CI run 38444662617 is green) | Deliver the CI build. Owner plays the same clip for 30 to 60 seconds and reports. |
+| Playback failures (suspected intermittent Anime1 HTTP 502) | Read `playback-failures.log` after the next failure; decide on an automatic retry from the recorded stage and status. |
 | Loop 30 owner checks | Owner checks the detail page, episode click/Enter/Space, Continue, back/retry, cover and minimum window size. |
 
 ## Settled owner decisions (2026-10-13)

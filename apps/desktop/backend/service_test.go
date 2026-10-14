@@ -474,3 +474,27 @@ func TestSortAnime(t *testing.T) {
 		t.Fatal(items)
 	}
 }
+
+func TestPlayForgetsProxyRejectionOfPreviousSession(t *testing.T) {
+	s, _, _ := testService()
+	directory := t.TempDir()
+	s.failures = NewFailureLog(directory)
+	s.playMu.Lock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = s.Play(context.Background(), PlayRequest{AnimeID: "a", EpisodeID: "e", StartAt: -1})
+	}()
+	// Play is now waiting for the previous operation; its session's proxy rejects a request.
+	time.Sleep(50 * time.Millisecond)
+	s.failures.UpstreamRejected(502)
+	s.playMu.Unlock()
+	<-done
+	s.failures.PlayerFailed()
+	s.failures.Close()
+	lines := readFailureLines(t, directory)
+	// Line 0 is Play's own invalid_input; line 1 must not be attributed to the old session.
+	if len(lines) != 2 || !strings.HasSuffix(lines[1], " player_load - player_failed") {
+		t.Fatalf("lines = %q", lines)
+	}
+}

@@ -380,7 +380,27 @@ func (service *Service) SaveSettings(ctx context.Context, input Settings) error 
 	return safeError(store.SaveSettings(operationCtx, core.Settings{Appearance: appearance, AutoplayNext: autoplay, ResumePlayback: resume, Language: language}))
 }
 
+// playError carries the unsanitized cause of a playback failure to Play, which logs the
+// fixed category and then returns the sanitized error to the caller.
+type playError struct{ cause error }
+
+func (e *playError) Error() string { return e.cause.Error() }
+func (e *playError) Unwrap() error { return e.cause }
+
 func (service *Service) Play(ctx context.Context, input PlayRequest) error {
+	failures := service.failures
+	err := service.play(ctx, input)
+	var failed *playError
+	if errors.As(err, &failed) {
+		err = failed.cause
+		failures.recordPlayFailure(err)
+		return safeError(err)
+	}
+	failures.recordPlayFailure(err)
+	return err
+}
+
+func (service *Service) play(ctx context.Context, input PlayRequest) error {
 	operationCtx, done, err := service.begin(ctx)
 	if err != nil {
 		return err
@@ -388,6 +408,8 @@ func (service *Service) Play(ctx context.Context, input PlayRequest) error {
 	defer done()
 	service.playMu.Lock()
 	defer service.playMu.Unlock()
+	// After the lock: a rejection from the previous session must not count for this attempt.
+	service.failures.beginAttempt()
 	animeID, err := localID(input.AnimeID)
 	if err != nil {
 		return err
@@ -429,7 +451,7 @@ func (service *Service) Play(ctx context.Context, input PlayRequest) error {
 		if err := app.SwitchEpisode(operationCtx, session, animeID, episodeID, ref, startAt); err == nil {
 			return nil
 		} else if !terminalPlaybackError(err) {
-			return safeError(err)
+			return &playError{cause: err}
 		} else if closeErr := session.Close(); closeErr != nil {
 			return safeError(closeErr)
 		}
@@ -447,7 +469,7 @@ func (service *Service) Play(ctx context.Context, input PlayRequest) error {
 	}
 	started, err := app.PlayEpisode(operationCtx, animeID, episodeID, ref, startAt)
 	if err != nil {
-		return safeError(err)
+		return &playError{cause: err}
 	}
 	service.mu.Lock()
 	old := service.session

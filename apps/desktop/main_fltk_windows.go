@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -21,6 +23,13 @@ import (
 
 func main() {
 	runtime.LockOSThread()
+	// FLTK only wakes the event loop for Fl::awake calls from other threads (libmpv frame
+	// notifications, backend results) after the main thread has called Fl::lock once.
+	// Without it those callbacks wait for an unrelated event, and video stutters.
+	if !fltk.Lock() {
+		fmt.Fprintln(os.Stderr, "FLTK threading support is unavailable")
+		os.Exit(1)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	executable, executableErr := os.Executable()
@@ -33,7 +42,6 @@ func main() {
 	var active *fltkengine.Engine
 	var home *fltk.Window
 	var navigateHome func(int)
-	var notifyHome func(string)
 	var play func(backend.PlayRequest)
 	var player *fltkplayer.View
 	var service *backend.Service
@@ -239,7 +247,12 @@ func main() {
 		Navigate: stop,
 	})
 	player.Window().SetCallback(func() { stop(0) })
-	service = backend.NewAtWithPlayerFactory(plan.DatabasePath, func() (core.Player, error) {
+	// The failure log sits next to the database; the service closes it on shutdown.
+	var failures *backend.FailureLog
+	if plan.DatabasePath != "" {
+		failures = backend.NewFailureLog(filepath.Dir(plan.DatabasePath))
+	}
+	service = backend.NewAtWithPlayback(plan.DatabasePath, failures, func() (core.Player, error) {
 		return libmpv.NewPlayer(func(factoryCtx context.Context) (libmpv.Bridge, libmpv.Renderer, error) {
 			created, err := fltkengine.New(factoryCtx, player.Video())
 			if err != nil {
@@ -277,6 +290,7 @@ func main() {
 				state.Playing = false
 				state.Loading = false
 				player.SetState(state)
+				failures.PlayerFailed()
 				fltk.MessageBox("播放失敗", "此集暫時無法播放。請重新選取該集或稍後再試。")
 			})
 			engineMu.Lock()
@@ -284,7 +298,7 @@ func main() {
 			engineMu.Unlock()
 			fltk.Awake(func() { player.SetRenderHook(func(width, height int) { _ = created.Render(width, height) }) })
 			return created, created, nil
-		}), nil
+		}, libmpv.WithUpstreamFailureObserver(failures.UpstreamRejected)), nil
 	})
 	defer func() { _ = service.Close(); player.Close() }()
 	play = func(request backend.PlayRequest) {
@@ -345,9 +359,10 @@ func main() {
 					if generation != viewGeneration.Load() {
 						return
 					}
-					notifyHome("無法播放此集，請重試。")
 					player.Window().Hide()
 					home.Show()
+					// Shown after Home so a late Home reload cannot clear it.
+					fltk.MessageBox("播放失敗", "無法播放此集，請重試。")
 				})
 			}
 		})
@@ -366,7 +381,7 @@ func main() {
 			}()
 		})
 	}
-	home, navigateHome, notifyHome = fltkhome.NewWindow(plan, planErr, service, ctx, cancel, play, closeApp)
+	home, navigateHome, _ = fltkhome.NewWindow(plan, planErr, service, ctx, cancel, play, closeApp)
 	home.Show()
 	fltk.Run()
 	cancel()

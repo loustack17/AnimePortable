@@ -28,6 +28,7 @@ const (
 	EventFileLoaded      EventID = 8
 	EventSeek            EventID = 20
 	EventPlaybackRestart EventID = 21
+	EventPropertyChange  EventID = 22
 )
 
 type EndFileReason int32
@@ -45,6 +46,55 @@ type Event struct {
 	Error         error
 	ReplyUserdata uint64
 	Data          unsafe.Pointer
+	// Property is set for EventPropertyChange only.
+	Property *PropertyChange
+}
+
+// PropertyChange is a copied mpv_event_property. Format is FormatNone when the
+// property is currently unavailable; otherwise only the field matching Format is meaningful.
+type PropertyChange struct {
+	Name   string
+	Format Format
+	String string
+	Double float64
+	Flag   bool
+}
+
+type rawPropertyChange struct {
+	Name   unsafe.Pointer
+	Format int32
+	Data   unsafe.Pointer
+}
+
+func parsePropertyChange(data unsafe.Pointer) *PropertyChange {
+	if data == nil {
+		return nil
+	}
+	raw := (*rawPropertyChange)(data)
+	change := &PropertyChange{Name: copyCString(raw.Name, 256), Format: Format(raw.Format)}
+	switch change.Format {
+	case FormatString:
+		if raw.Data == nil {
+			change.Format = FormatNone
+			break
+		}
+		change.String = copyCString(*(*unsafe.Pointer)(raw.Data), 4096)
+	case FormatFlag:
+		if raw.Data == nil {
+			change.Format = FormatNone
+			break
+		}
+		change.Flag = *(*int32)(raw.Data) != 0
+	case FormatDouble:
+		if raw.Data == nil {
+			change.Format = FormatNone
+			break
+		}
+		change.Double = *(*float64)(raw.Data)
+	default:
+		change.Format = FormatNone
+	}
+	return change
 }
 
 type rawEvent struct {

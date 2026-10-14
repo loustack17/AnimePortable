@@ -25,6 +25,7 @@ type fakeRemote struct {
 	mu       sync.Mutex
 	requests []*http.Request
 	response func(*http.Request) *securehttp.StreamResponse
+	openErr  func(*http.Request) error
 	closed   int
 }
 
@@ -34,6 +35,11 @@ func (remote *fakeRemote) Open(request *http.Request) (*securehttp.StreamRespons
 	clone.Header = request.Header.Clone()
 	remote.requests = append(remote.requests, clone)
 	remote.mu.Unlock()
+	if remote.openErr != nil {
+		if err := remote.openErr(request); err != nil {
+			return nil, err
+		}
+	}
 	return remote.response(request), nil
 }
 
@@ -1209,3 +1215,73 @@ func (writer *blockingWriter) writeErrValue() error {
 }
 
 func errorsIs(got, want error) bool { return got == want }
+
+func TestUpstreamFailureObserverReceivesOnlyTheStatus(t *testing.T) {
+	var mu sync.Mutex
+	var seen []int
+	status := http.StatusBadGateway
+	remote := &fakeRemote{response: func(*http.Request) *securehttp.StreamResponse {
+		return streamResponse(status, http.Header{"Content-Type": {"text/html"}}, "upstream error with secret")
+	}}
+	server := newProxyForTest(t, remote, Config{OnUpstreamFailure: func(code int) {
+		mu.Lock()
+		seen = append(seen, code)
+		mu.Unlock()
+	}})
+	session, err := server.NewSession(newSource())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result := handleRequest(t, server, sessionRequest(t, session, http.MethodGet)); result.status != http.StatusBadGateway {
+		t.Fatalf("status = %d", result.status)
+	}
+	status = http.StatusOK
+	remote.response = func(*http.Request) *securehttp.StreamResponse {
+		return streamResponse(http.StatusOK, http.Header{"Content-Type": {"video/mp4"}}, "video")
+	}
+	if result := handleRequest(t, server, sessionRequest(t, session, http.MethodGet)); result.status != http.StatusOK {
+		t.Fatalf("status = %d", result.status)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 1 || seen[0] != http.StatusBadGateway {
+		t.Fatalf("observer calls = %v", seen)
+	}
+}
+
+func TestUpstreamFailureObserverIgnoresCanceledRequests(t *testing.T) {
+	var mu sync.Mutex
+	var seen []int
+	var openErr error
+	remote := &fakeRemote{openErr: func(*http.Request) error { return openErr }}
+	server := newProxyForTest(t, remote, Config{OnUpstreamFailure: func(code int) {
+		mu.Lock()
+		seen = append(seen, code)
+		mu.Unlock()
+	}})
+	session, err := server.NewSession(newSource())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	openErr = &securehttp.Error{Kind: securehttp.KindCanceled}
+	handleRequest(t, server, sessionRequest(t, session, http.MethodGet))
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	openErr = &securehttp.Error{Kind: securehttp.KindNetwork}
+	handleRequest(t, server, sessionRequest(t, session, http.MethodGet).WithContext(canceled))
+
+	mu.Lock()
+	if len(seen) != 0 {
+		t.Fatalf("canceled requests reported failures: %v", seen)
+	}
+	mu.Unlock()
+
+	handleRequest(t, server, sessionRequest(t, session, http.MethodGet))
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 1 || seen[0] != 0 {
+		t.Fatalf("network failure calls = %v", seen)
+	}
+}
