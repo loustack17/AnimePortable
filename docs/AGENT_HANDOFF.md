@@ -13,7 +13,8 @@ observed_head: see git log; CI speed-up (D3) merged to main  # check `gh run lis
 active_work: >
   Loop 30 is next. CI speed-up (D3) is done: local native suite (plain, race, 20x repeat) passes in about 90 s;
   CI uses MSYS2 MINGW64 gcc without system upgrade plus pinned mesa-dist-win 26.2.4, about 3.3 min (run 38504108599).
-active_acceptance: Loop 30 checks in docs/loops/LOOP30.md.budgets: >
+active_acceptance: Loop 30 checks in docs/loops/LOOP30.md.
+budgets: >
   D1, D2 and D3 are complete.
   Loop 30 corrections are counted in docs/loops/LOOP30.md section 7.
 loop30:
@@ -26,9 +27,9 @@ loop30:
     CI run 38444662617 for it is green. No improvement is claimed until the owner tests it.
   details: docs/loops/LOOP30.md
 next_actions:
-  - 2. Note for users: after migration 0003 an older app version refuses to open the database; keep a backup before downgrading.
-  - 3. Resume Loop 30. Deliver the latest green CI build of main (it contains e8f0640), remove old binaries and caches (keep data/ and evidence), and ask the owner for one 30 to 60 second test of the same clip.
-  - 4. After that test, judge the new diagnostic report with TypeSafe (de-identified numbers only) before any further fix. If there is no improvement, record that.
+  - 1. Note for users: after migration 0003 an older app version refuses to open the database; keep a backup before downgrading.
+  - 2. Resume Loop 30. Deliver the latest green CI build of main (it contains e8f0640), remove old binaries and caches (keep data/ and evidence), and ask the owner for one 30 to 60 second test of the same clip.
+  - 3. After that test, judge the new diagnostic report with TypeSafe (de-identified numbers only) before any further fix. If there is no improvement, record that.
 do_not_repeat:
   - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt (CI run 38503790967 link failure).
   - Do not research libmpv licensing again; the owner settled it in ADR-023.
