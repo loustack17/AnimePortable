@@ -7,18 +7,17 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: IN_PROGRESS
-branch: claude/funny-lalande-549e51 (worktree, uncommitted)
+status: PASS
+branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  Loop 31 (Following), approved 2026-10-14. Built and reviewed, uncommitted; test build in artifacts/test-build/.
-  Owner check passed 2026-10-14 (docs/loops/LOOP31.md). Waiting for commit and push approval, then CI.
-active_acceptance: docs/loops/LOOP31.md
+  None. Loop 31 passed on 2026-10-14 (docs/loops/LOOP31.md, CI 38660646062). Loop 32 (History and Continue
+  Watching) is next and needs owner approval to start.
+active_acceptance: none
 next_actions:
-  - 1. With owner approval, commit and push Loop 31; then mark LOOP31.md PASS and update STATUS.md.
-  - 2. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
-  - 3. Pre-existing flaky failurelog tests (dropped write on Windows rename) block a fully green local race; propose a fix to the owner.
-  - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
+  - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
+  - 2. Ask the owner before starting Loop 32.
+  - 3. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
   - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt.
   - Do not research libmpv licensing again; settled in ADR-023.

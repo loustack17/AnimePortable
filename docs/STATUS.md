@@ -6,7 +6,7 @@ Updated 2026-10-14. Branch `main`.
 
 ## Current state
 
-Loops 1 to 30 pass. Loop 30 (anime detail and episode UI) was accepted on 2026-10-14: smooth playback (missing `fltk.Lock()` fixed), playback failures shown and logged in `playback-failures.log`, AniList/Bangumi cover and synopsis in Taiwan Traditional Chinese, general title matching, ascending episodes. Next is Loop 31 (Following UI). Loops 31-33 were reordered: Following, History, then Schedule, which needs owner approval to start.
+Loops 1 to 31 pass. Loop 31 (Following) was accepted on 2026-10-14: 追蹤 page with latest and watched episode and a 有新集數 badge from local data (shows when Anime1 is unreachable), episode numbers stored by migration 0004, follow and unfollow as a star icon. Commits a1a6dc6 and 6373957 (failure-log flake fix); CI 38660646062 green. Next is Loop 32 (History and Continue Watching), which needs owner approval to start. Loop 30 (anime detail and episode UI) was accepted on 2026-10-14: smooth playback (missing `fltk.Lock()` fixed), playback failures shown and logged in `playback-failures.log`, AniList/Bangumi cover and synopsis in Taiwan Traditional Chinese, general title matching, ascending episodes.
 
 Platform: Windows amd64 only. Native tests run locally (about 90 seconds including race) and in GitHub Windows CI.
 
@@ -14,8 +14,8 @@ Platform: Windows amd64 only. Native tests run locally (about 90 seconds includi
 
 | Loops | Status |
 | --- | --- |
-| 1 to 30 | PASS. Loop 30 details: [loops/LOOP30.md](loops/LOOP30.md) |
-| 31 to 38 | NOT_STARTED (roadmap shortened 2026-10-14) |
+| 1 to 31 | PASS. Loop 31 details: [loops/LOOP31.md](loops/LOOP31.md) |
+| 32 to 38 | NOT_STARTED (roadmap shortened 2026-10-14) |
 
 ## Open items
 

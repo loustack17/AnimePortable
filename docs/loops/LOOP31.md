@@ -2,7 +2,7 @@
 
 # Loop 31: Following
 
-Status: OWNER PASS (2026-10-14); waiting for commit, push and CI.
+Status: PASS (owner accepted 2026-10-14). Commits a1a6dc6 (Loop 31) and 6373957 (failure-log flake fix); CI 38660646062 green.
 
 ## Goal
 
@@ -44,10 +44,10 @@ Test build: `artifacts/test-build/AnimePortable.exe` (uncommitted worktree build
 
 ## Status
 
-- Local: full native suite green; race green except a pre-existing intermittent failure in `apps/desktop/backend/failurelog_test.go` (one log line dropped when a Windows file replace fails; also fails on clean HEAD 8f61bff; TypeSafe FLAKY, evidence in `artifacts/evidence/loop31/`). Not changed in this loop.
+- Local: full native suite and race green on 6373957. The earlier intermittent failure-log test failure (a Windows file replace briefly denied, so a line was dropped) was pre-existing and is fixed by 6373957 (bounded retry); TypeSafe evidence in `artifacts/evidence/loop31/`.
 - Independent review: no MUST_FIX after fixes (number-based 有新集數, refresh interval, failure wording, scroll and focus). Removed core source-based tests judged NOT_WEAKENED.
 - Owner check 1 (2026-10-14): HUMAN_FAIL. The owner wants follow as an icon (heart, pin or star) at the far right of the detail button row, aligned with the right edge of the episode list, not a text button in the middle. Fix: a star icon button (outline = not followed, filled accent = followed, tooltip 追蹤/取消追蹤) placed flush with the episode list. Build EXE SHA-256 `357B2062…43AC`.
 - Owner check 2 (2026-10-14): HUMAN_FAIL. The star stuck out past the episode rows (it used the scroll area's edge, not the rows' edge, which are inset 19 px), and 取消追蹤 on the 追蹤 page was still text. Fix: one shared episode-row span for rows and the icon; the 追蹤 page unfollow is a filled star aligned with 更新集數. Tests now check both right edges at three window sizes. Build EXE SHA-256 `123A38E5…1E93`.
 - Owner check 3 (2026-10-14): PASS for the icon layout: stars aligned, follow and unfollow by star work, alignment holds when resizing (owner: all 4 steps passed). Restart persistence not yet confirmed by the owner.
 - Owner check 4 (2026-10-14): PASS. After a restart the anime is still followed with the same episode state.
-- Pending: commit and push approval, GitHub Windows CI.
+- Pushed to main with owner approval; GitHub Windows CI 38660646062 green for 6373957.
