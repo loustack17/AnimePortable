@@ -192,5 +192,5 @@ jobs:
         run: |
           $notes = "docs/releases/$env:GITHUB_REF_NAME.md"
           if (-not (Test-Path -LiteralPath $notes)) { throw "Release notes missing: $notes" }
-          gh release create $env:GITHUB_REF_NAME $env:RELEASE_ZIP --prerelease --verify-tag --title "AnimePortable $env:GITHUB_REF_NAME" --notes-file $notes
+          gh release create $env:GITHUB_REF_NAME $env:RELEASE_ZIP --prerelease --verify-tag --title $env:GITHUB_REF_NAME --notes-file $notes
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

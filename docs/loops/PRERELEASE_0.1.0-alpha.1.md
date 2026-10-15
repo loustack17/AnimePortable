@@ -2,7 +2,7 @@
 
 # Pre-release v0.1.0-alpha.1
 
-Status: IN PROGRESS (owner approved on 2026-10-15: "如果適合就發吧", after agreeing it is an alpha, not a beta).
+Status: PASS. Published 2026-10-15 (owner approved: "如果適合就發吧", after agreeing it is an alpha, not a beta). https://github.com/loustack17/AnimePortable/releases/tag/v0.1.0-alpha.1
 
 ## Goal
 
@@ -21,3 +21,10 @@ Publish the current Windows app as a GitHub pre-release so the core flow (search
 ## Owner check
 
 Download the ZIP from the GitHub release page, unzip it to a new folder, run `animeportable.exe`, search for an anime and play an episode.
+
+## Result
+
+- Release job added in 399b5e0 (CI 38682949488 green on main, release skipped). Tag v0.1.0-alpha.1 on 399b5e0: CI 38683446055 green, windows and release jobs passed.
+- Published asset `AnimePortable-v0.1.0-alpha.1-windows-amd64.zip` (SHA-256 `5AB9B70F…B4DC`), marked pre-release. Downloaded and checked: 5 files as listed above, `libmpv-2.dll` SHA-256 equals the pin, the unzipped app starts and creates `data/`.
+- Release title changed to the version alone (owner request); the release job now uses the tag as the title.
+- Owner check 2026-10-15: PASS. The downloaded ZIP runs; search and playback work.

@@ -16,7 +16,8 @@ active_work: >
 active_acceptance: none
 next_actions:
   - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
-  - 2. Ask the owner before starting Loop 32.
+  - 2. v0.1.0-alpha.1 passed the owner check. Ask the owner before starting Loop 32.
+  - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
   - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
