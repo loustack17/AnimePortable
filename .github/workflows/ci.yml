@@ -146,3 +146,51 @@ jobs:
           path: ${{ runner.temp }}/animeportable.exe
           if-no-files-found: error
           retention-days: 7
+  release:
+    # Publishes a pre-release ZIP for v* tags, only after every Windows check above passes.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.26.9
+      - name: Download tested executable
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: windows-desktop-${{ github.sha }}
+          path: ${{ runner.temp }}/release-bin
+      - name: Download pinned libmpv
+        shell: pwsh
+        run: |
+          # The upstream release named in docs/LIBMPV_RUNTIME_NOTICE.txt; the DLL hash is checked again when packaging.
+          $archive = Join-Path $env:RUNNER_TEMP 'mpv-dev-x86_64-20260811-git-ad59ff1.7z'
+          & curl.exe --fail --location --proto '=https' --proto-redir '=https' --retry 3 --max-time 300 --max-filesize 67108864 --output $archive 'https://github.com/Predidit/libmpv-win32-video-cmake/releases/download/20260811/mpv-dev-x86_64-20260811-git-ad59ff1.7z'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne '0161AD026F9EBD418A9B660C8E8C569F7959B5BB8E5F4A63E462FFC73327D4D8') { throw 'libmpv archive hash mismatch' }
+          $directory = Join-Path $env:RUNNER_TEMP 'libmpv'
+          & 7z e $archive "-o$directory" 'libmpv-2.dll' -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "ANIMEPORTABLE_LIBMPV_DLL=$(Join-Path $directory 'libmpv-2.dll')"
+      - name: Package portable ZIP
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          $pin = (Select-String -LiteralPath ../../internal/runtimepin/libmpv.go -Pattern '"([0-9a-f]{64})"').Matches[0].Groups[1].Value
+          $env:ANIMEPORTABLE_LIBMPV_SHA256 = $pin
+          $zip = Join-Path $env:RUNNER_TEMP "AnimePortable-$env:GITHUB_REF_NAME-windows-amd64.zip"
+          & ./build/windows/package.ps1 -Arch amd64 -Binary (Join-Path $env:RUNNER_TEMP 'release-bin\animeportable.exe') -Output $zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RELEASE_ZIP=$zip"
+      - name: Publish pre-release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = "docs/releases/$env:GITHUB_REF_NAME.md"
+          if (-not (Test-Path -LiteralPath $notes)) { throw "Release notes missing: $notes" }
+          gh release create $env:GITHUB_REF_NAME $env:RELEASE_ZIP --prerelease --verify-tag --title "AnimePortable $env:GITHUB_REF_NAME" --notes-file $notes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
