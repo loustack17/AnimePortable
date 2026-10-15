@@ -113,7 +113,7 @@ func (service *Service) Detail(ctx context.Context, animeID string) (Detail, err
 	if err != nil {
 		return Detail{}, safeError(err)
 	}
-	result.Following = slices.Contains(following, localAnimeID)
+	result.Following = slices.ContainsFunc(following, func(item core.FollowedAnime) bool { return item.AnimeID == localAnimeID })
 	metadataValue, err := store.Metadata(operationCtx, localAnimeID)
 	if errors.Is(err, core.ErrNotFound) {
 		return result, nil
@@ -237,6 +237,8 @@ func (service *Service) Following(ctx context.Context) ([]Following, error) {
 			HasAvailable:          entry.HasAvailable,
 			HasWatched:            entry.HasWatched,
 			NewEpisode:            entry.NewEpisode,
+			RecentlyUpdated:       entry.RecentlyUpdated,
+			LatestSeenAt:          formatOptionalTime(entry.LatestSeenAt),
 		})
 	}
 	return result, nil

@@ -43,6 +43,10 @@ type Following struct {
 	HasAvailable          bool   `json:"hasAvailable"`
 	HasWatched            bool   `json:"hasWatched"`
 	NewEpisode            bool   `json:"newEpisode"`
+	// RecentlyUpdated marks Home's 近期更新: a latest episode first seen in the last 7 days,
+	// after the anime was followed, and not yet watched. LatestSeenAt is RFC 3339 or empty.
+	RecentlyUpdated bool   `json:"recentlyUpdated"`
+	LatestSeenAt    string `json:"latestSeenAt"`
 }
 
 type History struct {

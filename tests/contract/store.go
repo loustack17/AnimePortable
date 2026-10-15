@@ -231,9 +231,9 @@ func containsSourceRef(items []core.SourceRef, expected core.SourceRef) bool {
 	return false
 }
 
-func containsAnimeID(items []core.AnimeID, expected core.AnimeID) bool {
+func containsAnimeID(items []core.FollowedAnime, expected core.AnimeID) bool {
 	for _, item := range items {
-		if item == expected {
+		if item.AnimeID == expected && !item.FollowedAt.IsZero() {
 			return true
 		}
 	}

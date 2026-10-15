@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"animeportable/core"
 )
@@ -125,8 +126,8 @@ func TestEpisodeMappingsUpgradeFromInitialSchema(t *testing.T) {
 	if err := store.db.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&migrations); err != nil {
 		t.Fatal(err)
 	}
-	if migrations != 4 {
-		t.Fatalf("upgraded migration count = %d, want 4", migrations)
+	if migrations != 5 {
+		t.Fatalf("upgraded migration count = %d, want 5", migrations)
 	}
 	if _, err := store.db.Exec("SELECT 1 FROM episode_mappings LIMIT 1"); err != nil {
 		t.Fatalf("upgraded mapping table unavailable: %v", err)
@@ -262,4 +263,83 @@ func episodeRef(provider, animeID, episodeID string) core.EpisodeRef {
 
 func mapping(animeID, episodeID string, ref core.EpisodeRef) core.EpisodeMapping {
 	return core.EpisodeMapping{AnimeID: core.AnimeID(animeID), EpisodeID: core.EpisodeID(episodeID), Ref: ref}
+}
+
+func TestEpisodeFirstSeenIsKeptAndFollowTimeIsRecorded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	store := openLibraryStore(t, path)
+	defer store.Close()
+	ctx := context.Background()
+	if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
+		t.Fatal(err)
+	}
+	ref := episodeRef("provider", "source-anime", "source-episode")
+	if err := store.SaveSourceRef(ctx, core.AnimeID("anime"), ref.Anime); err != nil {
+		t.Fatal(err)
+	}
+	first := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
+	saved := mapping("anime", "episode", ref)
+	saved.Number, saved.FirstSeenAt = "1", first
+	if err := store.SaveEpisodeMapping(ctx, saved); err != nil {
+		t.Fatal(err)
+	}
+	again := saved
+	again.Number, again.FirstSeenAt = "01", first.Add(48*time.Hour)
+	if err := store.SaveEpisodeMapping(ctx, again); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.EpisodeMappings(ctx, core.AnimeID("anime"))
+	if err != nil || len(got) != 1 || !got[0].FirstSeenAt.Equal(first) || got[0].Number != "01" {
+		t.Fatalf("mappings = %#v, %v, want first seen %v kept and number updated", got, err, first)
+	}
+
+	before := time.Now().Add(-time.Second)
+	if err := store.SetFollowing(ctx, core.AnimeID("anime"), true); err != nil {
+		t.Fatal(err)
+	}
+	followed, err := store.Following(ctx)
+	if err != nil || len(followed) != 1 || followed[0].FollowedAt.Before(before) {
+		t.Fatalf("following = %#v, %v, want a follow time after %v", followed, err, before)
+	}
+	original := followed[0].FollowedAt
+	if err := store.SetFollowing(ctx, core.AnimeID("anime"), true); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := store.Following(ctx); err != nil || len(again) != 1 || !again[0].FollowedAt.Equal(original) {
+		t.Fatalf("following again = %#v, %v, want the original time %v", again, err, original)
+	}
+}
+
+func TestRecentUpdateMigrationStampsExistingFollows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	var previous []migration
+	for version, name := range []string{"0001_initial.sql", "0002_episode_mappings.sql", "0003_drop_settings_mpv_path.sql", "0004_episode_number.sql"} {
+		sql, err := migrationFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous = append(previous, migration{version: version + 1, name: name, sql: string(sql)})
+	}
+	legacy, err := open(context.Background(), path, migrationSource{migrations: previous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`INSERT INTO anime (id, title, native_title, description) VALUES ('anime', '', '', '')`,
+		`INSERT INTO following (anime_id) VALUES ('anime')`,
+	} {
+		if _, err := legacy.db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now().Add(-time.Minute)
+	store := openLibraryStore(t, path)
+	defer store.Close()
+	followed, err := store.Following(context.Background())
+	if err != nil || len(followed) != 1 || followed[0].FollowedAt.Before(before) {
+		t.Fatalf("following after upgrade = %#v, %v, want the migration time", followed, err)
+	}
 }

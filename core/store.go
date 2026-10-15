@@ -15,7 +15,7 @@ type Store interface {
 	SaveMetadata(ctx context.Context, animeID AnimeID, metadata AnimeMetadata) error
 	Metadata(ctx context.Context, animeID AnimeID) (AnimeMetadata, error)
 	SetFollowing(ctx context.Context, animeID AnimeID, following bool) error
-	Following(ctx context.Context) ([]AnimeID, error)
+	Following(ctx context.Context) ([]FollowedAnime, error)
 	AddHistory(ctx context.Context, entry HistoryEntry) error
 	History(ctx context.Context) ([]HistoryEntry, error)
 	RemoveHistory(ctx context.Context, animeID AnimeID) error

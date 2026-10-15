@@ -5,6 +5,7 @@ package backend
 import (
 	"context"
 	"strings"
+	"time"
 
 	"animeportable/core"
 	metadata "animeportable/internal/metadata"
@@ -49,6 +50,8 @@ func (service *Service) ingestEpisodes(ctx context.Context, store core.Store, an
 	for _, mapping := range mappings {
 		known[mapping.Ref] = mapping
 	}
+	// One time for the whole list, so a batch of newly seen episodes shares it.
+	seenAt := time.Now()
 	result := make([]Episode, 0, len(items))
 	for _, item := range items {
 		if item.Ref.Anime != parent || item.Ref.ID == "" || strings.TrimSpace(item.Ref.Anime.Provider) == "" {
@@ -65,7 +68,7 @@ func (service *Service) ingestEpisodes(ctx context.Context, store core.Store, an
 			if idErr != nil {
 				return nil, idErr
 			}
-			mapping = core.EpisodeMapping{AnimeID: animeID, EpisodeID: core.EpisodeID(value), Ref: item.Ref}
+			mapping = core.EpisodeMapping{AnimeID: animeID, EpisodeID: core.EpisodeID(value), Ref: item.Ref, FirstSeenAt: seenAt}
 		}
 		// Save new mappings, and known ones whose number is missing or changed, so
 		// Following can show the latest episode without the source.

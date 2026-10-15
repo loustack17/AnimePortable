@@ -24,6 +24,10 @@ func (store *Store) SaveEpisodeMapping(ctx context.Context, mapping core.Episode
 	if !validEpisodeMapping(mapping) {
 		return ErrInvalidInput
 	}
+	firstSeen, err := encodeStoredTime(mapping.FirstSeenAt)
+	if err != nil {
+		return err
+	}
 	return store.withDB(ctx, func(db *sql.DB) error {
 		if err := requireAnime(ctx, db, mapping.AnimeID); err != nil {
 			return err
@@ -40,14 +44,14 @@ func (store *Store) SaveEpisodeMapping(ctx context.Context, mapping core.Episode
 		}
 
 		result, err := db.ExecContext(ctx, `INSERT INTO episode_mappings (
-			anime_id, episode_id, provider, provider_anime_id, provider_episode_id, number
-		) SELECT ?, ?, ?, ?, ?, ?
+			anime_id, episode_id, provider, provider_anime_id, provider_episode_id, number, first_seen_at
+		) SELECT ?, ?, ?, ?, ?, ?, ?
 		WHERE NOT EXISTS (
 			SELECT 1 FROM episode_mappings
 			WHERE provider = ? AND provider_anime_id = ? AND provider_episode_id = ?
 		)
 		ON CONFLICT(anime_id, episode_id, provider, provider_anime_id, provider_episode_id) DO NOTHING`,
-			mapping.AnimeID, mapping.EpisodeID, mapping.Ref.Anime.Provider, mapping.Ref.Anime.ID, mapping.Ref.ID, mapping.Number,
+			mapping.AnimeID, mapping.EpisodeID, mapping.Ref.Anime.Provider, mapping.Ref.Anime.ID, mapping.Ref.ID, mapping.Number, firstSeen,
 			mapping.Ref.Anime.Provider, mapping.Ref.Anime.ID, mapping.Ref.ID)
 		if err != nil {
 			return err
@@ -74,6 +78,8 @@ func (store *Store) SaveEpisodeMapping(ctx context.Context, mapping core.Episode
 		if ownerAnime != mapping.AnimeID || ownerEpisode != mapping.EpisodeID {
 			return ErrIdentityConflict
 		}
+		// first_seen_at keeps the first save's time: a later save means the episode was
+		// seen again, not that it is new.
 		if mapping.Number == "" {
 			// A caller without the number must not erase one learned earlier.
 			return nil
@@ -91,7 +97,7 @@ func (store *Store) EpisodeMappings(ctx context.Context, animeID core.AnimeID) (
 		return items, ErrInvalidInput
 	}
 	err := store.withDB(ctx, func(db *sql.DB) error {
-		rows, err := db.QueryContext(ctx, `SELECT episode_id, provider, provider_anime_id, provider_episode_id, number
+		rows, err := db.QueryContext(ctx, `SELECT episode_id, provider, provider_anime_id, provider_episode_id, number, first_seen_at
 			FROM episode_mappings
 			WHERE anime_id = ?
 			ORDER BY episode_id, provider, provider_anime_id, provider_episode_id`, animeID)
@@ -103,7 +109,11 @@ func (store *Store) EpisodeMappings(ctx context.Context, animeID core.AnimeID) (
 			var mapping core.EpisodeMapping
 			mapping.AnimeID = animeID
 			mapping.Ref.Anime = core.SourceRef{}
-			if err := rows.Scan(&mapping.EpisodeID, &mapping.Ref.Anime.Provider, &mapping.Ref.Anime.ID, &mapping.Ref.ID, &mapping.Number); err != nil {
+			var firstSeen string
+			if err := rows.Scan(&mapping.EpisodeID, &mapping.Ref.Anime.Provider, &mapping.Ref.Anime.ID, &mapping.Ref.ID, &mapping.Number, &firstSeen); err != nil {
+				return err
+			}
+			if mapping.FirstSeenAt, err = decodeStoredTime(firstSeen); err != nil {
 				return err
 			}
 			items = append(items, mapping)

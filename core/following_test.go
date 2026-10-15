@@ -211,3 +211,114 @@ func TestEpisodeNumberValue(t *testing.T) {
 		}
 	}
 }
+
+func TestAppListFollowingRecentUpdateRule(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	followedAt := now.Add(-10 * 24 * time.Hour)
+	tests := []struct {
+		name     string
+		latestAt time.Time
+		history  []HistoryEntry
+		want     bool
+	}{
+		{name: "new episode two days ago", latestAt: now.Add(-48 * time.Hour), want: true},
+		{name: "new episode, earlier one watched", latestAt: now.Add(-48 * time.Hour), history: []HistoryEntry{played("anime", "ep-1", 1)}, want: true},
+		{name: "exactly seven days", latestAt: now.Add(-RecentUpdateWindow), want: true},
+		{name: "older than seven days", latestAt: now.Add(-RecentUpdateWindow - time.Minute), want: false},
+		{name: "already there when followed", latestAt: followedAt.Add(-time.Hour), want: false},
+		{name: "first seen not recorded", want: false},
+		{name: "latest already watched", latestAt: now.Add(-time.Hour), history: []HistoryEntry{played("anime", "ep-2", 1)}, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			animeRef := SourceRef{Provider: "source", ID: "anime"}
+			store := &fakeStore{
+				following:  []AnimeID{"anime"},
+				followedAt: followedAt,
+				episodeMappings: map[AnimeID][]EpisodeMapping{"anime": {
+					{AnimeID: "anime", EpisodeID: "ep-1", Ref: EpisodeRef{Anime: animeRef, ID: "1"}, Number: "1", FirstSeenAt: followedAt.Add(-time.Hour)},
+					{AnimeID: "anime", EpisodeID: "ep-2", Ref: EpisodeRef{Anime: animeRef, ID: "2"}, Number: "2", FirstSeenAt: test.latestAt},
+				}},
+				history: test.history,
+			}
+			app := NewApp(nil, &fakePlayer{}, store)
+			app.now = func() time.Time { return now }
+			entries, err := app.ListFollowing(context.Background())
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("entries = %#v, %v", entries, err)
+			}
+			if entries[0].RecentlyUpdated != test.want || !entries[0].LatestSeenAt.Equal(test.latestAt) {
+				t.Fatalf("entry = %#v, want RecentlyUpdated %v and LatestSeenAt %v", entries[0], test.want, test.latestAt)
+			}
+		})
+	}
+}
+
+func TestAppListFollowingRecentUpdateUsesEarliestSightingOfTheNumber(t *testing.T) {
+	// Episode 13 under two local IDs: the update happened when the first one appeared.
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	animeRef := SourceRef{Provider: "source", ID: "anime"}
+	early, late := now.Add(-9*24*time.Hour), now.Add(-time.Hour)
+	store := &fakeStore{
+		following: []AnimeID{"anime"},
+		episodeMappings: map[AnimeID][]EpisodeMapping{"anime": {
+			{AnimeID: "anime", EpisodeID: "a-13", Ref: EpisodeRef{Anime: animeRef, ID: "a"}, Number: "13", FirstSeenAt: late},
+			{AnimeID: "anime", EpisodeID: "b-13", Ref: EpisodeRef{Anime: animeRef, ID: "b"}, Number: "13", FirstSeenAt: early},
+		}},
+	}
+	app := NewApp(nil, &fakePlayer{}, store)
+	app.now = func() time.Time { return now }
+	entries, err := app.ListFollowing(context.Background())
+	if err != nil || len(entries) != 1 || entries[0].RecentlyUpdated || !entries[0].LatestSeenAt.Equal(early) {
+		t.Fatalf("entries = %#v, %v, want episode 13 first seen 9 days ago (not recent)", entries, err)
+	}
+}
+
+func TestAppListFollowingFirstStoredListAndLegacyRowsAreNotUpdates(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	followedAt := now.Add(-time.Hour)
+	animeRef := SourceRef{Provider: "source", ID: "anime"}
+	mappingAt := func(id EpisodeID, number string, seen time.Time) EpisodeMapping {
+		return EpisodeMapping{AnimeID: "anime", EpisodeID: id, Ref: EpisodeRef{Anime: animeRef, ID: string(id)}, Number: number, FirstSeenAt: seen}
+	}
+	tests := []struct {
+		name     string
+		mappings []EpisodeMapping
+		want     bool
+	}{
+		{
+			// The star was clicked before the episode list finished loading.
+			name:     "first list stored after the follow",
+			mappings: []EpisodeMapping{mappingAt("ep-1", "1", now.Add(-time.Minute)), mappingAt("ep-2", "2", now.Add(-time.Minute))},
+			want:     false,
+		},
+		{
+			name:     "later episode after that first list",
+			mappings: []EpisodeMapping{mappingAt("ep-1", "1", now.Add(-time.Minute)), mappingAt("ep-2", "2", now.Add(-time.Second))},
+			want:     true,
+		},
+		{
+			// Episode 2 was known before times were recorded; a re-upload is not new.
+			// Followed before the upgrade: episodes 1 and 2 have no recorded time.
+			name:     "new episode after rows of unknown time",
+			mappings: []EpisodeMapping{mappingAt("ep-1", "1", time.Time{}), mappingAt("ep-2", "2", time.Time{}), mappingAt("ep-3", "3", now.Add(-time.Second))},
+			want:     true,
+		},
+		{
+			name:     "re-uploaded episode with an older row of unknown time",
+			mappings: []EpisodeMapping{mappingAt("ep-1", "1", time.Time{}), mappingAt("ep-2", "2", time.Time{}), mappingAt("ep-2b", "2", now.Add(-time.Second))},
+			want:     false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &fakeStore{following: []AnimeID{"anime"}, followedAt: followedAt, episodeMappings: map[AnimeID][]EpisodeMapping{"anime": test.mappings}}
+			app := NewApp(nil, &fakePlayer{}, store)
+			app.now = func() time.Time { return now }
+			entries, err := app.ListFollowing(context.Background())
+			if err != nil || len(entries) != 1 || entries[0].RecentlyUpdated != test.want {
+				t.Fatalf("entries = %#v, %v, want RecentlyUpdated %v", entries, err, test.want)
+			}
+		})
+	}
+}

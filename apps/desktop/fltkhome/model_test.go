@@ -4,8 +4,10 @@ package fltkhome
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"animeportable/apps/desktop/backend"
 )
@@ -49,19 +51,12 @@ func TestSelectHomeRowsUsesOnlyLatestResumableEpisodePerAnime(t *testing.T) {
 	}
 }
 
-func TestFollowingRowsBoundUseKnownNamesAndPutNewEpisodesFirst(t *testing.T) {
+func TestFollowingRowsUseKnownNamesAndPutNewEpisodesFirst(t *testing.T) {
 	items := []backend.Following{{AnimeID: "known"}, {AnimeID: "missing"}, {AnimeID: "new", NewEpisode: true}}
 	library := []backend.Anime{{ID: "known", Title: "  作品名稱  "}, {ID: "new", Title: "新作品"}}
-	got := followingRows(items, library, 2)
-	if len(got) != 2 || got[0].Anime.ID != "new" || !got[0].New || got[1].Anime.Title != "作品名稱" || got[1].New {
+	got := followingRows(items, library)
+	if len(got) != 3 || got[0].Anime.ID != "new" || !got[0].New || got[1].Anime.Title != "作品名稱" || got[1].New || got[2].Anime.ID != "missing" || got[2].Anime.Title != "未知作品" {
 		t.Fatalf("following rows = %#v", got)
-	}
-	all := followingRows(items, library, rowLimit)
-	if len(all) != 3 || all[2].Anime.ID != "missing" || all[2].Anime.Title != "未知作品" {
-		t.Fatalf("following rows = %#v", all)
-	}
-	if got := followingRows(items, library, 0); got != nil {
-		t.Fatalf("zero limit returned %#v, want nil", got)
 	}
 }
 
@@ -139,5 +134,49 @@ func TestEpisodeNumberUsesExactIDAndSafeFallback(t *testing.T) {
 	}
 	if got := homeCaption(homeRow{History: backend.History{Position: 754000}}); got != "集數：未知 · 上次播放位置 12:34" {
 		t.Fatalf("fallback caption = %q", got)
+	}
+}
+
+func TestRecentUpdateRowsFilterOrderLimitAndCaption(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	seen := func(hours int) string { return now.Add(-time.Duration(hours) * time.Hour).Format(time.RFC3339Nano) }
+	following := []backend.Following{
+		{AnimeID: "old", LatestAvailableNumber: "3", RecentlyUpdated: true, LatestSeenAt: seen(50)},
+		{AnimeID: "today", LatestAvailableNumber: "12", RecentlyUpdated: true, LatestSeenAt: seen(2)},
+		{AnimeID: "not-recent", LatestAvailableNumber: "5", LatestSeenAt: seen(1)},
+		{AnimeID: "yesterday", LatestAvailableNumber: "SP", RecentlyUpdated: true, LatestSeenAt: seen(30)},
+		{AnimeID: "bad-time", RecentlyUpdated: true, LatestSeenAt: "not a time"},
+	}
+	library := []backend.Anime{{ID: "old", Title: "舊"}, {ID: "today", Title: "今天"}, {ID: "yesterday", Title: "昨天"}}
+	rows := recentUpdateRows(following, library, 6, now)
+	got := make([]string, 0, len(rows))
+	for _, row := range rows {
+		got = append(got, row.Anime.Title+"|"+row.Status)
+	}
+	want := []string{"今天|第 12 集 · 今天", "昨天|第 SP 集 · 昨天", "舊|第 3 集 · 2 天前"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("rows = %#v, want %#v", got, want)
+	}
+	if limited := recentUpdateRows(following, library, 2, now); len(limited) != 2 || limited[0].Anime.ID != "today" {
+		t.Fatalf("limited rows = %#v", limited)
+	}
+	if recentUpdateEmptyText(nil) == recentUpdateEmptyText(following) {
+		t.Fatal("empty text does not tell no follows from no updates")
+	}
+}
+
+func TestDaysAgoCountsLocalCalendarDays(t *testing.T) {
+	now := time.Date(2026, 10, 14, 8, 0, 0, 0, time.Local)
+	for _, test := range []struct {
+		at   time.Time
+		want string
+	}{
+		{now.Add(-time.Hour), "今天"},
+		{time.Date(2026, 10, 13, 23, 0, 0, 0, time.Local), "昨天"},
+		{time.Date(2026, 10, 12, 9, 0, 0, 0, time.Local), "2 天前"},
+	} {
+		if got := daysAgo(now, test.at); got != test.want {
+			t.Errorf("daysAgo(%v) = %q, want %q", test.at, got, test.want)
+		}
 	}
 }

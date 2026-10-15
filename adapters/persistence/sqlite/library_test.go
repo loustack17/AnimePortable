@@ -298,10 +298,10 @@ func TestLibraryListsAreDeterministicNonNilAndHonorContext(t *testing.T) {
 	if got, err := store.SourceRefs(ctx, "anime-a"); err != nil || !reflect.DeepEqual(got, []core.SourceRef{{Provider: "a", ID: "2"}, {Provider: "z", ID: "1"}}) {
 		t.Fatalf("source list = %#v, %v", got, err)
 	}
-	if got, err := store.Following(ctx); err != nil || !reflect.DeepEqual(got, []core.AnimeID{"anime-a", "anime-b", "anime-c"}) {
+	if got, err := store.Following(ctx); err != nil || !reflect.DeepEqual(followedIDs(got), []core.AnimeID{"anime-a", "anime-b", "anime-c"}) {
 		t.Fatalf("following list = %#v, %v", got, err)
 	}
-	for name, list := range map[string]func(context.Context) ([]core.AnimeID, error){
+	for name, list := range map[string]func(context.Context) ([]core.FollowedAnime, error){
 		"following": store.Following,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -341,7 +341,7 @@ func assertLibraryState(t *testing.T, store *Store, anime core.Anime, ref core.S
 	if got, err := store.Metadata(ctx, anime.ID); err != nil || got != metadata {
 		t.Fatalf("metadata = %#v, %v", got, err)
 	}
-	if got, err := store.Following(ctx); err != nil || !reflect.DeepEqual(got, []core.AnimeID{anime.ID}) {
+	if got, err := store.Following(ctx); err != nil || !reflect.DeepEqual(followedIDs(got), []core.AnimeID{anime.ID}) {
 		t.Fatalf("following = %#v, %v", got, err)
 	}
 }
@@ -400,4 +400,12 @@ func exerciseIdentityWrite(t *testing.T, separate bool, write func(*Store, core.
 	if successes != 1 || conflicts != 1 {
 		t.Fatalf("successes = %d, conflicts = %d, want 1 each", successes, conflicts)
 	}
+}
+
+func followedIDs(items []core.FollowedAnime) []core.AnimeID {
+	ids := make([]core.AnimeID, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.AnimeID)
+	}
+	return ids
 }

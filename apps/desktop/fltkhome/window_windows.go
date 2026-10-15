@@ -29,6 +29,13 @@ type Service interface {
 
 const homeEpisodeLookupTimeout = 3 * time.Second
 
+// Home layout: the first section's heading and first row, and the gap between sections.
+const (
+	homeFirstSectionY = 274
+	homeFirstRowY     = 318
+	homeSectionGap    = 20
+)
+
 type view struct {
 	window        *fltk.Window
 	service       Service
@@ -115,8 +122,14 @@ type view struct {
 	previewFollow *fltk.Button
 	// followPending blocks a second follow or unfollow until the first one finishes.
 	followPending bool
-	// detailFromFollowing makes Back and Escape on the detail screen return to 追蹤.
-	detailFromFollowing      bool
+	// detailOrigin is where Back and Escape on the detail screen return to.
+	detailOrigin             detailOrigin
+	homeUpdateButtons        []*fltk.Button
+	homeUpdateOffsets        []int
+	homeCardLabels           []*fltk.Box
+	homeCardOffset           int
+	continueHeading          *fltk.Box
+	homeUpdateKey            string
 	followingPage            *fltk.Group
 	followingStatus          *fltk.Box
 	followingRefresh         *fltk.Button
@@ -130,7 +143,9 @@ type view struct {
 	followingRefreshing      bool
 	followingRefreshFailures int
 	followingRefreshTotal    int
-	followingRefreshedAt     time.Time
+	// followingRefreshAttemptedAt throttles the automatic refresh, success or not, so a
+	// failing source is not asked again on every visit to Home or 追蹤.
+	followingRefreshAttemptedAt time.Time
 }
 
 func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int)) {
@@ -263,12 +278,12 @@ func (ui *view) build() {
 		if ui.retryButton != nil && ui.retryButton.Visible() {
 			return ui.retryButton
 		}
-		if len(ui.cardButtons) > 0 {
-			return ui.cardButtons[0]
+		if list := ui.homeFocusables(); len(list) > 0 {
+			return list[0]
 		}
 		return ui.themeToggle
 	})
-	ui.contentText(253, 274, 600, 32, "繼續觀看", 20, false, true)
+	ui.continueHeading = ui.contentText(253, homeFirstSectionY, 600, 32, "繼續觀看", 20, false, true)
 	ui.loadingText = fltk.NewBox(fltk.NO_BOX, 253, 326, 680, 36, "正在載入繼續觀看…")
 	ui.loadingText.SetLabelSize(13)
 	ui.loadingText.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
@@ -388,6 +403,7 @@ func (ui *view) showSection(index int) {
 	if ui.closing || index < 0 || index >= len(sections) {
 		return
 	}
+	enteringHome := index == 0 && ui.selected != 0
 	if ui.selected != index {
 		ui.pageGeneration++
 	}
@@ -404,7 +420,7 @@ func (ui *view) showSection(index int) {
 	}
 	ui.selected = index
 	if index != 4 {
-		ui.detailFromFollowing = false
+		ui.detailOrigin = detailFromSearch
 	}
 	if ui.followingPage != nil && index != followingSection {
 		ui.followingPage.Hide()
@@ -419,6 +435,10 @@ func (ui *view) showSection(index int) {
 		ui.scroll.Show()
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
+		if enteringHome {
+			// Following and history can change on other pages; Home must not show them stale.
+			ui.refreshHome()
+		}
 	} else if index == 4 {
 		ui.contentHint.SetLabel("搜尋作品名稱，先查看已儲存的作品，再按 Enter 更新搜尋。")
 		ui.scroll.Hide()
@@ -442,15 +462,26 @@ func (ui *view) showSection(index int) {
 }
 
 func (ui *view) navigate(index int) {
+	alreadyHome := index == 0 && ui.selected == 0
 	ui.showSection(index)
-	if index == 0 {
-		if ui.homeLoading {
-			ui.homeRefreshPending = true
-			ui.hideHomeContinue()
-		} else {
-			ui.loadHome()
-		}
+	if alreadyHome {
+		// showSection reloads Home only when entering it; after playback Home may already be shown.
+		ui.refreshHome()
 	}
+}
+
+// refreshHome reloads Home, or queues one more load when a load is already running.
+func (ui *view) refreshHome() {
+	// browseButton is nil when Home was not built (views that only build Search).
+	if ui.browseButton == nil || ui.mainGroup == nil || !ui.mainGroup.Visible() {
+		return
+	}
+	if ui.homeLoading {
+		ui.homeRefreshPending = true
+		ui.hideHomeContinue()
+		return
+	}
+	ui.loadHome()
 }
 
 func (ui *view) loadHome() {
@@ -513,16 +544,15 @@ func (ui *view) loadHome() {
 }
 
 func (ui *view) hideHomeContinue() {
-	for _, button := range ui.cardButtons {
+	for _, button := range ui.homeFocusables() {
 		button.Deactivate()
 		button.Hide()
 	}
-	for index := 0; index < len(ui.rows) && index < len(ui.cards); index++ {
-		ui.cards[index].Hide()
+	for _, card := range ui.cards {
+		card.Hide()
 	}
-	labels := min(len(ui.rows)*2, len(ui.contentLabels)-ui.staticLabels)
-	for _, label := range ui.contentLabels[ui.staticLabels : ui.staticLabels+labels] {
-		label.widget.Hide()
+	for _, label := range ui.homeCardLabels {
+		label.Hide()
 	}
 }
 
@@ -546,26 +576,81 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		ui.scroll.Remove(label.widget)
 		label.widget.Destroy()
 	}
+	for _, button := range ui.homeUpdateButtons {
+		ui.scroll.Remove(button)
+		button.Destroy()
+	}
+	ui.homeUpdateButtons = nil
+	ui.homeUpdateOffsets = nil
 	ui.cardButtons = nil
 	ui.cards = nil
 	ui.homeCaptionLabels = nil
+	ui.homeCardLabels = nil
 	ui.contentLabels = ui.contentLabels[:ui.staticLabels]
-	ui.loadingText.Show()
 	ui.scroll.Begin()
+
+	// 近期更新 comes first (owner decision 2026-10-15), then 繼續觀看, then 今日播出.
+	ui.contentText(253, homeFirstSectionY, 600, 32, "近期更新", 20, false, true)
+	updates := recentUpdateRows(following, library, rowLimit, time.Now())
+	ui.homeUpdateKey = recentUpdateKey(updates)
+	updatesBottom := homeFirstRowY + len(updates)*64 - 8
+	if len(updates) == 0 {
+		ui.contentText(270, homeFirstRowY+4, 620, 22, recentUpdateEmptyText(following), 12, true, false)
+		updatesBottom = homeFirstRowY + 26
+	}
+	for index, row := range updates {
+		y := homeFirstRowY + index*64
+		button := fltk.NewButton(250, y, 711, 56, row.Anime.Title)
+		button.SetTooltip(row.Status)
+		ui.styleFollowingRow(button, row)
+		item := row.Anime
+		openRow := func() {
+			if ui.selected == 0 && !ui.homeLoading {
+				ui.openDetailFrom(detailFromHome, item)
+			}
+		}
+		ui.bindButton(button, openRow)
+		// Keyboard order follows the page: these rows, then 繼續播放 cards, then the theme toggle.
+		ui.bindContentKeys(button, openRow, func() *fltk.Button {
+			if index > 0 {
+				return ui.homeUpdateButtons[index-1]
+			}
+			return ui.browseButton
+		}, func() *fltk.Button {
+			if index+1 < len(ui.homeUpdateButtons) {
+				return ui.homeUpdateButtons[index+1]
+			}
+			if len(ui.cardButtons) > 0 {
+				return ui.cardButtons[0]
+			}
+			return ui.themeToggle
+		})
+		ui.homeUpdateButtons = append(ui.homeUpdateButtons, button)
+		ui.homeUpdateOffsets = append(ui.homeUpdateOffsets, y-homeFirstRowY)
+	}
+
+	continueY := updatesBottom + homeSectionGap
+	cardsY := continueY + homeFirstRowY - homeFirstSectionY
+	ui.homeCardOffset = cardsY - homeFirstRowY
+	ui.continueHeading.Resize(253, continueY, 600, 32)
+	ui.loadingText.Resize(253, continueY+52, 680, 36)
+	ui.retryButton.Resize(253, continueY+91, 126, 36)
+	ui.loadingText.Show()
 	if len(ui.rows) == 0 {
 		ui.loadingText.SetLabel("還沒有可繼續觀看的內容。")
 	} else {
 		ui.loadingText.Hide()
 	}
 	for index, row := range ui.rows {
-		y := 318 + index*104
+		y := cardsY + index*104
 		rowGeneration := ui.homeLoadGeneration
 		card := fltk.NewBox(fltk.NO_BOX, 250, y, 711, 92)
 		card.SetDrawHandler(func(func()) { roundedRect(card.X(), card.Y(), card.W(), card.H(), 16, ui.colors().surface) })
 		ui.cards = append(ui.cards, card)
-		ui.contentText(273, y+14, 450, 25, row.Title, 15, false, true)
+		title := ui.contentText(273, y+14, 450, 25, row.Title, 15, false, true)
 		caption := ui.contentText(273, y+48, 450, 20, homeCaption(row), 12, true, false)
 		ui.homeCaptionLabels = append(ui.homeCaptionLabels, caption)
+		ui.homeCardLabels = append(ui.homeCardLabels, title, caption)
 		button := fltk.NewButton(813, y+28, 126, 36, "繼續播放")
 		ui.styleButton(button, func() bool { return true })
 		item := row.History
@@ -574,6 +659,9 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		ui.bindContentKeys(button, playRow, func() *fltk.Button {
 			if index > 0 {
 				return ui.cardButtons[index-1]
+			}
+			if len(ui.homeUpdateButtons) > 0 {
+				return ui.homeUpdateButtons[len(ui.homeUpdateButtons)-1]
 			}
 			return ui.browseButton
 		}, func() *fltk.Button {
@@ -584,37 +672,17 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		})
 		ui.cardButtons = append(ui.cardButtons, button)
 	}
-	followY := 326 + len(ui.rows)*104
-	if len(ui.rows) == 0 {
-		followY = 385
+	todayY := continueY + 111
+	if len(ui.rows) > 0 {
+		todayY = cardsY + len(ui.rows)*104 - 12 + homeSectionGap
 	}
-	ui.contentText(253, followY, 600, 31, "追蹤中", 20, false, true)
-	followRows := followingRows(following, library, rowLimit)
-	followCount := len(followRows)
-	followHeight := 70 + max(followCount-1, 0)*34
-	card := fltk.NewBox(fltk.NO_BOX, 250, followY+39, 711, followHeight)
-	card.SetDrawHandler(func(func()) { roundedRect(card.X(), card.Y(), card.W(), card.H(), 16, ui.colors().surface) })
-	ui.cards = append(ui.cards, card)
-	if followCount == 0 {
-		ui.contentText(270, followY+58, 620, 25, "尚未追蹤任何作品。", 15, false, true)
-	} else {
-		for index, row := range followRows {
-			status := row.Status
-			if row.New {
-				status = "有新集數 · " + status
-			}
-			ui.contentText(270, followY+54+index*34, 300, 26, row.Anime.Title, 15, false, true)
-			ui.contentText(580, followY+54+index*34, 370, 26, status, 12, !row.New, row.New)
-		}
-	}
-	updateY := followY + 39 + followHeight + 22
-	ui.contentText(253, updateY, 600, 31, "最近更新", 20, false, true)
-	ui.contentText(270, updateY+37, 620, 22, "目前沒有本機更新資料。", 12, true, false)
-	ui.contentText(253, updateY+80, 600, 31, "今日播出", 20, false, true)
-	ui.contentText(270, updateY+117, 620, 22, "目前沒有本機播出資料。", 12, true, false)
+	ui.contentText(253, todayY, 600, 31, "今日播出", 20, false, true)
+	ui.contentText(270, todayY+37, 620, 22, "目前沒有本機播出資料。", 12, true, false)
 	ui.scroll.End()
 	ui.applyTheme()
 	ui.resolveHomeEpisodes(ui.homeLoadGeneration)
+	// Home shows 近期更新 from stored data; this checks Anime1 for new episodes in the background.
+	ui.refreshFollowingIfDue()
 }
 
 func (ui *view) cancelHomeEpisodeLookup() {
@@ -759,6 +827,11 @@ func (ui *view) scrollTo(y int) {
 	}
 }
 
+// homeFocusables lists Home's focusable rows in page order: 近期更新, then 繼續播放.
+func (ui *view) homeFocusables() []*fltk.Button {
+	return append(append([]*fltk.Button(nil), ui.homeUpdateButtons...), ui.cardButtons...)
+}
+
 func (ui *view) focusTarget(button *fltk.Button) {
 	if button == nil || !button.Visible() || !button.IsActive() {
 		if ui.retryButton != nil && ui.retryButton.Visible() && ui.retryButton.IsActive() {
@@ -774,7 +847,13 @@ func (ui *view) focusTarget(button *fltk.Button) {
 	}
 	for index, card := range ui.cardButtons {
 		if card == button {
-			ui.scrollTo(index * 104)
+			ui.scrollTo(ui.homeCardOffset + index*104)
+			break
+		}
+	}
+	for index, row := range ui.homeUpdateButtons {
+		if row == button && index < len(ui.homeUpdateOffsets) {
+			ui.scrollTo(ui.homeUpdateOffsets[index])
 			break
 		}
 	}
@@ -797,10 +876,10 @@ func (ui *view) bindContentKeys(button *fltk.Button, action func(), previous, ne
 				ui.focusAfterKey(func() { ui.focusTarget(ui.browseButton) })
 			}
 		case 0xff53:
-			if button == ui.browseButton && len(ui.cardButtons) > 0 {
+			if button == ui.browseButton && len(ui.homeFocusables()) > 0 {
 				ui.focusAfterKey(func() {
-					if len(ui.cardButtons) > 0 {
-						ui.focusTarget(ui.cardButtons[0])
+					if list := ui.homeFocusables(); len(list) > 0 {
+						ui.focusTarget(list[0])
 					}
 				})
 			} else if button == ui.retryButton {
@@ -855,10 +934,10 @@ func (ui *view) bindThemeKeys(action func()) {
 		case 0xff54:
 			ui.focusAfterKey(ui.focusContent)
 		case 0xff52:
-			if len(ui.cardButtons) > 0 && ui.scroll.Visible() {
+			if len(ui.homeFocusables()) > 0 && ui.scroll.Visible() {
 				ui.focusAfterKey(func() {
-					if len(ui.cardButtons) > 0 {
-						ui.focusTarget(ui.cardButtons[len(ui.cardButtons)-1])
+					if list := ui.homeFocusables(); len(list) > 0 {
+						ui.focusTarget(list[len(list)-1])
 					}
 				})
 			} else if ui.scroll.Visible() {
@@ -872,10 +951,10 @@ func (ui *view) bindThemeKeys(action func()) {
 			}
 			if ui.scroll.Visible() && ui.retryButton != nil && ui.retryButton.Visible() {
 				ui.focusAfterKey(func() { ui.focusTarget(ui.retryButton) })
-			} else if len(ui.cardButtons) > 0 && ui.scroll.Visible() {
+			} else if len(ui.homeFocusables()) > 0 && ui.scroll.Visible() {
 				ui.focusAfterKey(func() {
-					if len(ui.cardButtons) > 0 {
-						ui.focusTarget(ui.cardButtons[len(ui.cardButtons)-1])
+					if list := ui.homeFocusables(); len(list) > 0 {
+						ui.focusTarget(list[len(list)-1])
 					}
 				})
 			} else {

@@ -21,8 +21,8 @@ const followingSection = 2
 // stall the refresh of the others.
 const followingRefreshTimeout = 15 * time.Second
 
-// followingRefreshInterval is how long a successful refresh is reused when 追蹤 is opened
-// again, so returning from a detail screen does not refetch every followed anime.
+// followingRefreshInterval is the least time between automatic refreshes, so returning to
+// Home or 追蹤 does not refetch every followed anime; 更新集數 forces one.
 const followingRefreshInterval = 10 * time.Minute
 
 func (ui *view) buildFollowingView() {
@@ -52,7 +52,11 @@ func (ui *view) showFollowing() {
 	ui.followingPage.Show()
 	ui.renderFollowing()
 	ui.loadFollowing()
-	if ui.followingRefreshedAt.IsZero() || time.Since(ui.followingRefreshedAt) >= followingRefreshInterval {
+	ui.refreshFollowingIfDue()
+}
+
+func (ui *view) refreshFollowingIfDue() {
+	if ui.followingRefreshAttemptedAt.IsZero() || time.Since(ui.followingRefreshAttemptedAt) >= followingRefreshInterval {
 		ui.refreshFollowing()
 	}
 }
@@ -73,7 +77,7 @@ func (ui *view) loadFollowing() {
 			ui.followingLoaded = true
 			ui.followingLoadFailed = firstError(libraryErr, followingErr) != nil
 			if !ui.followingLoadFailed {
-				ui.followingItems = followingRows(following, library, len(following))
+				ui.followingItems = followingRows(following, library)
 			}
 			ui.renderFollowing()
 		})
@@ -85,6 +89,7 @@ func (ui *view) refreshFollowing() {
 		return
 	}
 	ui.followingRefreshing = true
+	ui.followingRefreshAttemptedAt = time.Now()
 	ui.followingRefreshFailures = 0
 	ui.renderFollowingStatus()
 	go func() {
@@ -110,11 +115,30 @@ func (ui *view) refreshFollowing() {
 				return
 			}
 			ui.followingRefreshFailures, ui.followingRefreshTotal = failures, total
-			if failures == 0 {
-				ui.followingRefreshedAt = time.Now()
-			}
 			if ui.followingVisible() {
 				ui.loadFollowing()
+			} else if ui.selected == 0 && failures < total {
+				// Some episode lists were stored, so 近期更新 may have changed.
+				ui.reloadHomeIfUpdatesChanged()
+			}
+		})
+	}()
+}
+
+// reloadHomeIfUpdatesChanged reloads Home only when its 近期更新 rows would change, because
+// a reload scrolls Home to the top and rebuilds its buttons, losing keyboard focus.
+func (ui *view) reloadHomeIfUpdatesChanged() {
+	if ui.service == nil || ui.closing || ui.ctx.Err() != nil {
+		return
+	}
+	go func() {
+		following, err := ui.service.Following(ui.ctx)
+		fltk.Awake(func() {
+			if err != nil || ui.closing || ui.ctx.Err() != nil || ui.selected != 0 || ui.homeLoading {
+				return
+			}
+			if recentUpdateKey(recentUpdateRows(following, nil, rowLimit, time.Now())) != ui.homeUpdateKey {
+				ui.refreshHome()
 			}
 		})
 	}()
@@ -147,23 +171,48 @@ func followErrorMessage(err error) string {
 	return "無法更新追蹤，請重試。"
 }
 
-func (ui *view) openFollowedAnime(item backend.Anime) {
+// detailOrigin is the page the detail screen was opened from; the zero value is Search.
+type detailOrigin uint8
+
+const (
+	detailFromSearch detailOrigin = iota
+	detailFromHome
+	detailFromFollowing
+)
+
+func (origin detailOrigin) backLabel() string {
+	switch origin {
+	case detailFromHome:
+		return "返回首頁"
+	case detailFromFollowing:
+		return "返回追蹤"
+	}
+	return "返回結果"
+}
+
+// openDetailFrom opens an anime's detail screen (which lives in the Search page) so that
+// Back and Escape return to origin.
+func (ui *view) openDetailFrom(origin detailOrigin, item backend.Anime) {
 	if ui.closing {
 		return
 	}
 	ui.showSection(4)
-	ui.detailFromFollowing = true
+	ui.detailOrigin = origin
 	ui.openSearchResult(item)
 }
 
 // leaveDetail goes back to where the detail screen was opened from.
 func (ui *view) leaveDetail() {
-	if !ui.detailFromFollowing {
+	switch ui.detailOrigin {
+	case detailFromHome:
+		ui.showSection(0)
+		ui.focusContent()
+	case detailFromFollowing:
+		ui.showSection(followingSection)
+		ui.focusFollowing()
+	default:
 		ui.backToSearchResults()
-		return
 	}
-	ui.showSection(followingSection)
-	ui.focusFollowing()
 }
 
 func (ui *view) focusFollowing() {
@@ -182,7 +231,7 @@ func (ui *view) renderFollowingStatus() {
 	case ui.followingLoadFailed:
 		status = "無法載入追蹤清單，請按「更新集數」重試。"
 	case len(ui.followingItems) == 0:
-		status = "尚未追蹤任何作品。在作品頁按「追蹤」即可加入。"
+		status = "尚未追蹤任何作品。在作品頁按星號即可追蹤。"
 	default:
 		newCount := 0
 		for _, item := range ui.followingItems {
@@ -228,7 +277,7 @@ func (ui *view) renderFollowing() {
 		item := row.Anime
 		ui.bindButton(open, func() {
 			if ui.followingVisible() {
-				ui.openFollowedAnime(item)
+				ui.openDetailFrom(detailFromFollowing, item)
 			}
 		})
 		remove := fltk.NewButton(0, 0, 1, 1, "取消追蹤")

@@ -21,7 +21,7 @@ func (app *App) ListFollowing(ctx context.Context) ([]FollowingEntry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	ids, err := app.store.Following(ctx)
+	followed, err := app.store.Following(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -30,8 +30,10 @@ func (app *App) ListFollowing(ctx context.Context) ([]FollowingEntry, error) {
 		return nil, err
 	}
 	watched, recent := indexPlaybackHistory(history)
-	entries := make([]FollowingEntry, 0, len(ids))
-	for _, id := range ids {
+	now := app.now()
+	entries := make([]FollowingEntry, 0, len(followed))
+	for _, item := range followed {
+		id := item.AnimeID
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -45,7 +47,10 @@ func (app *App) ListFollowing(ctx context.Context) ([]FollowingEntry, error) {
 		if err != nil {
 			return nil, err
 		}
-		entries = append(entries, followingEntry(id, episodeNumbers(mappings), watched[id], recent[id]))
+		numbers := episodeNumbers(mappings)
+		entry := followingEntry(id, numbers, watched[id], recent[id])
+		markRecentUpdate(&entry, mappings, numbers, watched[id], item.FollowedAt, now)
+		entries = append(entries, entry)
 	}
 	return entries, nil
 }
@@ -71,6 +76,54 @@ func followingEntry(id AnimeID, numbers map[EpisodeID]string, watched map[Episod
 		entry.NewEpisode = entry.HasWatched && !watchedUpTo(numbers, watched, entry.LatestAvailableNumber)
 	}
 	return entry
+}
+
+// RecentUpdateWindow is how long a newly seen latest episode counts as a recent update.
+const RecentUpdateWindow = 7 * 24 * time.Hour
+
+// markRecentUpdate applies Home's 近期更新 rule. Anime1 gives no episode dates, so an
+// update is the latest episode as first seen by the app: within RecentUpdateWindow,
+// after the anime was followed, after the anime's first stored episode list, and not
+// yet watched up to. The first list is excluded because it holds episodes that already
+// existed, even when it is stored after the follow (the star can be clicked before the
+// list loads). An episode number with a row of unknown time (stored before times were
+// recorded) is old and never counts.
+func markRecentUpdate(entry *FollowingEntry, mappings []EpisodeMapping, numbers map[EpisodeID]string, watched map[EpisodeID]struct{}, followedAt, now time.Time) {
+	if !entry.HasAvailable {
+		return
+	}
+	latestValue, _ := EpisodeNumberValue(entry.LatestAvailableNumber)
+	var firstList time.Time
+	unknownTimes := false
+	latestKnownBefore := false
+	for _, mapping := range mappings {
+		if mapping.FirstSeenAt.IsZero() {
+			unknownTimes = true
+		} else if firstList.IsZero() || mapping.FirstSeenAt.Before(firstList) {
+			firstList = mapping.FirstSeenAt
+		}
+		value, ok := EpisodeNumberValue(numbers[mapping.EpisodeID])
+		if !ok || value != latestValue {
+			continue
+		}
+		// One number can have several local IDs; the update happened when the first appeared.
+		if mapping.FirstSeenAt.IsZero() {
+			latestKnownBefore = true
+		} else if entry.LatestSeenAt.IsZero() || mapping.FirstSeenAt.Before(entry.LatestSeenAt) {
+			entry.LatestSeenAt = mapping.FirstSeenAt
+		}
+	}
+	if latestKnownBefore {
+		entry.LatestSeenAt = time.Time{}
+	}
+	if unknownTimes {
+		// Rows stored before times were recorded are the first list; anything with a
+		// recorded time came later.
+		firstList = time.Time{}
+	}
+	seen := entry.LatestSeenAt
+	entry.RecentlyUpdated = !seen.IsZero() && seen.After(followedAt) && seen.After(firstList) &&
+		now.Sub(seen) <= RecentUpdateWindow && !watchedUpTo(numbers, watched, entry.LatestAvailableNumber)
 }
 
 // watchedUpTo reports whether an episode numbered at least latest has history. It

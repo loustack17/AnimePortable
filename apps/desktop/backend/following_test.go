@@ -74,8 +74,14 @@ func TestFollowingSurvivesRestartAndSourceOutage(t *testing.T) {
 		t.Fatal(err)
 	}
 	upToDate := Following{AnimeID: string(anime.ID), LatestAvailable: string(ids["2"]), LatestAvailableNumber: "2", LatestWatched: string(ids["2"]), LatestWatchedNumber: "2", HasAvailable: true, HasWatched: true}
-	if got, err := service.Following(ctx); err != nil || len(got) != 1 || got[0] != upToDate {
-		t.Fatalf("following = %#v, %v, want %#v", got, err, upToDate)
+	got, err := service.Following(ctx)
+	if err != nil || len(got) != 1 || got[0].LatestSeenAt == "" {
+		t.Fatalf("following = %#v, %v", got, err)
+	}
+	// The seen time is stamped at ingest; the rest is exact.
+	upToDate.LatestSeenAt = got[0].LatestSeenAt
+	if got[0] != upToDate {
+		t.Fatalf("following = %#v, want %#v", got[0], upToDate)
 	}
 
 	// A new episode airs.
@@ -85,8 +91,9 @@ func TestFollowingSurvivesRestartAndSourceOutage(t *testing.T) {
 	if _, err := service.Episodes(ctx, string(anime.ID)); err != nil {
 		t.Fatal(err)
 	}
-	got, err := service.Following(ctx)
-	if err != nil || len(got) != 1 || !got[0].NewEpisode || got[0].LatestAvailableNumber != "3" || got[0].LatestWatchedNumber != "2" {
+	// Episode 3 appeared after the anime was followed and is not watched: a recent update.
+	got, err = service.Following(ctx)
+	if err != nil || len(got) != 1 || !got[0].NewEpisode || !got[0].RecentlyUpdated || got[0].LatestAvailableNumber != "3" || got[0].LatestWatchedNumber != "2" {
 		t.Fatalf("following after new episode = %#v, %v", got, err)
 	}
 	withNewEpisode := got[0]

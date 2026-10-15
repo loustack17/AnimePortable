@@ -123,7 +123,7 @@ func (ui *view) applyTheme() {
 	for _, card := range ui.cards {
 		card.Redraw()
 	}
-	for _, button := range ui.cardButtons {
+	for _, button := range ui.homeFocusables() {
 		button.Redraw()
 	}
 	for _, button := range ui.navigation {

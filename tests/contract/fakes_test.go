@@ -212,6 +212,7 @@ type memoryStore struct {
 	sourceRefs map[core.AnimeID][]core.SourceRef
 	metadata   map[core.AnimeID]core.AnimeMetadata
 	following  map[core.AnimeID]bool
+	followedAt map[core.AnimeID]time.Time
 	mappings   map[core.AnimeID][]core.EpisodeMapping
 	history    []core.HistoryEntry
 	progress   map[[2]string]core.PlaybackProgress
@@ -282,14 +283,20 @@ func (store *memoryStore) Metadata(_ context.Context, id core.AnimeID) (core.Ani
 	return metadata, nil
 }
 func (store *memoryStore) SetFollowing(_ context.Context, id core.AnimeID, following bool) error {
+	if store.followedAt == nil {
+		store.followedAt = make(map[core.AnimeID]time.Time)
+	}
+	if following && !store.following[id] {
+		store.followedAt[id] = time.Now()
+	}
 	store.following[id] = following
 	return nil
 }
-func (store *memoryStore) Following(context.Context) ([]core.AnimeID, error) {
-	items := []core.AnimeID{}
+func (store *memoryStore) Following(context.Context) ([]core.FollowedAnime, error) {
+	items := []core.FollowedAnime{}
 	for id, following := range store.following {
 		if following {
-			items = append(items, id)
+			items = append(items, core.FollowedAnime{AnimeID: id, FollowedAt: store.followedAt[id]})
 		}
 	}
 	return items, nil

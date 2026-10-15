@@ -401,6 +401,13 @@ func historyDTO(entry core.HistoryEntry) History {
 	return History{AnimeID: string(entry.Progress.AnimeID), EpisodeID: string(entry.Progress.EpisodeID), Position: entry.Progress.Position.Milliseconds(), Duration: entry.Progress.Duration.Milliseconds(), Completed: entry.Progress.Completed, UpdatedAt: entry.Progress.UpdatedAt.UTC().Format(time.RFC3339Nano), LastPlayed: entry.LastPlayedAt.UTC().Format(time.RFC3339Nano)}
 }
 
+func formatOptionalTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
 func parseTime(value string) (time.Time, error) {
 	parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(value))
 	if err != nil {

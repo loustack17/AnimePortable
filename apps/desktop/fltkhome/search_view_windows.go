@@ -486,11 +486,7 @@ func (ui *view) renderPreview() {
 	} else {
 		ui.previewRetry.Hide()
 	}
-	if ui.detailFromFollowing {
-		ui.previewBack.SetLabel("返回追蹤")
-	} else {
-		ui.previewBack.SetLabel("返回結果")
-	}
+	ui.previewBack.SetLabel(ui.detailOrigin.backLabel())
 	ui.renderDetailFollow()
 	ui.applyTheme()
 }
@@ -619,7 +615,7 @@ func (ui *view) backToSearchResults() {
 	ui.stopDetailLoad()
 	ui.searchModel.cancel()
 	ui.searchPreview = false
-	ui.detailFromFollowing = false
+	ui.detailOrigin = detailFromSearch
 	ui.previewGroup.Hide()
 	ui.searchPage.Show()
 	ui.renderSearch()

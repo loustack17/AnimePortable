@@ -24,6 +24,15 @@ type EpisodeMapping struct {
 	Ref       EpisodeRef
 	// Number is the source's episode label ("12", "12.5", "SP"); empty when not yet known.
 	Number string
+	// FirstSeenAt is when the app first stored this episode; zero for episodes stored
+	// before this was recorded.
+	FirstSeenAt time.Time
+}
+
+// FollowedAnime is a followed anime and when it was followed (zero if unknown).
+type FollowedAnime struct {
+	AnimeID    AnimeID
+	FollowedAt time.Time
 }
 
 type MetadataRef struct {
@@ -92,6 +101,9 @@ type FollowingEntry struct {
 	HasAvailable          bool
 	HasWatched            bool
 	NewEpisode            bool
+	// LatestSeenAt is when the app first saw the latest episode; zero if unknown.
+	LatestSeenAt    time.Time
+	RecentlyUpdated bool
 }
 
 type Appearance uint8

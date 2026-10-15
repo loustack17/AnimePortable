@@ -151,6 +151,7 @@ type fakeStore struct {
 	progressErr        error
 	checkpoints        []HistoryEntry
 	following          []AnimeID
+	followedAt         time.Time
 	followingErr       error
 	setFollowingErr    error
 	sourceRefs         map[AnimeID][]SourceRef
@@ -257,12 +258,16 @@ func (store *fakeStore) SetFollowing(ctx context.Context, id AnimeID, following 
 	return nil
 }
 
-func (store *fakeStore) Following(ctx context.Context) ([]AnimeID, error) {
+func (store *fakeStore) Following(ctx context.Context) ([]FollowedAnime, error) {
 	store.context = ctx
 	if store.followingErr != nil {
 		return nil, store.followingErr
 	}
-	return store.following, nil
+	followed := make([]FollowedAnime, 0, len(store.following))
+	for _, id := range store.following {
+		followed = append(followed, FollowedAnime{AnimeID: id, FollowedAt: store.followedAt})
+	}
+	return followed, nil
 }
 
 func (*fakeStore) AddHistory(context.Context, HistoryEntry) error {

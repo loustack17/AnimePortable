@@ -117,7 +117,7 @@ func TestDetailFollowButtonFollowsAndBackReturnsToFollowing(t *testing.T) {
 	}
 	ui := newFollowingViewTestFixture(t, service)
 	ui.showSection(followingSection)
-	ui.openFollowedAnime(backend.Anime{ID: "fresh", Title: "甲作品"})
+	ui.openDetailFrom(detailFromFollowing, backend.Anime{ID: "fresh", Title: "甲作品"})
 	pumpSearchEvents(t, func() bool { return ui.searchModel.preview != nil && ui.previewFollow.Visible() })
 	if ui.previewFollow.Label() != "追蹤" || ui.previewBack.Label() != "返回追蹤" {
 		t.Fatalf("follow = %q, back = %q", ui.previewFollow.Label(), ui.previewBack.Label())
@@ -175,7 +175,7 @@ func TestFollowingRefreshReportsPartialFailureAndIsNotRepeatedSoonAfterSuccess(t
 
 	failFresh.Store(false)
 	ui.refreshFollowing()
-	pumpSearchEvents(t, func() bool { return !ui.followingRefreshing && !ui.followingRefreshedAt.IsZero() })
+	pumpSearchEvents(t, func() bool { return !ui.followingRefreshing && !ui.followingRefreshAttemptedAt.IsZero() })
 	before := calls.Load()
 	ui.showSection(0)
 	ui.showSection(followingSection)

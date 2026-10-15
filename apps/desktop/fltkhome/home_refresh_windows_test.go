@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	"animeportable/apps/desktop/backend"
 	fltk "github.com/pwiecz/go-fltk"
@@ -28,6 +29,7 @@ type homeRefreshTestService struct {
 	blockCall        int
 	entered          chan struct{}
 	release          chan struct{}
+	following        []backend.Following
 }
 
 func (service *homeRefreshTestService) Start(context.Context) error { return nil }
@@ -76,7 +78,9 @@ func (service *homeRefreshTestService) History(context.Context) ([]backend.Histo
 	return history, err
 }
 func (service *homeRefreshTestService) Following(context.Context) ([]backend.Following, error) {
-	return nil, nil
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return append([]backend.Following(nil), service.following...), nil
 }
 
 func (service *homeRefreshTestService) setHistory(history []backend.History, err error) {
@@ -159,7 +163,7 @@ func TestNativeReturningHomeRefreshesContinuePosition(t *testing.T) {
 	service.setHistory([]backend.History{{AnimeID: "anime", EpisodeID: "episode", Position: 42750, LastPlayed: "2026-10-06T10:05:00Z"}}, nil)
 	ui.navigate(0)
 	pumpSearchEvents(t, func() bool { return !ui.homeLoading && len(ui.rows) == 1 && ui.rows[0].History.Position == 42750 })
-	if got := ui.contentLabels[ui.staticLabels+1].widget.Label(); got != "集數：未知 · 上次播放位置 0:42" {
+	if got := ui.homeCaptionLabels[0].Label(); got != "集數：未知 · 上次播放位置 0:42" {
 		t.Fatalf("refreshed Continue label = %q", got)
 	}
 	ui.playHomeRow(ui.rows[0].History, ui.homeLoadGeneration)
@@ -254,10 +258,11 @@ func TestNativeHomeEpisodeLookupUpdatesWhileSearchIsVisible(t *testing.T) {
 	if ui.selected != 4 {
 		t.Fatal("episode lookup test left Search before the result was applied")
 	}
+	// Returning to Home reloads it; the refreshed caption must show the episode again.
 	ui.showSection(0)
-	if got := ui.homeCaptionLabels[0].Label(); got != "集數：04 · 上次播放位置 2:05" {
-		t.Fatalf("Continue caption after returning from Search = %q", got)
-	}
+	pumpSearchEvents(t, func() bool {
+		return !ui.homeLoading && len(ui.homeCaptionLabels) == 1 && ui.homeCaptionLabels[0].Label() == "集數：04 · 上次播放位置 2:05"
+	})
 }
 
 func TestNativeHomeRefreshErrorRemovesStaleContinueAction(t *testing.T) {
@@ -347,3 +352,72 @@ func TestNativeHomeRefreshIsBoundedAndOnlyRunsForHomeNavigation(t *testing.T) {
 
 func (service *homeRefreshTestService) Follow(context.Context, string) error   { return nil }
 func (service *homeRefreshTestService) Unfollow(context.Context, string) error { return nil }
+
+func TestNativeReturningHomeFromMenuShowsRecentUpdate(t *testing.T) {
+	service := &homeRefreshTestService{}
+	ui := newHomeRefreshFixture(t, service)
+	ui.loadHome()
+	pumpSearchEvents(t, func() bool {
+		return !ui.homeLoading && homeHasLabel(ui, "尚未追蹤任何作品。在作品頁按星號即可追蹤。")
+	})
+
+	// A new episode of a followed anime was stored while another page was shown.
+	ui.showSection(followingSection)
+	service.mu.Lock()
+	service.following = []backend.Following{{AnimeID: "anime", HasAvailable: true, LatestAvailableNumber: "12", RecentlyUpdated: true, LatestSeenAt: time.Now().UTC().Format(time.RFC3339Nano)}}
+	service.mu.Unlock()
+	// The 首頁 menu button and Search's 返回首頁 call showSection(0).
+	ui.showSection(0)
+	pumpSearchEvents(t, func() bool { return !ui.homeLoading && len(ui.homeUpdateButtons) == 1 })
+	update := ui.homeUpdateButtons[0]
+	if update.Label() != "作品" || !update.Visible() || !update.IsActive() {
+		t.Fatalf("近期更新 row = %q, visible %v, active %v", update.Label(), update.Visible(), update.IsActive())
+	}
+}
+func homeHasLabel(ui *view, text string) bool {
+	for _, label := range ui.contentLabels[ui.staticLabels:] {
+		if label.widget.Label() == text {
+			return true
+		}
+	}
+	return false
+}
+
+func TestNativeHomeUpdateOpensDetailAndBackReturnsHome(t *testing.T) {
+	service := &homeRefreshTestService{following: []backend.Following{{AnimeID: "anime", HasAvailable: true, LatestAvailableNumber: "12", RecentlyUpdated: true, LatestSeenAt: time.Now().UTC().Format(time.RFC3339Nano)}}}
+	ui := newHomeRefreshFixture(t, service)
+	ui.loadHome()
+	pumpSearchEvents(t, func() bool { return !ui.homeLoading && len(ui.homeUpdateButtons) == 1 })
+	ui.openDetailFrom(detailFromHome, backend.Anime{ID: "anime", Title: "作品"})
+	pumpSearchEvents(t, func() bool { return ui.searchPreview && ui.previewBack.Label() == "返回首頁" })
+	ui.leaveDetail()
+	if ui.selected != 0 || ui.searchPreview || !ui.scroll.Visible() {
+		t.Fatalf("after back: section %d, preview %v, Home visible %v", ui.selected, ui.searchPreview, ui.scroll.Visible())
+	}
+}
+
+func TestNativeHomeUpdateRowsComeBeforeContinueCardsInKeyboardOrder(t *testing.T) {
+	seen := time.Now().UTC().Format(time.RFC3339Nano)
+	service := &homeRefreshTestService{
+		history: []backend.History{{AnimeID: "anime", EpisodeID: "episode", Position: 10000, LastPlayed: "2026-10-06T10:00:00Z"}},
+		following: []backend.Following{
+			{AnimeID: "anime", HasAvailable: true, LatestAvailableNumber: "12", RecentlyUpdated: true, LatestSeenAt: seen},
+			{AnimeID: "other", HasAvailable: true, LatestAvailableNumber: "3", RecentlyUpdated: true, LatestSeenAt: seen},
+		},
+	}
+	ui := newHomeRefreshFixture(t, service)
+	ui.loadHome()
+	pumpSearchEvents(t, func() bool { return !ui.homeLoading && len(ui.homeUpdateButtons) == 2 })
+	list := ui.homeFocusables()
+	if len(list) != 3 || list[0] != ui.homeUpdateButtons[0] || list[1] != ui.homeUpdateButtons[1] || list[2] != ui.cardButtons[0] {
+		t.Fatalf("Home keyboard order = %d buttons, want both 近期更新 rows then 繼續播放", len(list))
+	}
+	if ui.homeUpdateButtons[1].Y() >= ui.cardButtons[0].Y() {
+		t.Fatal("近期更新 rows are not above 繼續觀看")
+	}
+	last := ui.cardButtons[0]
+	ui.focusTarget(last)
+	if !last.HasFocus() || last.Y() < ui.scroll.Y() || last.Y()+last.H() > ui.scroll.Y()+ui.scroll.H() {
+		t.Fatalf("focused 繼續播放 at y=%d..%d, scroll view %d..%d", last.Y(), last.Y()+last.H(), ui.scroll.Y(), ui.scroll.Y()+ui.scroll.H())
+	}
+}

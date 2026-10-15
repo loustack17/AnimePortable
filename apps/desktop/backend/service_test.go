@@ -177,13 +177,13 @@ func (s *fakeStore) SetFollowing(ctx context.Context, id core.AnimeID, v bool) e
 	s.following[id] = v
 	return nil
 }
-func (s *fakeStore) Following(ctx context.Context) ([]core.AnimeID, error) {
+func (s *fakeStore) Following(ctx context.Context) ([]core.FollowedAnime, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r := []core.AnimeID{}
+	r := []core.FollowedAnime{}
 	for id, v := range s.following {
 		if v {
-			r = append(r, id)
+			r = append(r, core.FollowedAnime{AnimeID: id})
 		}
 	}
 	return r, nil
