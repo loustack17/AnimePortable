@@ -36,7 +36,7 @@ CGO_ENABLED=1 go test ./...
 
 ## 目前進度
 
-開發中，尚未公開發布。瀏覽、作品詳情與播放已完成。第一個 Windows 版本發布前還有：追蹤、歷史紀錄、時間表、完整鍵盤操作、離線時用已存資料啟動、自動播放下一集、設定，以及安全與發布檢查。
+開發中。預覽版（alpha）可在 [Releases](https://github.com/loustack17/AnimePortable/releases) 下載：解壓後執行 `animeportable.exe` 即可，內含固定版本的 libmpv。已完成：搜尋、作品詳情、播放與繼續觀看、追蹤與首頁「近期更新」。正式版之前還有：歷史紀錄、時間表、完整鍵盤操作、離線時用已存資料啟動、自動播放下一集、設定，以及安全與資源檢查。
 
 - 詳細狀態：[docs/STATUS.md](docs/STATUS.md)
 - 工程文件：[docs/README.md](docs/README.md)

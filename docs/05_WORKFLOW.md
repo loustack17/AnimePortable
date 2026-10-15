@@ -76,3 +76,15 @@ Use TypeSafe for judgment steps it can answer: failure classification, CI log re
 - Duplicating security or domain policy outside its owner.
 - Showing stack traces in the UI, logging secrets, or making cached startup wait on the network.
 - Optimizing without a measurement.
+
+## 11. Releases
+
+Each release needs the owner's approval for the tag and the publication.
+
+1. Write the release notes in `docs/releases/<tag>.md` (Traditional Chinese, for users): what works, how to run it, known limits. Commit them before tagging.
+2. Push an annotated tag `v<version>` on a commit whose CI is green. The `release` job in `.github/workflows/ci.yml` runs only for `v*` tags and only after the Windows job passes. It reuses that job's executable, downloads the libmpv archive named in `LIBMPV_RUNTIME_NOTICE.txt` (archive SHA-256 pinned), packages `AnimePortable-<tag>-windows-amd64.zip` with `apps/desktop/build/windows/package.ps1` (DLL checked against `internal/runtimepin`), and creates a GitHub pre-release titled with the tag alone.
+3. Download the published ZIP, check its files and the DLL hash, unzip it to a new folder and start it. Then ask the owner to try it, and record the result in the loop file.
+
+Versions: `v0.x.y-alpha.n` while features are missing (now), `v0.x.y-beta.n` once Loops 32-37 are done, `v1.0.0` after Loop 38. The job always publishes a pre-release; Loop 38 changes that for `v1.0.0`. GitHub's repository sidebar shows only full releases, so it shows the tag count until then.
+
+When the release job or packaging changes, update this section and test the job with a pre-release tag before relying on it.

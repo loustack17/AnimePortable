@@ -36,7 +36,7 @@ Put the pinned `libmpv-2.dll` (see [docs/LIBMPV_RUNTIME_NOTICE.txt](docs/LIBMPV_
 
 ## Project status
 
-In development; there is no public release yet. Browsing, the detail page and playback work. Before the first Windows release come: following, history, schedule, full keyboard navigation, offline startup from saved data, autoplay of the next episode, settings, and a security and release pass.
+In development. A preview (alpha) is on [Releases](https://github.com/loustack17/AnimePortable/releases): unzip it and run `animeportable.exe`; the pinned libmpv is included. Done: search, the detail page, playback and resume, following and Home's recent updates. Before the full release come: history, schedule, full keyboard navigation, offline startup from saved data, autoplay of the next episode, settings, and a security and resource pass.
 
 - Detailed state: [docs/STATUS.md](docs/STATUS.md)
 - Engineering docs: [docs/README.md](docs/README.md)

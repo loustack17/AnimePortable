@@ -113,7 +113,7 @@ Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.m
 ### Loop 38 - Hardening and release (Windows MVP)
 
 - Goal: A trustworthy portable Windows release.
-- In scope: A security pass over every trust boundary in [03_SECURITY.md](03_SECURITY.md); a resource pass (repeated player open/close and episode switches, cancelled searches, proxy-session churn: no steady growth in goroutines or memory); the portable ZIP with the pinned libmpv DLL and its notice, built by CI and published as a GitHub Release.
+- In scope: A security pass over every trust boundary in [03_SECURITY.md](03_SECURITY.md); a resource pass (repeated player open/close and episode switches, cancelled searches, proxy-session churn: no steady growth in goroutines or memory); the portable ZIP with the pinned libmpv DLL and its notice, built by CI and published as a GitHub Release. The tag-only CI release job already exists (pre-release v0.1.0-alpha.1, [05_WORKFLOW.md section 11](05_WORKFLOW.md)); Loop 38 lets it publish the first full release, v1.0.0.
 - Out of scope: New features, installers, Linux and macOS.
 - Done when: The security and resource passes have no open must-fix finding, and the CI-built ZIP runs after extraction with no installer.
 - Owner check: Download the release ZIP, unzip it, run it, and use the app for a normal session.
