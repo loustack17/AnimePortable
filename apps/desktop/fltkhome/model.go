@@ -127,23 +127,65 @@ func formatPosition(milliseconds int64) string {
 	return fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
 }
 
-func followingTitles(following []backend.Following, library []backend.Anime, limit int) []string {
+type followingRow struct {
+	Anime  backend.Anime
+	Status string
+	New    bool
+}
+
+// followingRows lists followed anime with series that have a new episode first, then by
+// title, keeping at most limit rows.
+func followingRows(following []backend.Following, library []backend.Anime, limit int) []followingRow {
 	if limit < 1 {
 		return nil
 	}
-	titles := make(map[string]string, len(library))
+	known := make(map[string]backend.Anime, len(library))
 	for _, item := range library {
-		titles[item.ID] = strings.TrimSpace(item.Title)
+		known[item.ID] = item
 	}
-	result := make([]string, 0, min(len(following), limit))
-	for _, item := range following[:min(len(following), limit)] {
-		name := titles[item.AnimeID]
-		if name == "" {
-			name = "未知作品"
+	rows := make([]followingRow, 0, len(following))
+	for _, item := range following {
+		anime, ok := known[item.AnimeID]
+		if !ok {
+			anime = backend.Anime{ID: item.AnimeID}
 		}
-		result = append(result, name)
+		anime.Title = strings.TrimSpace(anime.Title)
+		if anime.Title == "" {
+			anime.Title = "未知作品"
+		}
+		rows = append(rows, followingRow{Anime: anime, Status: followingStatus(item), New: item.NewEpisode})
 	}
-	return result
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].New != rows[j].New {
+			return rows[i].New
+		}
+		if rows[i].Anime.Title != rows[j].Anime.Title {
+			return rows[i].Anime.Title < rows[j].Anime.Title
+		}
+		return rows[i].Anime.ID < rows[j].Anime.ID
+	})
+	return rows[:min(len(rows), limit)]
+}
+
+// followingStatus describes the stored episode state, for example "最新：第 12 集 · 看到：第 10 集".
+func followingStatus(item backend.Following) string {
+	latest := "最新：尚未取得集數"
+	if item.HasAvailable {
+		latest = "最新：" + episodeLabel(item.LatestAvailableNumber)
+	}
+	watched := "尚未觀看"
+	if item.HasWatched {
+		watched = "看到：" + episodeLabel(item.LatestWatchedNumber)
+	}
+	return latest + " · " + watched
+}
+
+func episodeLabel(number string) string {
+	number = strings.TrimSpace(number)
+	if number == "" {
+		return "集數未知"
+	}
+	return "第 " + number + " 集"
 }
 
 func playRequest(item backend.History) backend.PlayRequest {

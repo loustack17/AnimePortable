@@ -5,10 +5,8 @@ package backend
 import (
 	"context"
 	"errors"
-	"math"
+	"slices"
 	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	"animeportable/adapters/player/libmpv"
@@ -111,6 +109,11 @@ func (service *Service) Detail(ctx context.Context, animeID string) (Detail, err
 		return Detail{}, dtoErr
 	}
 	result := Detail{Anime: animeValue}
+	following, err := store.Following(operationCtx)
+	if err != nil {
+		return Detail{}, safeError(err)
+	}
+	result.Following = slices.Contains(following, localAnimeID)
 	metadataValue, err := store.Metadata(operationCtx, localAnimeID)
 	if errors.Is(err, core.ErrNotFound) {
 		return result, nil
@@ -199,8 +202,8 @@ func (service *Service) Episodes(ctx context.Context, animeID string) ([]Episode
 // Episodes without a plain number (specials) keep their relative order after the numbered ones.
 func orderEpisodes(episodes []Episode) {
 	sort.SliceStable(episodes, func(left, right int) bool {
-		leftNumber, leftOK := episodeNumberValue(episodes[left].Number)
-		rightNumber, rightOK := episodeNumberValue(episodes[right].Number)
+		leftNumber, leftOK := core.EpisodeNumberValue(episodes[left].Number)
+		rightNumber, rightOK := core.EpisodeNumberValue(episodes[right].Number)
 		if leftOK != rightOK {
 			return leftOK
 		}
@@ -208,49 +211,33 @@ func orderEpisodes(episodes []Episode) {
 	})
 }
 
-func episodeNumberValue(number string) (float64, bool) {
-	value, err := strconv.ParseFloat(strings.TrimSpace(number), 64)
-	return value, err == nil && !math.IsNaN(value) && !math.IsInf(value, 0)
-}
-
+// Following lists followed anime from local data only; it never waits on the source.
 func (service *Service) Following(ctx context.Context) ([]Following, error) {
 	operationCtx, done, err := service.begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer done()
-	_, store, _, err := service.appSnapshot()
+	app, _, _, err := service.appSnapshot()
 	if err != nil {
 		return nil, err
 	}
-	ids, err := store.Following(operationCtx)
+	entries, err := app.ListFollowing(operationCtx)
 	if err != nil {
 		return nil, safeError(err)
 	}
-	history, err := store.History(operationCtx)
-	if err != nil {
-		return nil, safeError(err)
-	}
-	watched := make(map[core.AnimeID]map[core.EpisodeID]struct{})
-	latest := make(map[core.AnimeID]core.HistoryEntry)
-	for _, entry := range history {
-		if watched[entry.Progress.AnimeID] == nil {
-			watched[entry.Progress.AnimeID] = make(map[core.EpisodeID]struct{})
-		}
-		watched[entry.Progress.AnimeID][entry.Progress.EpisodeID] = struct{}{}
-		previous, exists := latest[entry.Progress.AnimeID]
-		if !exists || entry.LastPlayedAt.After(previous.LastPlayedAt) {
-			latest[entry.Progress.AnimeID] = entry
-		}
-	}
-	result := make([]Following, 0, len(ids))
-	for _, id := range ids {
-		entry := Following{AnimeID: string(id)}
-		if len(watched[id]) > 0 {
-			entry.HasWatched = true
-			entry.LatestWatched = string(latest[id].Progress.EpisodeID)
-		}
-		result = append(result, entry)
+	result := make([]Following, 0, len(entries))
+	for _, entry := range entries {
+		result = append(result, Following{
+			AnimeID:               string(entry.AnimeID),
+			LatestAvailable:       string(entry.LatestAvailable),
+			LatestAvailableNumber: entry.LatestAvailableNumber,
+			LatestWatched:         string(entry.LatestWatched),
+			LatestWatchedNumber:   entry.LatestWatchedNumber,
+			HasAvailable:          entry.HasAvailable,
+			HasWatched:            entry.HasWatched,
+			NewEpisode:            entry.NewEpisode,
+		})
 	}
 	return result, nil
 }

@@ -154,7 +154,17 @@ func (ui *view) applyTheme() {
 		ui.previewEpisodes.Redraw()
 		ui.previewEpisodeText.SetLabelColor(colors.muted)
 		ui.previewEpisodeText.Redraw()
-		for _, button := range append(append(append([]*fltk.Button(nil), ui.searchRows...), ui.previewEpisodeRows...), ui.searchButton, ui.searchBack, ui.searchPrevious, ui.searchNext, ui.previewBack, ui.previewContinue, ui.previewRetry, ui.previewPrevious, ui.previewNext) {
+		for _, button := range append(append(append([]*fltk.Button(nil), ui.searchRows...), ui.previewEpisodeRows...), ui.searchButton, ui.searchBack, ui.searchPrevious, ui.searchNext, ui.previewBack, ui.previewContinue, ui.previewRetry, ui.previewFollow, ui.previewPrevious, ui.previewNext) {
+			button.Redraw()
+		}
+	}
+	if ui.followingPage != nil {
+		ui.followingStatus.SetLabelColor(colors.muted)
+		ui.followingScroll.SetColor(colors.background)
+		ui.followingStatus.Redraw()
+		ui.followingScroll.Redraw()
+		ui.followingRefresh.Redraw()
+		for _, button := range ui.followingButtons {
 			button.Redraw()
 		}
 	}

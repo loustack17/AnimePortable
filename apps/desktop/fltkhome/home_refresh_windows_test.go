@@ -344,3 +344,6 @@ func TestNativeHomeRefreshIsBoundedAndOnlyRunsForHomeNavigation(t *testing.T) {
 		t.Fatalf("non-Home navigation made another History call: %d", got)
 	}
 }
+
+func (service *homeRefreshTestService) Follow(context.Context, string) error   { return nil }
+func (service *homeRefreshTestService) Unfollow(context.Context, string) error { return nil }

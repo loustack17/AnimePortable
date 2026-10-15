@@ -70,7 +70,7 @@ func (ui *view) buildSearchView() {
 	ui.previewGroup.Begin()
 	ui.previewBack = fltk.NewButton(252, 118, 113, 38, "返回結果")
 	ui.styleButton(ui.previewBack, nil)
-	ui.bindSearchButton(ui.previewBack, ui.backToSearchResults)
+	ui.bindSearchButton(ui.previewBack, ui.leaveDetail)
 	ui.previewContinue = fltk.NewButton(539, 118, 126, 38, "繼續觀看")
 	ui.styleButton(ui.previewContinue, nil)
 	ui.bindSearchButton(ui.previewContinue, ui.continueDetailEpisode)
@@ -78,6 +78,10 @@ func (ui *view) buildSearchView() {
 	ui.styleButton(ui.previewRetry, nil)
 	ui.bindSearchButton(ui.previewRetry, ui.retryDetailLoad)
 	ui.previewRetry.Hide()
+	ui.previewFollow = fltk.NewButton(0, 118, followIconSize, 38, "追蹤")
+	ui.styleFollowIcon(ui.previewFollow, func() bool { return ui.searchModel.preview != nil && ui.searchModel.preview.Following })
+	ui.bindSearchButton(ui.previewFollow, ui.toggleDetailFollow)
+	ui.previewFollow.Hide()
 	ui.previewTitle = fltk.NewBox(fltk.NO_BOX, 252, 166, 408, 42, "")
 	ui.previewTitle.SetLabelFont(fltk.HELVETICA_BOLD)
 	ui.previewTitle.SetLabelSize(20)
@@ -112,6 +116,7 @@ func (ui *view) buildSearchView() {
 	ui.previewEpisodes.SetType(fltk.SCROLL_VERTICAL)
 	ui.previewEpisodes.SetBox(fltk.FLAT_BOX)
 	ui.previewEpisodes.End()
+	ui.placeFollowIcon()
 	ui.previewEpisodeText = fltk.NewBox(fltk.NO_BOX, 684, 519, 166, 25, "")
 	ui.previewEpisodeText.SetLabelSize(11)
 	ui.previewEpisodeText.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
@@ -168,7 +173,7 @@ func (ui *view) buildSearchView() {
 }
 
 func (ui *view) bindSearchButton(button *fltk.Button, action func()) {
-	previewAction := button == ui.previewBack || button == ui.previewContinue || button == ui.previewRetry || button == ui.previewPrevious || button == ui.previewNext
+	previewAction := button == ui.previewBack || button == ui.previewContinue || button == ui.previewRetry || button == ui.previewFollow || button == ui.previewPrevious || button == ui.previewNext
 	activate := ui.deferredSearchAction(action, previewAction)
 	button.SetCallback(activate)
 	button.SetEventHandler(func(event fltk.Event) bool {
@@ -481,6 +486,12 @@ func (ui *view) renderPreview() {
 	} else {
 		ui.previewRetry.Hide()
 	}
+	if ui.detailFromFollowing {
+		ui.previewBack.SetLabel("返回追蹤")
+	} else {
+		ui.previewBack.SetLabel("返回結果")
+	}
+	ui.renderDetailFollow()
 	ui.applyTheme()
 }
 
@@ -596,7 +607,7 @@ func (ui *view) searchEscape() {
 		return
 	}
 	if ui.searchPreview {
-		ui.backToSearchResults()
+		ui.leaveDetail()
 		return
 	}
 	ui.showSection(0)
@@ -608,6 +619,7 @@ func (ui *view) backToSearchResults() {
 	ui.stopDetailLoad()
 	ui.searchModel.cancel()
 	ui.searchPreview = false
+	ui.detailFromFollowing = false
 	ui.previewGroup.Hide()
 	ui.searchPage.Show()
 	ui.renderSearch()
@@ -670,6 +682,7 @@ func (ui *view) resizeSearch() {
 	ui.previewPrevious.Resize(episodeX, episodeFooterY+28, 92, 34)
 	ui.previewNext.Resize(episodeX+episodeWidth-92, episodeFooterY+28, 92, 34)
 	ui.resizeDetailEpisodeRows()
+	ui.placeFollowIcon()
 	for index, button := range ui.searchRows {
 		button.Resize(ui.searchScroll.X()+15, ui.searchScroll.Y()+9+index*45, max(300, ui.searchScroll.W()-35), 40)
 	}

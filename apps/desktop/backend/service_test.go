@@ -134,8 +134,11 @@ func (s *fakeStore) SaveEpisodeMapping(ctx context.Context, m core.EpisodeMappin
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, x := range s.mappings[m.AnimeID] {
+	for index, x := range s.mappings[m.AnimeID] {
 		if x.Ref == m.Ref {
+			if m.Number != "" {
+				s.mappings[m.AnimeID][index].Number = m.Number
+			}
 			return nil
 		}
 	}

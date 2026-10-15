@@ -22,6 +22,8 @@ type EpisodeMapping struct {
 	AnimeID   AnimeID
 	EpisodeID EpisodeID
 	Ref       EpisodeRef
+	// Number is the source's episode label ("12", "12.5", "SP"); empty when not yet known.
+	Number string
 }
 
 type MetadataRef struct {
@@ -82,12 +84,14 @@ type HistoryEntry struct {
 }
 
 type FollowingEntry struct {
-	AnimeID         AnimeID
-	LatestAvailable EpisodeRef
-	LatestWatched   EpisodeID
-	HasAvailable    bool
-	HasWatched      bool
-	NewEpisode      bool
+	AnimeID               AnimeID
+	LatestAvailable       EpisodeID
+	LatestAvailableNumber string
+	LatestWatched         EpisodeID
+	LatestWatchedNumber   string
+	HasAvailable          bool
+	HasWatched            bool
+	NewEpisode            bool
 }
 
 type Appearance uint8

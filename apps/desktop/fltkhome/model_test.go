@@ -49,11 +49,35 @@ func TestSelectHomeRowsUsesOnlyLatestResumableEpisodePerAnime(t *testing.T) {
 	}
 }
 
-func TestFollowingTitlesBoundsAndUsesKnownNames(t *testing.T) {
-	items := []backend.Following{{AnimeID: "known"}, {AnimeID: "missing"}, {AnimeID: "ignored"}}
-	got := followingTitles(items, []backend.Anime{{ID: "known", Title: "  作品名稱  "}}, 2)
-	if len(got) != 2 || got[0] != "作品名稱" || got[1] != "未知作品" {
-		t.Fatalf("following titles = %#v", got)
+func TestFollowingRowsBoundUseKnownNamesAndPutNewEpisodesFirst(t *testing.T) {
+	items := []backend.Following{{AnimeID: "known"}, {AnimeID: "missing"}, {AnimeID: "new", NewEpisode: true}}
+	library := []backend.Anime{{ID: "known", Title: "  作品名稱  "}, {ID: "new", Title: "新作品"}}
+	got := followingRows(items, library, 2)
+	if len(got) != 2 || got[0].Anime.ID != "new" || !got[0].New || got[1].Anime.Title != "作品名稱" || got[1].New {
+		t.Fatalf("following rows = %#v", got)
+	}
+	all := followingRows(items, library, rowLimit)
+	if len(all) != 3 || all[2].Anime.ID != "missing" || all[2].Anime.Title != "未知作品" {
+		t.Fatalf("following rows = %#v", all)
+	}
+	if got := followingRows(items, library, 0); got != nil {
+		t.Fatalf("zero limit returned %#v, want nil", got)
+	}
+}
+
+func TestFollowingStatusDescribesEachEpisodeState(t *testing.T) {
+	for _, test := range []struct {
+		item backend.Following
+		want string
+	}{
+		{backend.Following{}, "最新：尚未取得集數 · 尚未觀看"},
+		{backend.Following{HasAvailable: true, LatestAvailableNumber: "12"}, "最新：第 12 集 · 尚未觀看"},
+		{backend.Following{HasAvailable: true, LatestAvailableNumber: "12", HasWatched: true, LatestWatchedNumber: "10", NewEpisode: true}, "最新：第 12 集 · 看到：第 10 集"},
+		{backend.Following{HasWatched: true}, "最新：尚未取得集數 · 看到：集數未知"},
+	} {
+		if got := followingStatus(test.item); got != test.want {
+			t.Errorf("followingStatus(%#v) = %q, want %q", test.item, got, test.want)
+		}
 	}
 }
 

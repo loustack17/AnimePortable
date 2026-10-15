@@ -9,11 +9,15 @@ import (
 	"animeportable/core"
 )
 
+// maxEpisodeNumberBytes matches the CHECK on episode_mappings.number.
+const maxEpisodeNumberBytes = 128
+
 func validEpisodeMapping(mapping core.EpisodeMapping) bool {
 	return validIdentity(string(mapping.AnimeID)) &&
 		validIdentity(string(mapping.EpisodeID)) &&
 		validSourceRef(mapping.Ref.Anime) &&
-		validIdentity(mapping.Ref.ID)
+		validIdentity(mapping.Ref.ID) &&
+		len(mapping.Number) <= maxEpisodeNumberBytes
 }
 
 func (store *Store) SaveEpisodeMapping(ctx context.Context, mapping core.EpisodeMapping) error {
@@ -36,14 +40,14 @@ func (store *Store) SaveEpisodeMapping(ctx context.Context, mapping core.Episode
 		}
 
 		result, err := db.ExecContext(ctx, `INSERT INTO episode_mappings (
-			anime_id, episode_id, provider, provider_anime_id, provider_episode_id
-		) SELECT ?, ?, ?, ?, ?
+			anime_id, episode_id, provider, provider_anime_id, provider_episode_id, number
+		) SELECT ?, ?, ?, ?, ?, ?
 		WHERE NOT EXISTS (
 			SELECT 1 FROM episode_mappings
 			WHERE provider = ? AND provider_anime_id = ? AND provider_episode_id = ?
 		)
 		ON CONFLICT(anime_id, episode_id, provider, provider_anime_id, provider_episode_id) DO NOTHING`,
-			mapping.AnimeID, mapping.EpisodeID, mapping.Ref.Anime.Provider, mapping.Ref.Anime.ID, mapping.Ref.ID,
+			mapping.AnimeID, mapping.EpisodeID, mapping.Ref.Anime.Provider, mapping.Ref.Anime.ID, mapping.Ref.ID, mapping.Number,
 			mapping.Ref.Anime.Provider, mapping.Ref.Anime.ID, mapping.Ref.ID)
 		if err != nil {
 			return err
@@ -70,7 +74,14 @@ func (store *Store) SaveEpisodeMapping(ctx context.Context, mapping core.Episode
 		if ownerAnime != mapping.AnimeID || ownerEpisode != mapping.EpisodeID {
 			return ErrIdentityConflict
 		}
-		return nil
+		if mapping.Number == "" {
+			// A caller without the number must not erase one learned earlier.
+			return nil
+		}
+		_, err = db.ExecContext(ctx, `UPDATE episode_mappings SET number = ?
+			WHERE provider = ? AND provider_anime_id = ? AND provider_episode_id = ?`,
+			mapping.Number, mapping.Ref.Anime.Provider, mapping.Ref.Anime.ID, mapping.Ref.ID)
+		return err
 	})
 }
 
@@ -80,7 +91,7 @@ func (store *Store) EpisodeMappings(ctx context.Context, animeID core.AnimeID) (
 		return items, ErrInvalidInput
 	}
 	err := store.withDB(ctx, func(db *sql.DB) error {
-		rows, err := db.QueryContext(ctx, `SELECT episode_id, provider, provider_anime_id, provider_episode_id
+		rows, err := db.QueryContext(ctx, `SELECT episode_id, provider, provider_anime_id, provider_episode_id, number
 			FROM episode_mappings
 			WHERE anime_id = ?
 			ORDER BY episode_id, provider, provider_anime_id, provider_episode_id`, animeID)
@@ -92,7 +103,7 @@ func (store *Store) EpisodeMappings(ctx context.Context, animeID core.AnimeID) (
 			var mapping core.EpisodeMapping
 			mapping.AnimeID = animeID
 			mapping.Ref.Anime = core.SourceRef{}
-			if err := rows.Scan(&mapping.EpisodeID, &mapping.Ref.Anime.Provider, &mapping.Ref.Anime.ID, &mapping.Ref.ID); err != nil {
+			if err := rows.Scan(&mapping.EpisodeID, &mapping.Ref.Anime.Provider, &mapping.Ref.Anime.ID, &mapping.Ref.ID, &mapping.Number); err != nil {
 				return err
 			}
 			items = append(items, mapping)

@@ -251,11 +251,18 @@ func (ui *view) resizeDetailEpisodeRows() {
 	}
 	ui.previewEpisodes.ScrollTo(0, 0)
 	for index, row := range ui.previewEpisodeRows {
-		row.Resize(ui.previewEpisodes.X()+8, ui.previewEpisodes.Y()+7+index*37, max(120, ui.previewEpisodes.W()-27), 33)
+		x, width := ui.detailEpisodeRowSpan()
+		row.Resize(x, ui.previewEpisodes.Y()+7+index*37, width, 33)
 	}
 	if focusedIndex >= 0 {
 		ui.focusDetailEpisodeRow(focusedIndex)
 	}
+}
+
+// detailEpisodeRowSpan is the x and width of an episode row: inset from the scroll area
+// and clear of its scrollbar. The follow icon lines up with the same right edge.
+func (ui *view) detailEpisodeRowSpan() (int, int) {
+	return ui.previewEpisodes.X() + 8, max(120, ui.previewEpisodes.W()-27)
 }
 
 func (ui *view) renderDetailEpisodes() {
@@ -295,7 +302,8 @@ func (ui *view) renderDetailEpisodes() {
 				label += "　" + episodeProgressLabel(history)
 			}
 		}
-		button := fltk.NewButton(ui.previewEpisodes.X()+8, ui.previewEpisodes.Y()+7+offset*37, max(120, ui.previewEpisodes.W()-27), 33, label)
+		x, width := ui.detailEpisodeRowSpan()
+		button := fltk.NewButton(x, ui.previewEpisodes.Y()+7+offset*37, width, 33, label)
 		selectedIndex := index
 		ui.styleButton(button, func() bool { return ui.detailModel.selected == selectedIndex })
 		button.SetCallback(ui.deferredSearchAction(func() { ui.playDetailEpisodeAt(selectedIndex) }, true))

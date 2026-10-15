@@ -23,6 +23,8 @@ type Service interface {
 	Episodes(context.Context, string) ([]backend.Episode, error)
 	History(context.Context) ([]backend.History, error)
 	Following(context.Context) ([]backend.Following, error)
+	Follow(context.Context, string) error
+	Unfollow(context.Context, string) error
 }
 
 const homeEpisodeLookupTimeout = 3 * time.Second
@@ -109,6 +111,26 @@ type view struct {
 	dark               bool
 	appearance         *appearancePersistence
 	closing            bool
+
+	previewFollow *fltk.Button
+	// followPending blocks a second follow or unfollow until the first one finishes.
+	followPending bool
+	// detailFromFollowing makes Back and Escape on the detail screen return to 追蹤.
+	detailFromFollowing      bool
+	followingPage            *fltk.Group
+	followingStatus          *fltk.Box
+	followingRefresh         *fltk.Button
+	followingScroll          *fltk.Scroll
+	followingButtons         []*fltk.Button
+	followingRowIDs          []string
+	followingItems           []followingRow
+	followingGeneration      uint64
+	followingLoaded          bool
+	followingLoadFailed      bool
+	followingRefreshing      bool
+	followingRefreshFailures int
+	followingRefreshTotal    int
+	followingRefreshedAt     time.Time
 }
 
 func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int)) {
@@ -257,6 +279,7 @@ func (ui *view) build() {
 	ui.retryButton.Hide()
 	ui.scroll.End()
 	ui.buildSearchView()
+	ui.buildFollowingView()
 	ui.mainGroup.End()
 	ui.mainGroup.Hide()
 	navPanel := fltk.NewGroup(14, 18, 205, 582)
@@ -287,6 +310,7 @@ func (ui *view) build() {
 	ui.window.SetResizeHandler(func() {
 		ui.scroll.Resize(236, 110, max(400, ui.window.W()-259), max(250, ui.window.H()-131))
 		ui.resizeSearch()
+		ui.resizeFollowing()
 	})
 }
 
@@ -379,6 +403,12 @@ func (ui *view) showSection(index int) {
 		ui.searchPreview = false
 	}
 	ui.selected = index
+	if index != 4 {
+		ui.detailFromFollowing = false
+	}
+	if ui.followingPage != nil && index != followingSection {
+		ui.followingPage.Hide()
+	}
 	for _, button := range ui.navigation {
 		button.Redraw()
 	}
@@ -396,6 +426,12 @@ func (ui *view) showSection(index int) {
 		ui.previewGroup.Hide()
 		ui.loadSearchLibrary()
 		ui.renderSearch()
+	} else if index == followingSection && ui.followingPage != nil {
+		ui.contentHint.SetLabel("追蹤作品的最新集數與觀看進度；按作品開啟詳情。")
+		ui.scroll.Hide()
+		ui.searchPage.Hide()
+		ui.previewGroup.Hide()
+		ui.showFollowing()
 	} else {
 		ui.contentHint.SetLabel("此頁面尚未建立")
 		ui.scroll.Hide()
@@ -553,8 +589,8 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		followY = 385
 	}
 	ui.contentText(253, followY, 600, 31, "追蹤中", 20, false, true)
-	followNames := followingTitles(following, library, rowLimit)
-	followCount := len(followNames)
+	followRows := followingRows(following, library, rowLimit)
+	followCount := len(followRows)
 	followHeight := 70 + max(followCount-1, 0)*34
 	card := fltk.NewBox(fltk.NO_BOX, 250, followY+39, 711, followHeight)
 	card.SetDrawHandler(func(func()) { roundedRect(card.X(), card.Y(), card.W(), card.H(), 16, ui.colors().surface) })
@@ -562,8 +598,13 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	if followCount == 0 {
 		ui.contentText(270, followY+58, 620, 25, "尚未追蹤任何作品。", 15, false, true)
 	} else {
-		for index, name := range followNames {
-			ui.contentText(270, followY+54+index*34, 620, 26, name, 15, false, true)
+		for index, row := range followRows {
+			status := row.Status
+			if row.New {
+				status = "有新集數 · " + status
+			}
+			ui.contentText(270, followY+54+index*34, 300, 26, row.Anime.Title, 15, false, true)
+			ui.contentText(580, followY+54+index*34, 370, 26, status, 12, !row.New, row.New)
 		}
 	}
 	updateY := followY + 39 + followHeight + 22
@@ -697,6 +738,10 @@ func (ui *view) focusContent() {
 		} else {
 			ui.searchInput.TakeFocus()
 		}
+		return
+	}
+	if ui.selected == followingSection && ui.followingPage != nil {
+		ui.focusFollowing()
 		return
 	}
 	if ui.scroll.Visible() && ui.browseButton != nil {

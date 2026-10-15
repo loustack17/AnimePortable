@@ -125,11 +125,84 @@ func TestEpisodeMappingsUpgradeFromInitialSchema(t *testing.T) {
 	if err := store.db.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&migrations); err != nil {
 		t.Fatal(err)
 	}
-	if migrations != 3 {
-		t.Fatalf("upgraded migration count = %d, want 3", migrations)
+	if migrations != 4 {
+		t.Fatalf("upgraded migration count = %d, want 4", migrations)
 	}
 	if _, err := store.db.Exec("SELECT 1 FROM episode_mappings LIMIT 1"); err != nil {
 		t.Fatalf("upgraded mapping table unavailable: %v", err)
+	}
+}
+
+func TestEpisodeMappingNumberIsStoredFilledInAndNeverErased(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	store := openLibraryStore(t, path)
+	ctx := context.Background()
+	if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
+		t.Fatal(err)
+	}
+	ref := episodeRef("provider", "source-anime", "source-episode")
+	if err := store.SaveSourceRef(ctx, core.AnimeID("anime"), ref.Anime); err != nil {
+		t.Fatal(err)
+	}
+	unnumbered := mapping("anime", "episode", ref)
+	if err := store.SaveEpisodeMapping(ctx, unnumbered); err != nil {
+		t.Fatal(err)
+	}
+	numbered := unnumbered
+	numbered.Number = "12"
+	if err := store.SaveEpisodeMapping(ctx, numbered); err != nil {
+		t.Fatalf("fill in number: %v", err)
+	}
+	if err := store.SaveEpisodeMapping(ctx, unnumbered); err != nil {
+		t.Fatalf("save without number: %v", err)
+	}
+	tooLong := numbered
+	tooLong.Number = strings.Repeat("9", maxEpisodeNumberBytes+1)
+	if err := store.SaveEpisodeMapping(ctx, tooLong); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("too long number error = %v, want ErrInvalidInput", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store = openLibraryStore(t, path)
+	defer store.Close()
+	if got, err := store.EpisodeMappings(ctx, core.AnimeID("anime")); err != nil || !reflect.DeepEqual(got, []core.EpisodeMapping{numbered}) {
+		t.Fatalf("mappings = %#v, %v, want %#v", got, err, []core.EpisodeMapping{numbered})
+	}
+}
+
+func TestEpisodeNumberMigrationKeepsExistingMappings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	var previous []migration
+	for version, name := range []string{"0001_initial.sql", "0002_episode_mappings.sql", "0003_drop_settings_mpv_path.sql"} {
+		sql, err := migrationFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous = append(previous, migration{version: version + 1, name: name, sql: string(sql)})
+	}
+	legacy, err := open(context.Background(), path, migrationSource{migrations: previous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`INSERT INTO anime (id, title, native_title, description) VALUES ('anime', '', '', '')`,
+		`INSERT INTO source_refs (anime_id, provider, external_id) VALUES ('anime', 'provider', 'source-anime')`,
+		`INSERT INTO episode_mappings (anime_id, episode_id, provider, provider_anime_id, provider_episode_id) VALUES ('anime', 'episode', 'provider', 'source-anime', 'source-episode')`,
+	}
+	for _, statement := range statements {
+		if _, err := legacy.db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store := openLibraryStore(t, path)
+	defer store.Close()
+	want := []core.EpisodeMapping{mapping("anime", "episode", episodeRef("provider", "source-anime", "source-episode"))}
+	if got, err := store.EpisodeMappings(context.Background(), core.AnimeID("anime")); err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("upgraded mappings = %#v, %v, want %#v", got, err, want)
 	}
 }
 

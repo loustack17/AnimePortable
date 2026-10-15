@@ -27,17 +27,22 @@ type Metadata struct {
 }
 
 type Detail struct {
-	Anime    Anime     `json:"anime"`
-	Metadata *Metadata `json:"metadata,omitempty"`
+	Anime     Anime     `json:"anime"`
+	Metadata  *Metadata `json:"metadata,omitempty"`
+	Following bool      `json:"following"`
 }
 
+// Following is one followed anime. Episode fields are local episode IDs and the
+// source's episode labels; the numbers are empty when not known yet.
 type Following struct {
-	AnimeID         string `json:"animeId"`
-	LatestAvailable string `json:"latestAvailable"`
-	LatestWatched   string `json:"latestWatched"`
-	HasAvailable    bool   `json:"hasAvailable"`
-	HasWatched      bool   `json:"hasWatched"`
-	NewEpisode      bool   `json:"newEpisode"`
+	AnimeID               string `json:"animeId"`
+	LatestAvailable       string `json:"latestAvailable"`
+	LatestAvailableNumber string `json:"latestAvailableNumber"`
+	LatestWatched         string `json:"latestWatched"`
+	LatestWatchedNumber   string `json:"latestWatchedNumber"`
+	HasAvailable          bool   `json:"hasAvailable"`
+	HasWatched            bool   `json:"hasWatched"`
+	NewEpisode            bool   `json:"newEpisode"`
 }
 
 type History struct {

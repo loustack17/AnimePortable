@@ -45,9 +45,9 @@ func (service *Service) ingestEpisodes(ctx context.Context, store core.Store, an
 	if err != nil {
 		return nil, err
 	}
-	known := make(map[core.EpisodeRef]core.EpisodeID, len(mappings))
+	known := make(map[core.EpisodeRef]core.EpisodeMapping, len(mappings))
 	for _, mapping := range mappings {
-		known[mapping.Ref] = mapping.EpisodeID
+		known[mapping.Ref] = mapping
 	}
 	result := make([]Episode, 0, len(items))
 	for _, item := range items {
@@ -59,19 +59,24 @@ func (service *Service) ingestEpisodes(ctx context.Context, store core.Store, an
 		if !numberOK || !titleOK || number == "" || len(number) > 128 || len(title) > 4096 {
 			return nil, ErrInvalidInput
 		}
-		id, ok := known[item.Ref]
+		mapping, ok := known[item.Ref]
 		if !ok {
 			value, idErr := newLocalID("episode")
 			if idErr != nil {
 				return nil, idErr
 			}
-			id = core.EpisodeID(value)
-			if err := store.SaveEpisodeMapping(ctx, core.EpisodeMapping{AnimeID: animeID, EpisodeID: id, Ref: item.Ref}); err != nil {
+			mapping = core.EpisodeMapping{AnimeID: animeID, EpisodeID: core.EpisodeID(value), Ref: item.Ref}
+		}
+		// Save new mappings, and known ones whose number is missing or changed, so
+		// Following can show the latest episode without the source.
+		if !ok || mapping.Number != number {
+			mapping.Number = number
+			if err := store.SaveEpisodeMapping(ctx, mapping); err != nil {
 				return nil, err
 			}
-			known[item.Ref] = id
+			known[item.Ref] = mapping
 		}
-		result = append(result, Episode{ID: string(id), AnimeID: string(animeID), Number: number, Title: title})
+		result = append(result, Episode{ID: string(mapping.EpisodeID), AnimeID: string(animeID), Number: number, Title: title})
 	}
 	return result, nil
 }
