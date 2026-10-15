@@ -11,13 +11,14 @@ status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 31 passed on 2026-10-14 (docs/loops/LOOP31.md, CI 38660646062). Loop 32 (History and Continue
+  None. Loop 31 passed on 2026-10-14; Home 近期更新 follow-up f7dffd5 on 2026-10-15 (docs/loops/LOOP31.md, CI 38681263489). Loop 32 (History and Continue
   Watching) is next and needs owner approval to start.
 active_acceptance: none
 next_actions:
   - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
   - 2. Ask the owner before starting Loop 32.
-  - 3. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
+  - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
+  - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
   - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt.
   - Do not research libmpv licensing again; settled in ADR-023.
