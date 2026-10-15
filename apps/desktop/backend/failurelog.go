@@ -22,6 +22,10 @@ const (
 	failureLogMaxLines = 50
 	// A proxy rejection only explains a player failure that follows it closely.
 	upstreamFailureWindow = 30 * time.Second
+	// On Windows, antivirus or indexing can hold the just-replaced log open for a few
+	// milliseconds, so replacing it fails transiently; a short retry rides that out.
+	replaceAttempts   = 5
+	replaceRetryDelay = 10 * time.Millisecond
 )
 
 type failureStage string
@@ -156,7 +160,12 @@ func writeLinesAtomically(path string, lines []string) error {
 	if err := os.WriteFile(temporary, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		return err
 	}
-	if err := os.Rename(temporary, path); err != nil {
+	err := os.Rename(temporary, path)
+	for attempt := 1; err != nil && attempt < replaceAttempts; attempt++ {
+		time.Sleep(replaceRetryDelay)
+		err = os.Rename(temporary, path)
+	}
+	if err != nil {
 		_ = os.Remove(temporary)
 		return err
 	}
