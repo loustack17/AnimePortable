@@ -2,7 +2,7 @@
 
 # Loop 32: History and Continue Watching
 
-Status: PASS (owner accepted 2026-10-19). Run `git log -1` for the final commit; GitHub Windows CI confirms it.
+Status: PASS (owner accepted 2026-10-19). Commit 606b914, GitHub Windows CI 39327866863 green. Follow-up c7cac18 shares the 追蹤/歷史紀錄 row list (behavior unchanged). Released in v0.1.0-alpha.2.
 
 ## Goal
 
