@@ -627,7 +627,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		y := homeFirstRowY + index*64
 		button := fltk.NewButton(250, y, 711, 56, row.Anime.Title)
 		button.SetTooltip(row.Status)
-		ui.styleFollowingRow(button, row)
+		ui.styleTitleStatusRow(button, row.Anime.Title, row.Status)
 		item := row.Anime
 		openRow := func() {
 			if ui.selected == 0 && !ui.homeLoading {

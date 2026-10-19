@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"slices"
 	"time"
 
 	"animeportable/apps/desktop/backend"
@@ -26,20 +25,7 @@ const followingRefreshTimeout = 15 * time.Second
 const followingRefreshInterval = 10 * time.Minute
 
 func (ui *view) buildFollowingView() {
-	ui.followingPage = fltk.NewGroup(236, 110, 741, 487)
-	ui.followingPage.Begin()
-	ui.followingStatus = fltk.NewBox(fltk.NO_BOX, 252, 118, 580, 40, "")
-	ui.followingStatus.SetLabelSize(12)
-	ui.followingStatus.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
-	ui.followingRefresh = fltk.NewButton(845, 118, 112, 40, "更新集數")
-	ui.styleButton(ui.followingRefresh, nil)
-	ui.bindButton(ui.followingRefresh, ui.refreshFollowing)
-	ui.followingScroll = fltk.NewScroll(236, 166, 741, 431)
-	ui.followingScroll.SetType(fltk.SCROLL_VERTICAL)
-	ui.followingScroll.SetBox(fltk.FLAT_BOX)
-	ui.followingScroll.End()
-	ui.followingPage.End()
-	ui.followingPage.Hide()
+	ui.followingPage, ui.followingStatus, ui.followingRefresh, ui.followingScroll = ui.buildRowListPage("更新集數", ui.refreshFollowing)
 }
 
 func (ui *view) followingVisible() bool {
@@ -247,116 +233,38 @@ func (ui *view) renderFollowingStatus() {
 	ui.followingStatus.Redraw()
 }
 
+func (ui *view) followingList() rowList {
+	return rowList{
+		page: ui.followingPage, status: ui.followingStatus, action: ui.followingRefresh, scroll: ui.followingScroll,
+		buttons: &ui.followingButtons, rowIDs: &ui.followingRowIDs,
+	}
+}
+
 func (ui *view) renderFollowing() {
-	if ui.followingPage == nil {
-		return
-	}
-	focusedID, focusedRow, focusedColumn := "", -1, 0
-	for index, button := range ui.followingButtons {
-		if button.HasFocus() && index/2 < len(ui.followingRowIDs) {
-			focusedID, focusedRow, focusedColumn = ui.followingRowIDs[index/2], index/2, index%2
-		}
-		ui.followingScroll.Remove(button)
-		button.Destroy()
-	}
-	ui.followingButtons = nil
-	ui.followingRowIDs = nil
-	// Keep the scroll position: a background refresh must not jump the list to the top.
-	scrollY := ui.followingScroll.YPosition()
-	ui.followingScroll.ScrollTo(0, 0)
-	ui.followingScroll.Begin()
-	for index, row := range ui.followingItems {
-		open := fltk.NewButton(0, 0, 1, 1, row.Anime.Title)
-		open.SetTooltip(row.Status)
-		ui.styleFollowingRow(open, row)
+	rows := make([]listRow, 0, len(ui.followingItems))
+	for _, row := range ui.followingItems {
 		item := row.Anime
-		ui.bindButton(open, func() {
-			if ui.followingVisible() {
-				ui.openDetailFrom(detailFromFollowing, item)
-			}
+		rows = append(rows, listRow{
+			id: item.ID, title: item.Title, status: row.Status, tooltip: row.Status,
+			open: func() {
+				if ui.followingVisible() {
+					ui.openDetailFrom(detailFromFollowing, item)
+				}
+			},
+			iconLabel: "取消追蹤",
+			styleIcon: func(button *fltk.Button) { ui.styleFollowIcon(button, func() bool { return true }) },
+			activateIcon: func() {
+				if ui.followingVisible() {
+					ui.unfollow(item.ID)
+				}
+			},
 		})
-		remove := fltk.NewButton(0, 0, 1, 1, "取消追蹤")
-		remove.SetTooltip("取消追蹤")
-		ui.styleFollowIcon(remove, func() bool { return true })
-		ui.bindButton(remove, func() {
-			if ui.followingVisible() {
-				ui.unfollow(item.ID)
-			}
-		})
-		ui.followingButtons = append(ui.followingButtons, open, remove)
-		ui.followingRowIDs = append(ui.followingRowIDs, item.ID)
-		ui.placeFollowingRow(index)
 	}
-	ui.followingScroll.End()
-	if len(ui.followingRowIDs) > 0 {
-		lastRowBottom := 9 + len(ui.followingRowIDs)*64
-		ui.followingScroll.ScrollTo(0, max(0, min(scrollY, lastRowBottom-ui.followingScroll.H())))
-	}
-	ui.renderFollowingStatus()
-	ui.applyTheme()
-	if focusedRow < 0 {
-		return
-	}
-	// The focused row may be gone after 取消追蹤; keep focus on the row now in its place.
-	target := slices.Index(ui.followingRowIDs, focusedID)
-	if target < 0 {
-		target = min(focusedRow, len(ui.followingRowIDs)-1)
-	}
-	if target < 0 {
-		ui.followingRefresh.TakeFocus()
-		return
-	}
-	ui.followingButtons[target*2+focusedColumn].TakeFocus()
-}
-
-func (ui *view) placeFollowingRow(index int) {
-	scroll := ui.followingScroll
-	removeWidth := followIconSize
-	// The star's right edge lines up with the 更新集數 button above it.
-	openWidth := max(220, scroll.W()-35-removeWidth-8)
-	y := scroll.Y() + 9 + index*64
-	ui.followingButtons[index*2].Resize(scroll.X()+15, y, openWidth, 56)
-	ui.followingButtons[index*2+1].Resize(scroll.X()+15+openWidth+8, y+8, removeWidth, 40)
-}
-
-// styleFollowingRow draws the title above the episode state.
-func (ui *view) styleFollowingRow(button *fltk.Button, row followingRow) {
-	button.SetBox(fltk.NO_BOX)
-	button.SetDrawHandler(func(func()) {
-		colors := ui.colors()
-		x, y, width, height := button.X(), button.Y(), button.W(), button.H()
-		if button.HasFocus() {
-			roundedRect(x, y, width, height, 13, colors.accent)
-		} else {
-			roundedRect(x, y, width, height, 13, colors.surface)
-		}
-		roundedRect(x+3, y+3, width-6, height-6, 11, colors.surface)
-		fltk.PushClip(x+3, y+3, width-6, height-6)
-
-		fltk.SetDrawColor(colors.ink)
-		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 15)
-		fltk.Draw(row.Anime.Title, x+18, y+6, width-36, 24, fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE|fltk.ALIGN_CLIP)
-		fltk.SetDrawColor(colors.muted)
-		fltk.SetDrawFont(fltk.HELVETICA, 12)
-		fltk.Draw(row.Status, x+18, y+30, width-36, 20, fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE|fltk.ALIGN_CLIP)
-		fltk.PopClip()
-	})
+	ui.renderRowList(ui.followingList(), rows, ui.renderFollowingStatus, ui.focusFollowing)
 }
 
 func (ui *view) resizeFollowing() {
-	if ui.followingPage == nil {
-		return
-	}
-	width := max(400, ui.window.W()-259)
-	height := max(250, ui.window.H()-131)
-	ui.followingPage.Resize(236, 110, width, height)
-	ui.followingRefresh.Resize(236+width-20-112, 118, 112, 40)
-	ui.followingStatus.Resize(252, 118, max(150, width-32-112-12), 40)
-	ui.followingScroll.Resize(236, 166, width, max(120, height-56))
-	ui.followingScroll.ScrollTo(0, 0)
-	for index := range ui.followingRowIDs {
-		ui.placeFollowingRow(index)
-	}
+	ui.resizeRowList(ui.followingList())
 }
 
 func (ui *view) toggleDetailFollow() {
@@ -408,7 +316,7 @@ func (ui *view) renderDetailFollow() {
 	ui.previewFollow.Show()
 }
 
-// followIconSize is the width of the star follow buttons.
+// followIconSize is the width of the detail screen's star follow button.
 const followIconSize = 40
 
 // placeFollowIcon puts the detail screen's follow icon at the right end of the button

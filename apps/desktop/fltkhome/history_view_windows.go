@@ -6,7 +6,6 @@ package fltkhome
 
 import (
 	"fmt"
-	"slices"
 	"time"
 
 	"animeportable/apps/desktop/backend"
@@ -15,25 +14,10 @@ import (
 
 const historySection = 3
 
-// historyRemoveSize is the width of the remove icon at the end of each 歷史紀錄 row.
-const historyRemoveSize = 40
-
 func (ui *view) buildHistoryView() {
-	ui.historyPage = fltk.NewGroup(236, 110, 741, 487)
-	ui.historyPage.Begin()
-	ui.historyStatus = fltk.NewBox(fltk.NO_BOX, 252, 118, 580, 40, "")
-	ui.historyStatus.SetLabelSize(12)
-	ui.historyStatus.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
-	ui.historyRetry = fltk.NewButton(845, 118, 112, 40, "重新載入")
-	ui.styleButton(ui.historyRetry, nil)
-	ui.bindButton(ui.historyRetry, ui.loadHistory)
+	ui.historyPage, ui.historyStatus, ui.historyRetry, ui.historyScroll = ui.buildRowListPage("重新載入", ui.loadHistory)
+	// 重新載入 shows only after a failed load.
 	ui.historyRetry.Hide()
-	ui.historyScroll = fltk.NewScroll(236, 166, 741, 431)
-	ui.historyScroll.SetType(fltk.SCROLL_VERTICAL)
-	ui.historyScroll.SetBox(fltk.FLAT_BOX)
-	ui.historyScroll.End()
-	ui.historyPage.End()
-	ui.historyPage.Hide()
 }
 
 func (ui *view) historyVisible() bool {
@@ -139,83 +123,30 @@ func (ui *view) renderHistoryStatus() {
 	ui.historyStatus.Redraw()
 }
 
-func (ui *view) renderHistory() {
-	if ui.historyPage == nil {
-		return
+func (ui *view) historyList() rowList {
+	return rowList{
+		page: ui.historyPage, status: ui.historyStatus, action: ui.historyRetry, scroll: ui.historyScroll,
+		buttons: &ui.historyButtons, rowIDs: &ui.historyRowIDs,
 	}
-	focusedID, focusedRow, focusedColumn := "", -1, 0
-	for index, button := range ui.historyButtons {
-		if button.HasFocus() && index/2 < len(ui.historyRowIDs) {
-			focusedID, focusedRow, focusedColumn = ui.historyRowIDs[index/2], index/2, index%2
-		}
-		ui.historyScroll.Remove(button)
-		button.Destroy()
-	}
-	ui.historyButtons = nil
-	ui.historyRowIDs = nil
-	// Keep the scroll position: a reload after removing a row must not jump to the top.
-	scrollY := ui.historyScroll.YPosition()
-	ui.historyScroll.ScrollTo(0, 0)
-	ui.historyScroll.Begin()
-	for index, row := range ui.historyItems {
-		open := fltk.NewButton(0, 0, 1, 1, row.Title)
-		open.SetTooltip("繼續播放：" + row.Status)
-		// The row looks like a 追蹤 row: title above, status below.
-		ui.styleFollowingRow(open, followingRow{Anime: backend.Anime{ID: row.History.AnimeID, Title: row.Title}, Status: row.Status})
-		item := row.History
-		ui.bindButton(open, func() { ui.continueHistory(item) })
-		remove := fltk.NewButton(0, 0, 1, 1, "移除紀錄")
-		remove.SetTooltip("移除紀錄")
-		ui.styleRemoveIcon(remove)
-		ui.bindButton(remove, func() { ui.removeHistory(item.AnimeID) })
-		ui.historyButtons = append(ui.historyButtons, open, remove)
-		ui.historyRowIDs = append(ui.historyRowIDs, item.AnimeID)
-		ui.placeHistoryRow(index)
-	}
-	ui.historyScroll.End()
-	if len(ui.historyRowIDs) > 0 {
-		lastRowBottom := 9 + len(ui.historyRowIDs)*64
-		ui.historyScroll.ScrollTo(0, max(0, min(scrollY, lastRowBottom-ui.historyScroll.H())))
-	}
-	ui.renderHistoryStatus()
-	ui.applyTheme()
-	if focusedRow < 0 {
-		return
-	}
-	// The focused row may be gone after 移除紀錄; keep focus on the row now in its place.
-	target := slices.Index(ui.historyRowIDs, focusedID)
-	if target < 0 {
-		target = min(focusedRow, len(ui.historyRowIDs)-1)
-	}
-	if target < 0 {
-		ui.focusHistory()
-		return
-	}
-	ui.historyButtons[target*2+focusedColumn].TakeFocus()
 }
 
-func (ui *view) placeHistoryRow(index int) {
-	scroll := ui.historyScroll
-	openWidth := max(220, scroll.W()-35-historyRemoveSize-8)
-	y := scroll.Y() + 9 + index*64
-	ui.historyButtons[index*2].Resize(scroll.X()+15, y, openWidth, 56)
-	ui.historyButtons[index*2+1].Resize(scroll.X()+15+openWidth+8, y+8, historyRemoveSize, 40)
+func (ui *view) renderHistory() {
+	rows := make([]listRow, 0, len(ui.historyItems))
+	for _, row := range ui.historyItems {
+		item := row.History
+		rows = append(rows, listRow{
+			id: item.AnimeID, title: row.Title, status: row.Status, tooltip: "繼續播放：" + row.Status,
+			open:         func() { ui.continueHistory(item) },
+			iconLabel:    "移除紀錄",
+			styleIcon:    ui.styleRemoveIcon,
+			activateIcon: func() { ui.removeHistory(item.AnimeID) },
+		})
+	}
+	ui.renderRowList(ui.historyList(), rows, ui.renderHistoryStatus, ui.focusHistory)
 }
 
 func (ui *view) resizeHistory() {
-	if ui.historyPage == nil {
-		return
-	}
-	width := max(400, ui.window.W()-259)
-	height := max(250, ui.window.H()-131)
-	ui.historyPage.Resize(236, 110, width, height)
-	ui.historyRetry.Resize(236+width-20-112, 118, 112, 40)
-	ui.historyStatus.Resize(252, 118, max(150, width-32-112-12), 40)
-	ui.historyScroll.Resize(236, 166, width, max(120, height-56))
-	ui.historyScroll.ScrollTo(0, 0)
-	for index := range ui.historyRowIDs {
-		ui.placeHistoryRow(index)
-	}
+	ui.resizeRowList(ui.historyList())
 }
 
 // styleRemoveIcon draws a remove button as an X. The label is not drawn; it names the
