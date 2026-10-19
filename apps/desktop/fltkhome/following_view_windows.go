@@ -70,14 +70,15 @@ func (ui *view) loadFollowing() {
 	go func() {
 		library, libraryErr := ui.service.Library(ui.ctx)
 		following, followingErr := ui.service.Following(ui.ctx)
+		history, historyErr := ui.service.History(ui.ctx)
 		fltk.Awake(func() {
 			if generation != ui.followingGeneration || !ui.followingVisible() {
 				return
 			}
 			ui.followingLoaded = true
-			ui.followingLoadFailed = firstError(libraryErr, followingErr) != nil
+			ui.followingLoadFailed = firstError(libraryErr, followingErr, historyErr) != nil
 			if !ui.followingLoadFailed {
-				ui.followingItems = followingRows(following, library)
+				ui.followingItems = followingRows(following, library, history)
 			}
 			ui.renderFollowing()
 		})
@@ -233,13 +234,7 @@ func (ui *view) renderFollowingStatus() {
 	case len(ui.followingItems) == 0:
 		status = "尚未追蹤任何作品。在作品頁按星號即可追蹤。"
 	default:
-		newCount := 0
-		for _, item := range ui.followingItems {
-			if item.New {
-				newCount++
-			}
-		}
-		status = fmt.Sprintf("追蹤 %d 部，%d 部有新集數。", len(ui.followingItems), newCount)
+		status = fmt.Sprintf("追蹤 %d 部。", len(ui.followingItems))
 	}
 	if ui.followingRefreshing {
 		status += "\n正在更新最新集數，先顯示上次記錄。"
@@ -324,7 +319,7 @@ func (ui *view) placeFollowingRow(index int) {
 	ui.followingButtons[index*2+1].Resize(scroll.X()+15+openWidth+8, y+8, removeWidth, 40)
 }
 
-// styleFollowingRow draws the title, the episode state and a 有新集數 badge.
+// styleFollowingRow draws the title above the episode state.
 func (ui *view) styleFollowingRow(button *fltk.Button, row followingRow) {
 	button.SetBox(fltk.NO_BOX)
 	button.SetDrawHandler(func(func()) {
@@ -337,17 +332,10 @@ func (ui *view) styleFollowingRow(button *fltk.Button, row followingRow) {
 		}
 		roundedRect(x+3, y+3, width-6, height-6, 11, colors.surface)
 		fltk.PushClip(x+3, y+3, width-6, height-6)
-		badgeWidth := 0
-		if row.New {
-			badgeWidth = 96
-			roundedRect(x+width-badgeWidth-14, y+8, badgeWidth, 22, 11, colors.accent)
-			fltk.SetDrawColor(colors.surface)
-			fltk.SetDrawFont(fltk.HELVETICA_BOLD, 12)
-			fltk.Draw("有新集數", x+width-badgeWidth-14, y+8, badgeWidth, 22, fltk.ALIGN_CENTER)
-		}
+
 		fltk.SetDrawColor(colors.ink)
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 15)
-		fltk.Draw(row.Anime.Title, x+18, y+6, width-36-badgeWidth, 24, fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE|fltk.ALIGN_CLIP)
+		fltk.Draw(row.Anime.Title, x+18, y+6, width-36, 24, fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE|fltk.ALIGN_CLIP)
 		fltk.SetDrawColor(colors.muted)
 		fltk.SetDrawFont(fltk.HELVETICA, 12)
 		fltk.Draw(row.Status, x+18, y+30, width-36, 20, fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE|fltk.ALIGN_CLIP)

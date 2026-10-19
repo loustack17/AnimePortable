@@ -22,6 +22,7 @@ type Service interface {
 	Detail(context.Context, string) (backend.Detail, error)
 	Episodes(context.Context, string) ([]backend.Episode, error)
 	History(context.Context) ([]backend.History, error)
+	RemoveHistory(context.Context, string) error
 	Following(context.Context) ([]backend.Following, error)
 	Follow(context.Context, string) error
 	Unfollow(context.Context, string) error
@@ -146,6 +147,19 @@ type view struct {
 	// followingRefreshAttemptedAt throttles the automatic refresh, success or not, so a
 	// failing source is not asked again on every visit to Home or 追蹤.
 	followingRefreshAttemptedAt time.Time
+
+	historyPage          *fltk.Group
+	historyStatus        *fltk.Box
+	historyRetry         *fltk.Button
+	historyScroll        *fltk.Scroll
+	historyButtons       []*fltk.Button
+	historyRowIDs        []string
+	historyItems         []historyRow
+	historyGeneration    uint64
+	historyLoading       bool
+	historyLoaded        bool
+	historyLoadFailed    bool
+	historyRemovePending bool
 }
 
 func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int)) {
@@ -295,6 +309,7 @@ func (ui *view) build() {
 	ui.scroll.End()
 	ui.buildSearchView()
 	ui.buildFollowingView()
+	ui.buildHistoryView()
 	ui.mainGroup.End()
 	ui.mainGroup.Hide()
 	navPanel := fltk.NewGroup(14, 18, 205, 582)
@@ -326,6 +341,7 @@ func (ui *view) build() {
 		ui.scroll.Resize(236, 110, max(400, ui.window.W()-259), max(250, ui.window.H()-131))
 		ui.resizeSearch()
 		ui.resizeFollowing()
+		ui.resizeHistory()
 	})
 }
 
@@ -425,6 +441,9 @@ func (ui *view) showSection(index int) {
 	if ui.followingPage != nil && index != followingSection {
 		ui.followingPage.Hide()
 	}
+	if ui.historyPage != nil && index != historySection {
+		ui.historyPage.Hide()
+	}
 	for _, button := range ui.navigation {
 		button.Redraw()
 	}
@@ -452,6 +471,12 @@ func (ui *view) showSection(index int) {
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
 		ui.showFollowing()
+	} else if index == historySection && ui.historyPage != nil {
+		ui.contentHint.SetLabel("最近觀看的作品與進度；按作品繼續播放。")
+		ui.scroll.Hide()
+		ui.searchPage.Hide()
+		ui.previewGroup.Hide()
+		ui.showHistory()
 	} else {
 		ui.contentHint.SetLabel("此頁面尚未建立")
 		ui.scroll.Hide()
@@ -810,6 +835,10 @@ func (ui *view) focusContent() {
 	}
 	if ui.selected == followingSection && ui.followingPage != nil {
 		ui.focusFollowing()
+		return
+	}
+	if ui.selected == historySection && ui.historyPage != nil {
+		ui.focusHistory()
 		return
 	}
 	if ui.scroll.Visible() && ui.browseButton != nil {

@@ -87,6 +87,10 @@ func TestPlaybackAndSettingsPersistAcrossReopen(t *testing.T) {
 	if err := store.SaveSettings(ctx, settings); err != nil {
 		t.Fatal(err)
 	}
+	kept := core.PlaybackProgress{AnimeID: "anime-b", EpisodeID: "episode-a", Position: 3 * time.Minute, Duration: 24 * time.Minute, UpdatedAt: fixed}
+	if err := store.SaveProgress(ctx, kept); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.RemoveHistory(ctx, "anime-a"); err != nil {
 		t.Fatal(err)
 	}
@@ -98,8 +102,12 @@ func TestPlaybackAndSettingsPersistAcrossReopen(t *testing.T) {
 	}
 	store = openLibraryStore(t, path)
 	defer store.Close()
-	if got, err := store.Progress(ctx, replacement.AnimeID, replacement.EpisodeID); err != nil || got != replacement {
+	if got, err := store.Progress(ctx, kept.AnimeID, kept.EpisodeID); err != nil || got != kept {
 		t.Fatalf("reopened progress = %#v, %v", got, err)
+	}
+	// Removing anime-a's history also removed its resume position (owner decision 2026-10-19).
+	if got, err := store.Progress(ctx, replacement.AnimeID, replacement.EpisodeID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("removed progress = %#v, %v", got, err)
 	}
 	if got, err := store.History(ctx); err != nil || !reflect.DeepEqual(got, []core.HistoryEntry{entryC}) {
 		t.Fatalf("reopened history = %#v, %v", got, err)

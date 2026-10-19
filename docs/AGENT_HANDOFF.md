@@ -11,12 +11,12 @@ status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 31 passed on 2026-10-14; Home 近期更新 follow-up f7dffd5 on 2026-10-15 (docs/loops/LOOP31.md, CI 38681263489). Loop 32 (History and Continue
-  Watching) is next and needs owner approval to start.
+  None. Loop 32 (History and Continue Watching) passed on 2026-10-19 (docs/loops/LOOP32.md); 追蹤 now shows only the watched
+  episode and position (owner decision). Loop 33 (Schedule) is next and needs owner approval to start.
 active_acceptance: none
 next_actions:
   - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
-  - 2. v0.1.0-alpha.1 passed the owner check. Ask the owner before starting Loop 32.
+  - 2. Ask the owner before starting Loop 33. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
   - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
@@ -32,8 +32,10 @@ boundaries:
   - Keep .codex/, artifacts/ and portable data untouched.
   - Commit, push, workflow and release need owner approval.
 references:
+  - docs/loops/LOOP32.md
   - docs/loops/LOOP31.md
   - docs/loops/LOOP30.md
   - docs/STATUS.md
   - artifacts/evidence/loop31/
+  - artifacts/evidence/loop32/
 ```

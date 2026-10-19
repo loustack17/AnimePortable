@@ -66,8 +66,9 @@ func TestFollowingPageShowsStoredStateWhenRefreshFails(t *testing.T) {
 	service := &followingViewTestService{
 		searchViewTestService: &searchViewTestService{episodes: unreachable},
 		following: []backend.Following{
-			{AnimeID: "fresh", HasAvailable: true, LatestAvailableNumber: "3"},
-			{AnimeID: "watched", HasAvailable: true, LatestAvailableNumber: "3", HasWatched: true, LatestWatchedNumber: "2", NewEpisode: true},
+			// NewEpisode no longer moves a series up (owner decision 2026-10-19): 乙作品 still sorts first.
+			{AnimeID: "fresh", HasAvailable: true, LatestAvailableNumber: "3", NewEpisode: true},
+			{AnimeID: "watched", HasAvailable: true, LatestAvailableNumber: "3", HasWatched: true, LatestWatchedNumber: "2"},
 		},
 	}
 	ui := newFollowingViewTestFixture(t, service)
@@ -77,9 +78,9 @@ func TestFollowingPageShowsStoredStateWhenRefreshFails(t *testing.T) {
 		return ui.followingLoaded && !ui.followingRefreshing && strings.Contains(ui.followingStatus.Label(), "無法更新最新集數，顯示上次記錄的狀態。")
 	})
 	if !slices.Equal(ui.followingRowIDs, []string{"watched", "fresh"}) {
-		t.Fatalf("rows = %#v, want the series with a new episode first", ui.followingRowIDs)
+		t.Fatalf("rows = %#v, want title order", ui.followingRowIDs)
 	}
-	if status := ui.followingStatus.Label(); !strings.Contains(status, "追蹤 2 部，1 部有新集數。") {
+	if status := ui.followingStatus.Label(); !strings.Contains(status, "追蹤 2 部。") || strings.Contains(status, "有新集數") {
 		t.Fatalf("status = %q", status)
 	}
 	if !ui.followingPage.Visible() || ui.searchPage.Visible() {

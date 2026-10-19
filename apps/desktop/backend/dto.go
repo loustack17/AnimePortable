@@ -49,14 +49,17 @@ type Following struct {
 	LatestSeenAt    string `json:"latestSeenAt"`
 }
 
+// History is one played episode. EpisodeNumber is the stored episode label, empty when
+// not known yet.
 type History struct {
-	AnimeID    string `json:"animeId"`
-	EpisodeID  string `json:"episodeId"`
-	Position   int64  `json:"position"`
-	Duration   int64  `json:"duration"`
-	Completed  bool   `json:"completed"`
-	UpdatedAt  string `json:"updatedAt"`
-	LastPlayed string `json:"lastPlayed"`
+	AnimeID       string `json:"animeId"`
+	EpisodeID     string `json:"episodeId"`
+	EpisodeNumber string `json:"episodeNumber"`
+	Position      int64  `json:"position"`
+	Duration      int64  `json:"duration"`
+	Completed     bool   `json:"completed"`
+	UpdatedAt     string `json:"updatedAt"`
+	LastPlayed    string `json:"lastPlayed"`
 }
 
 type Settings struct {

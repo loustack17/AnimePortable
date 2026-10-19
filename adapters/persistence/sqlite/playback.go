@@ -282,6 +282,9 @@ func (store *Store) History(ctx context.Context) ([]core.HistoryEntry, error) {
 	return items, nil
 }
 
+// RemoveHistory deletes an anime's history and its saved resume positions together
+// (owner decision 2026-10-19), so nothing of a removed entry comes back until the anime
+// is played again.
 func (store *Store) RemoveHistory(ctx context.Context, animeID core.AnimeID) error {
 	if !validIdentity(string(animeID)) {
 		return ErrInvalidInput
@@ -290,8 +293,18 @@ func (store *Store) RemoveHistory(ctx context.Context, animeID core.AnimeID) err
 		if err := requireAnime(ctx, db, animeID); err != nil {
 			return err
 		}
-		_, err := db.ExecContext(ctx, `DELETE FROM playback_history WHERE anime_id = ?`, animeID)
-		return err
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		if _, err := tx.ExecContext(ctx, `DELETE FROM playback_history WHERE anime_id = ?`, animeID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM playback_progress WHERE anime_id = ?`, animeID); err != nil {
+			return err
+		}
+		return tx.Commit()
 	})
 }
 

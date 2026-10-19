@@ -316,6 +316,11 @@ func (store *memoryStore) RemoveHistory(_ context.Context, id core.AnimeID) erro
 		}
 	}
 	store.history = kept
+	for key := range store.progress {
+		if key[0] == string(id) {
+			delete(store.progress, key)
+		}
+	}
 	return nil
 }
 func progressKey(animeID core.AnimeID, episodeID core.EpisodeID) [2]string {

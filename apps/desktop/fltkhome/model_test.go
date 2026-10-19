@@ -51,11 +51,12 @@ func TestSelectHomeRowsUsesOnlyLatestResumableEpisodePerAnime(t *testing.T) {
 	}
 }
 
-func TestFollowingRowsUseKnownNamesAndPutNewEpisodesFirst(t *testing.T) {
+func TestFollowingRowsUseKnownNamesAndSortByTitleOnly(t *testing.T) {
+	// A series with unwatched episodes is not moved up or marked (owner decision 2026-10-19).
 	items := []backend.Following{{AnimeID: "known"}, {AnimeID: "missing"}, {AnimeID: "new", NewEpisode: true}}
-	library := []backend.Anime{{ID: "known", Title: "  作品名稱  "}, {ID: "new", Title: "新作品"}}
-	got := followingRows(items, library)
-	if len(got) != 3 || got[0].Anime.ID != "new" || !got[0].New || got[1].Anime.Title != "作品名稱" || got[1].New || got[2].Anime.ID != "missing" || got[2].Anime.Title != "未知作品" {
+	library := []backend.Anime{{ID: "known", Title: "  乙作品  "}, {ID: "new", Title: "戊作品"}}
+	got := followingRows(items, library, nil)
+	if len(got) != 3 || got[0].Anime.Title != "乙作品" || got[1].Anime.ID != "new" || got[2].Anime.ID != "missing" || got[2].Anime.Title != "未知作品" {
 		t.Fatalf("following rows = %#v", got)
 	}
 }
@@ -65,12 +66,22 @@ func TestFollowingStatusDescribesEachEpisodeState(t *testing.T) {
 		item backend.Following
 		want string
 	}{
-		{backend.Following{}, "最新：尚未取得集數 · 尚未觀看"},
-		{backend.Following{HasAvailable: true, LatestAvailableNumber: "12"}, "最新：第 12 集 · 尚未觀看"},
-		{backend.Following{HasAvailable: true, LatestAvailableNumber: "12", HasWatched: true, LatestWatchedNumber: "10", NewEpisode: true}, "最新：第 12 集 · 看到：第 10 集"},
-		{backend.Following{HasWatched: true}, "最新：尚未取得集數 · 看到：集數未知"},
+		{backend.Following{}, "尚未觀看"},
+		{backend.Following{HasAvailable: true, LatestAvailableNumber: "12"}, "尚未觀看"},
+		{backend.Following{AnimeID: "a", HasAvailable: true, LatestAvailableNumber: "12", HasWatched: true, LatestWatched: "ep-10", LatestWatchedNumber: "10", NewEpisode: true}, "看到：第 10 集 · 7:52 / 24:00"},
+		{backend.Following{AnimeID: "a", HasWatched: true, LatestWatched: "ep-1", LatestWatchedNumber: "01"}, "看到：第 01 集 · 已看完"},
+		{backend.Following{AnimeID: "a", HasWatched: true, LatestWatched: "no-history"}, "看到：集數未知"},
+		{backend.Following{AnimeID: "a", HasWatched: true, LatestWatched: "opened", LatestWatchedNumber: "11"}, "看到：第 11 集"},
+		{backend.Following{AnimeID: "a", HasWatched: true, LatestWatched: "no-duration", LatestWatchedNumber: "3"}, "看到：第 3 集 · 7:52"},
 	} {
-		if got := followingStatus(test.item); got != test.want {
+		history := []backend.History{
+			{AnimeID: "other", EpisodeID: "ep-10", Position: 1000},
+			{AnimeID: "a", EpisodeID: "ep-10", Position: 472000, Duration: 1440000},
+			{AnimeID: "a", EpisodeID: "ep-1", Position: 1440000, Duration: 1440000, Completed: true},
+			{AnimeID: "a", EpisodeID: "opened", Duration: 1440000},
+			{AnimeID: "a", EpisodeID: "no-duration", Position: 472000},
+		}
+		if got := followingStatus(test.item, history); got != test.want {
 			t.Errorf("followingStatus(%#v) = %q, want %q", test.item, got, test.want)
 		}
 	}

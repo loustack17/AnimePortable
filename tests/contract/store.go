@@ -131,6 +131,11 @@ func RunStore(t *testing.T, suite StoreSuite) {
 		if err := store.AddHistory(ctx, entryB); err != nil {
 			t.Fatal(err)
 		}
+		for _, entry := range []core.HistoryEntry{entryA, entryB} {
+			if err := store.SaveProgress(ctx, entry.Progress); err != nil {
+				t.Fatal(err)
+			}
+		}
 		history, err := store.History(ctx)
 		if err != nil || !containsHistory(history, animeA.ID) || !containsHistory(history, animeB.ID) {
 			t.Fatalf("history = %#v, error = %v", history, err)
@@ -141,6 +146,13 @@ func RunStore(t *testing.T, suite StoreSuite) {
 		history, err = store.History(ctx)
 		if err != nil || containsHistory(history, animeA.ID) || !containsHistory(history, animeB.ID) {
 			t.Fatalf("history = %#v, error = %v", history, err)
+		}
+		// Removing an entry also forgets its resume positions, and only that anime's.
+		if _, err := store.Progress(ctx, animeA.ID, episodeA); !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("removed anime progress error = %v", err)
+		}
+		if _, err := store.Progress(ctx, animeB.ID, episodeB); err != nil {
+			t.Fatalf("other anime progress error = %v", err)
 		}
 	})
 	t.Run("progress", func(t *testing.T) {

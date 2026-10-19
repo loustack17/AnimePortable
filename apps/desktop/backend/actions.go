@@ -343,17 +343,19 @@ func (service *Service) History(ctx context.Context) ([]History, error) {
 		return nil, err
 	}
 	defer done()
-	_, store, _, err := service.appSnapshot()
+	app, _, _, err := service.appSnapshot()
 	if err != nil {
 		return nil, err
 	}
-	entries, err := store.History(operationCtx)
+	entries, err := app.ListHistory(operationCtx)
 	if err != nil {
 		return nil, safeError(err)
 	}
 	result := make([]History, 0, len(entries))
 	for _, entry := range entries {
-		result = append(result, historyDTO(entry))
+		item := historyDTO(entry.HistoryEntry)
+		item.EpisodeNumber = entry.EpisodeNumber
+		result = append(result, item)
 	}
 	return result, nil
 }

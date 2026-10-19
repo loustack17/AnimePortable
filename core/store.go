@@ -18,6 +18,7 @@ type Store interface {
 	Following(ctx context.Context) ([]FollowedAnime, error)
 	AddHistory(ctx context.Context, entry HistoryEntry) error
 	History(ctx context.Context) ([]HistoryEntry, error)
+	// RemoveHistory also deletes the anime's saved resume positions.
 	RemoveHistory(ctx context.Context, animeID AnimeID) error
 	SaveProgress(ctx context.Context, progress PlaybackProgress) error
 	SavePlaybackCheckpoint(ctx context.Context, entry HistoryEntry) error

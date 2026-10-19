@@ -658,5 +658,6 @@ func TestNativeCoverRedrawScalesWithinResizedBoxAndKeepsSourceDimensions(t *test
 	ui.releaseDetailCover()
 }
 
-func (service *searchViewTestService) Follow(context.Context, string) error   { return nil }
-func (service *searchViewTestService) Unfollow(context.Context, string) error { return nil }
+func (service *searchViewTestService) Follow(context.Context, string) error        { return nil }
+func (service *searchViewTestService) Unfollow(context.Context, string) error      { return nil }
+func (service *searchViewTestService) RemoveHistory(context.Context, string) error { return nil }

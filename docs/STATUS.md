@@ -2,11 +2,11 @@
 
 # Status
 
-Updated 2026-10-14. Branch `main`.
+Updated 2026-10-19. Branch `main`.
 
 ## Current state
 
-Loops 1 to 31 pass. Loop 31 (Following) was accepted on 2026-10-14: 追蹤 page with latest and watched episode and a 有新集數 badge from local data (shows when Anime1 is unreachable), episode numbers stored by migration 0004, follow and unfollow as a star icon. Commits a1a6dc6 and 6373957 (failure-log flake fix); CI 38660646062 green. Follow-up f7dffd5 (2026-10-15, owner-approved): Home's first section is 近期更新 (followed anime with an episode first seen in the last 7 days, migration 0005), then 繼續觀看; CI 38681263489 green. Pre-release v0.1.0-alpha.1 was published on 2026-10-15 by a tag-only CI release job ([loops/PRERELEASE_0.1.0-alpha.1.md](loops/PRERELEASE_0.1.0-alpha.1.md)). Next is Loop 32 (History and Continue Watching), which needs owner approval to start. Loop 30 (anime detail and episode UI) was accepted on 2026-10-14: smooth playback (missing `fltk.Lock()` fixed), playback failures shown and logged in `playback-failures.log`, AniList/Bangumi cover and synopsis in Taiwan Traditional Chinese, general title matching, ascending episodes.
+Loops 1 to 32 pass. Loop 32 (History and Continue Watching) was accepted on 2026-10-19: 歷史紀錄 page (one row per anime with episode, progress and last-played day; a row continues at the saved position; an X icon removes the anime's history and its saved resume positions), local only, no migration. Owner decision the same day: the 追蹤 page shows only the watched episode and position, with no 有新集數 badge. Details: [loops/LOOP32.md](loops/LOOP32.md); GitHub Windows CI confirms the pushed commit. Loop 31 (Following) was accepted on 2026-10-14: 追蹤 page with latest and watched episode and a 有新集數 badge from local data (shows when Anime1 is unreachable), episode numbers stored by migration 0004, follow and unfollow as a star icon. Commits a1a6dc6 and 6373957 (failure-log flake fix); CI 38660646062 green. Follow-up f7dffd5 (2026-10-15, owner-approved): Home's first section is 近期更新 (followed anime with an episode first seen in the last 7 days, migration 0005), then 繼續觀看; CI 38681263489 green. Pre-release v0.1.0-alpha.1 was published on 2026-10-15 by a tag-only CI release job ([loops/PRERELEASE_0.1.0-alpha.1.md](loops/PRERELEASE_0.1.0-alpha.1.md)). Next is Loop 33 (Schedule), which needs owner approval to start. Loop 30 (anime detail and episode UI) was accepted on 2026-10-14: smooth playback (missing `fltk.Lock()` fixed), playback failures shown and logged in `playback-failures.log`, AniList/Bangumi cover and synopsis in Taiwan Traditional Chinese, general title matching, ascending episodes.
 
 Platform: Windows amd64 only. Native tests run locally (about 90 seconds including race) and in GitHub Windows CI.
 
@@ -14,13 +14,15 @@ Platform: Windows amd64 only. Native tests run locally (about 90 seconds includi
 
 | Loops | Status |
 | --- | --- |
-| 1 to 31 | PASS. Loop 31 details: [loops/LOOP31.md](loops/LOOP31.md) |
-| 32 to 38 | NOT_STARTED (roadmap shortened 2026-10-14) |
+| 1 to 32 | PASS. Loop 32 details: [loops/LOOP32.md](loops/LOOP32.md) |
+| 33 to 38 | NOT_STARTED (roadmap shortened 2026-10-14) |
 
 ## Open items
 
 | Item | Next action |
 | --- | --- |
+| 追蹤 更新集數 wording; core/backend `NewEpisode` unused by the UI | Owner to decide whether to reword the refresh button and notes, and whether to remove `NewEpisode`. |
+| 追蹤 and 歷史紀錄 list code duplicated | Refactor session waits for Loop 32 on main. |
 | Playback failures (suspected intermittent Anime1 HTTP 502) | Read `playback-failures.log` after the next failure; decide on an automatic retry from the recorded stage and status. |
 
 ## Settled owner decisions (2026-10-13)

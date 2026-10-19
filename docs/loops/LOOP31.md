@@ -20,7 +20,7 @@ In scope:
 
 Out of scope: notifications, Schedule, History page, new dependencies, workflow or release changes.
 
-Indicator rules (core `ListFollowing`):
+Indicator rules (core `ListFollowing`). Owner decision 2026-10-19 (docs/loops/LOOP32.md): the 追蹤 page no longer shows 有新集數 or ranks by it; rows show only the watched episode and position.
 
 - Latest episode: the highest numbered stored episode. Episodes without a plain number (specials) are not "latest".
 - Watched episode: the highest numbered episode with any playback history; rewatching an older one does not lower it.
