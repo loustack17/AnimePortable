@@ -16,7 +16,7 @@ active_work: >
 active_acceptance: none
 next_actions:
   - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
-  - 2. Ask the owner before starting Loop 33. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
+  - 2. v0.1.0-alpha.2 published 2026-10-19 (tag on 85fbbc0, release run 39337289767; ZIP verified, DLL hash matches pin, smoke start OK; owner try PASS). Ask the owner before starting Loop 33. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
   - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.

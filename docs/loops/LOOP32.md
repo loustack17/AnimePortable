@@ -46,6 +46,7 @@ Test build: `artifacts/test-build/AnimePortable.exe` (uncommitted worktree build
 
 ## Status
 
+- Release v0.1.0-alpha.2 (2026-10-19): tag on 85fbbc0, release run 39337289767 green; ZIP files checked, libmpv DLL matches the pin, smoke start OK. Owner downloaded, unzipped and ran it: PASS (TypeSafe owner-report HUMAN_PASS, conf 1.00).
 - Owner check 2 (2026-10-19): PASS for the 追蹤 page; owner approved commit and push (TypeSafe owner-report HUMAN_PASS, conf 1.00).
 - Implementation done. Local: gofmt and vet clean; full native suite and race green (nuwen msvcrt MinGW gcc 15.2); origin/main unchanged since 45e949f, no newer migration.
 - Independent review: no MUST_FIX. Fixed: rows from an old or failed load could still be played at a stale or removed position (now blocked while loading; a failed load drops the rows); last-row removal focuses the 歷史紀錄 button; port comment; backend test removes while offline and checks kept progress. Deferred: the 歷史紀錄 list mirrors the 追蹤 list code (render, place, resize, focus restore); sharing it needs edits to Loop 31 files.
