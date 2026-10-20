@@ -568,6 +568,7 @@ type trackedEventRelay struct {
 	priority          []trackedRelayEvent
 	lastTerminalOwner uint64
 	terminalSeen      bool
+	queueGeneration   uint64
 	wake              chan struct{}
 	stop              <-chan struct{}
 	events            chan PlaybackEvent
@@ -607,6 +608,7 @@ func (relay *trackedEventRelay) publish(event PlaybackEvent, owner uint64) {
 		relay.terminalSeen = true
 		relay.lastTerminalOwner = owner
 		relay.queue = relay.queue[:0]
+		relay.queueGeneration++
 		if len(relay.priority) < trackedEventQueueCapacity {
 			relay.priority = append(relay.priority, item)
 		}
@@ -676,10 +678,9 @@ func (relay *trackedEventRelay) run() {
 		if len(relay.queue) > 0 {
 			item := relay.queue[0]
 			relay.queue = relay.queue[1:]
+			generation := relay.queueGeneration
 			relay.mu.Unlock()
-			select {
-			case relay.events <- item.event:
-			case <-relay.stop:
+			if !relay.deliverQueued(item.event, generation) {
 				return
 			}
 			continue
@@ -689,6 +690,28 @@ func (relay *trackedEventRelay) run() {
 		case <-relay.wake:
 		case <-relay.stop:
 			return
+		}
+	}
+}
+
+// deliverQueued hands a dequeued event to the consumer, or drops it if a terminal
+// clears the queue first. Until the consumer takes it the event has not been
+// delivered, so it must stay droppable; otherwise a stale old-owner event slips
+// in before the terminal. It reports false when the relay stops.
+func (relay *trackedEventRelay) deliverQueued(event PlaybackEvent, generation uint64) bool {
+	for {
+		relay.mu.Lock()
+		cleared := relay.queueGeneration != generation
+		relay.mu.Unlock()
+		if cleared {
+			return true
+		}
+		select {
+		case relay.events <- event:
+			return true
+		case <-relay.wake:
+		case <-relay.stop:
+			return false
 		}
 	}
 }
