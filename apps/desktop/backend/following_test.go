@@ -84,7 +84,14 @@ func TestFollowingSurvivesRestartAndSourceOutage(t *testing.T) {
 		t.Fatalf("following = %#v, want %#v", got[0], upToDate)
 	}
 
-	// A new episode airs.
+	// A new episode airs. In the app a later list is a separate fetch, so it gets a later
+	// stamp; here the calls are back to back and Windows' wall clock can stamp both with
+	// the same time, so wait for it to move past the follow and the first list. Round(0)
+	// compares wall time, which is what gets stored, not the finer monotonic reading.
+	firstListed := time.Now().Round(0)
+	for !time.Now().Round(0).After(firstListed) {
+		time.Sleep(time.Millisecond)
+	}
 	source.mu.Lock()
 	source.episodes = []core.SourceEpisode{episode("3"), episode("2"), episode("1")}
 	source.mu.Unlock()
