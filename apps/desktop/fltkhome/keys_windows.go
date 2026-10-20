@@ -160,10 +160,10 @@ func (ui *view) windowKey(command keyCommand, key int) bool {
 	}
 	switch command {
 	case keyBack:
-		ui.deferredMainAction(ui.goBack)()
+		ui.backKey()
 		return true
 	case keySearch:
-		ui.deferredMainAction(ui.openQuickSearch)()
+		ui.quickSearchKey()
 		return true
 	case keyActivate:
 		// Space with no focused button plays the selected episode on the detail screen.
@@ -173,6 +173,24 @@ func (ui *view) windowKey(command keyCommand, key int) bool {
 		}
 	}
 	return false
+}
+
+// bindWindowKeys installs the window-wide keys. Esc and quick search run after the key event
+// and are not tied to the page generation: they act on whatever page shows when they run, so a
+// page reloading in between (a queued detail reopening) must not drop the key. Presses that
+// arrive before the first one runs are dropped, so Esc goes back one page only. Nothing runs
+// while the player hides the window.
+func (ui *view) bindWindowKeys() {
+	whenShown := func(action func()) func() {
+		return ui.deferredKeyAction(func() {
+			if ui.window.IsShown() && ui.mainGroup.Visible() {
+				action()
+			}
+		})
+	}
+	ui.backKey = whenShown(ui.goBack)
+	ui.quickSearchKey = whenShown(ui.openQuickSearch)
+	ui.window.SetEventHandler(ui.handleWindowShortcut)
 }
 
 // isEscapeClose reports whether the window callback was triggered by Esc, which FLTK turns

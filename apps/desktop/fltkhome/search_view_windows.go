@@ -131,7 +131,7 @@ func (ui *view) buildSearchView() {
 	ui.previewGroup.End()
 	ui.previewGroup.Hide()
 
-	ui.window.SetEventHandler(ui.handleWindowShortcut)
+	ui.bindWindowKeys()
 }
 
 func (ui *view) bindSearchButton(button *fltk.Button, action func()) {
@@ -528,17 +528,6 @@ func searchPageLabel(page, count, total int) string {
 func (ui *view) focusSearchInput() {
 	if ui.selected == 4 && !ui.searchPreview {
 		ui.searchInput.TakeFocus()
-	}
-}
-
-func (ui *view) deferredMainAction(action func()) func() {
-	return func() {
-		pageGeneration := ui.pageGeneration
-		ui.deferredKeyAction(func() {
-			if ui.pageGeneration == pageGeneration && ui.mainGroup != nil && ui.mainGroup.Visible() {
-				action()
-			}
-		})()
 	}
 }
 

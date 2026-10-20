@@ -116,11 +116,13 @@ type view struct {
 	pageGeneration     uint64
 	searchInputVersion uint64
 	closeOnce          sync.Once
-	closeButton        *fltk.Button
-	themeToggle        *fltk.Button
-	dark               bool
-	appearance         *appearancePersistence
-	closing            bool
+	// backKey and quickSearchKey run Esc and `/` or Ctrl+K; see bindWindowKeys.
+	backKey, quickSearchKey func()
+	closeButton             *fltk.Button
+	themeToggle             *fltk.Button
+	dark                    bool
+	appearance              *appearancePersistence
+	closing                 bool
 
 	previewFollow *fltk.Button
 	// followPending blocks a second follow or unfollow until the first one finishes.

@@ -129,7 +129,22 @@ func TestNativeEscapeGoesBackAndNeverClosesTheApp(t *testing.T) {
 	pumpSearchEvents(t, func() bool { return ui.searchPreview })
 	ui.previewBack.TakeFocus()
 	pressKey(t, ui.window, vkEscape)
+	// A detail queued behind 搜尋's library load reopens when the library lands, which starts a
+	// new page generation; the Escape already pressed must still go back (CI 39498639041).
+	ui.pageGeneration++
 	pumpSearchEvents(t, func() bool { return ui.selected == followingSection && !ui.searchPreview })
+
+	// Two presses before the first one runs go back one page, not two.
+	ui.openDetailFrom(detailFromFollowing, backend.Anime{ID: "anime", Title: "作品"})
+	pumpSearchEvents(t, func() bool { return ui.searchPreview })
+	ui.previewBack.TakeFocus()
+	pressKey(t, ui.window, vkEscape)
+	pressKey(t, ui.window, vkEscape)
+	pumpSearchEvents(t, func() bool { return ui.selected == followingSection })
+	pumpFor(100 * time.Millisecond)
+	if ui.selected != followingSection {
+		t.Fatalf("two quick Escapes left 追蹤 for section %d", ui.selected)
+	}
 
 	// Before the main screen shows, no page handles Escape; FLTK's default must not close the app.
 	ui.mainGroup.Hide()
