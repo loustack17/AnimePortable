@@ -19,7 +19,6 @@ next_actions:
   - 2. Ask the owner before starting Loop 34. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
-  - Pre-existing -race flake in core TestTrackedRelayDropsQueuedOldOwnerEventsBeforeTargetTerminal: relay fix 3a98db7 on branch loustack17/priceless-kowalevski-8d8512, not pushed; needs owner approval.
   - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
   - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt.
