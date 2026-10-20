@@ -7,16 +7,16 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: PASS
+status: OWNER_CHECK_PENDING
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 33 (Schedule) passed on 2026-10-20 (docs/loops/LOOP33.md; d7285ab, CI 39382115519). Loop 34 (Keyboard
-  navigation everywhere) is next and needs owner approval.
-active_acceptance: none
+  Loop 34 (Keyboard navigation everywhere, docs/loops/LOOP34.md) implemented in worktree hungry-kowalevski-1f0f72,
+  not committed. Suite and race green, review has no MUST_FIX, owner check PASS 2026-10-20.
+active_acceptance: docs/loops/LOOP34.md (owner check steps 1-7)
 next_actions:
-  - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
-  - 2. Ask the owner before starting Loop 34. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
+  - 1. Owner check passed. Confirm the Ctrl+K player test change with the owner; then ask to commit and push to main and confirm Windows CI.
+  - 2. After PASS, move Loop 34 to the completed table in docs/04_ROADMAP.md and update its header count. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
   - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
@@ -29,11 +29,13 @@ do_not_repeat:
   - Do not show Simplified Chinese; convert Bangumi text with s2twp. Japanese-only synopses stay unconverted.
   - Do not add backend actions without owner approval; main_test.go allowlist is fixed (CachedSchedule was approved 2026-10-20).
   - Never change a migration already applied to the owner's test data; the checksum check then refuses the database (happened 2026-10-20, repaired; broken copy in artifacts/evidence/loop33/).
+  - Do not let Esc reach FLTK's default on the main window: unhandled Esc runs the window callback and closed the app (fixed Loop 34 by isEscapeClose).
   - Do not take the schedule from Anime1 (owner, 2026-10-20): its season pages lag; the schedule is Bangumi's calendar.
 boundaries:
   - Keep .codex/, artifacts/ and portable data untouched.
   - Commit, push, workflow and release need owner approval.
 references:
+  - docs/loops/LOOP34.md
   - docs/loops/LOOP33.md
   - docs/loops/LOOP32.md
   - docs/loops/LOOP31.md

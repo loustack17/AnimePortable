@@ -239,7 +239,7 @@ func TestNativeDetailArrowKeepsLastEpisodeVisibleAtMinimumWindow(t *testing.T) {
 	ui.renderDetailEpisodes()
 	ui.previewEpisodeRows[0].TakeFocus()
 	for index := 0; index < len(episodes)-1; index++ {
-		ui.handleDetailEpisodeKey(index, 0xff54)
+		ui.handleDetailEpisodeKey(index, classifyKey(0xff54, 0))
 		pumpSearchEvents(t, func() bool {
 			return ui.detailModel.selected == index+1 && ui.previewEpisodeRows[index+1].HasFocus()
 		})
@@ -415,12 +415,12 @@ func TestNativeDetailSpacePlaysExactFocusedEpisodeAndArrowRestoresFocus(t *testi
 	ui.previewGroup.Show()
 	ui.renderDetailEpisodes()
 	ui.previewEpisodeRows[2].TakeFocus()
-	ui.handleDetailEpisodeKey(2, 0xff52)
+	ui.handleDetailEpisodeKey(2, classifyKey(0xff52, 0))
 	pumpSearchEvents(t, func() bool { return ui.detailModel.selected == 1 && ui.previewEpisodeRows[1].HasFocus() })
 	ui.detailModel.selectEpisode(0)
 	ui.renderDetailEpisodes()
 	ui.previewEpisodeRows[2].TakeFocus()
-	ui.handleDetailEpisodeKey(2, 0xff54)
+	ui.handleDetailEpisodeKey(2, classifyKey(0xff54, 0))
 	pumpSearchEvents(t, func() bool { return ui.detailModel.selected == 3 && ui.previewEpisodeRows[3].HasFocus() })
 	ui.detailModel.setHistory(nil)
 	ui.renderDetailEpisodes()
@@ -431,7 +431,7 @@ func TestNativeDetailSpacePlaysExactFocusedEpisodeAndArrowRestoresFocus(t *testi
 	played := false
 	ui.onPlay = func(value backend.PlayRequest) { request, played = value, true }
 	ui.previewEpisodeRows[2].TakeFocus()
-	ui.handleDetailEpisodeKey(2, 32)
+	ui.handleDetailEpisodeKey(2, classifyKey(32, 0))
 	pumpSearchEvents(t, func() bool { return played })
 	if request.AnimeID != "anime" || request.EpisodeID != "episode-2" || request.StartAt != 0 {
 		t.Fatalf("focused episode Space request = %#v", request)
@@ -446,7 +446,7 @@ func TestNativeDetailWithoutPlayCallbackKeepsSelectedRowFocusedAndCancelsLoads(t
 	ui.detailModel.setEpisodes([]backend.Episode{{ID: "episode-0"}, {ID: "episode-1"}, {ID: "episode-2"}})
 	ui.previewGroup.Show()
 	ui.renderDetailEpisodes()
-	ui.handleDetailEpisodeKey(2, 13)
+	ui.handleDetailEpisodeKey(2, classifyKey(13, 0))
 	pumpSearchEvents(t, func() bool { return ui.detailModel.selected == 2 && ui.previewEpisodeRows[2].HasFocus() })
 	backCtx, backCancel := context.WithCancel(ui.ctx)
 	ui.detailCancel = backCancel

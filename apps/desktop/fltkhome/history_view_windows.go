@@ -15,7 +15,7 @@ import (
 const historySection = 3
 
 func (ui *view) buildHistoryView() {
-	ui.historyPage, ui.historyStatus, ui.historyRetry, ui.historyScroll = ui.buildRowListPage("重新載入", ui.loadHistory)
+	ui.historyPage, ui.historyStatus, ui.historyRetry, ui.historyScroll = ui.buildRowListPage("重新載入", ui.loadHistory, func() { ui.historyList().focus(0, 0) })
 	// 重新載入 shows only after a failed load.
 	ui.historyRetry.Hide()
 }
@@ -92,7 +92,7 @@ func (ui *view) removeHistory(animeID string) {
 
 func (ui *view) focusHistory() {
 	if len(ui.historyButtons) > 0 {
-		ui.historyButtons[0].TakeFocus()
+		ui.historyList().focus(0, 0)
 		return
 	}
 	if ui.historyRetry.Visible() {

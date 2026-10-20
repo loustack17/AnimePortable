@@ -126,8 +126,12 @@ type view struct {
 	// followPending blocks a second follow or unfollow until the first one finishes.
 	followPending bool
 	// detailOrigin is where Back and Escape on the detail screen return to.
-	detailOrigin             detailOrigin
-	homeUpdateButtons        []*fltk.Button
+	detailOrigin      detailOrigin
+	homeUpdateButtons []*fltk.Button
+	// homeUpdateIDs holds the anime ID of each 近期更新 row, in homeUpdateButtons order.
+	homeUpdateIDs []string
+	// homeFocus is the Home row that had focus when a reload hid the rows.
+	homeFocus                homeFocus
 	homeUpdateOffsets        []int
 	homeCardLabels           []*fltk.Box
 	homeCardOffset           int
@@ -199,7 +203,11 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 			}
 		})
 	})
-	window.SetCallback(ui.cancel)
+	window.SetCallback(func() {
+		if !isEscapeClose() {
+			ui.cancel()
+		}
+	})
 	ui.build()
 	if planErr != nil {
 		ui.showStartupError("無法使用這個資料夾，請將程式解壓到可寫入的位置後重新開啟。")
@@ -258,7 +266,7 @@ func (ui *view) build() {
 		}
 		ui.applyTheme()
 	}
-	ui.bindButton(ui.themeToggle, toggleTheme)
+	ui.themeToggle.SetCallback(toggleTheme)
 	ui.bindThemeKeys(toggleTheme)
 	ui.themeToggle.Deactivate()
 	ui.startupGroup = fltk.NewGroup(18, 78, 964, 520)
@@ -306,7 +314,7 @@ func (ui *view) build() {
 		fltk.Draw(browse.Label(), x, y, width, height, fltk.ALIGN_CENTER)
 	})
 	browseAction := func() { ui.showSection(4); ui.focusSearchInput() }
-	ui.bindButton(browse, browseAction)
+	browse.SetCallback(browseAction)
 	ui.bindContentKeys(browse, browseAction, nil, func() *fltk.Button {
 		if ui.retryButton != nil && ui.retryButton.Visible() {
 			return ui.retryButton
@@ -322,7 +330,7 @@ func (ui *view) build() {
 	ui.loadingText.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
 	ui.retryButton = fltk.NewButton(253, 365, 126, 36, "重新載入")
 	ui.styleButton(ui.retryButton, func() bool { return true })
-	ui.bindButton(ui.retryButton, ui.loadHome)
+	ui.retryButton.SetCallback(ui.loadHome)
 	ui.bindContentKeys(ui.retryButton, ui.loadHome, func() *fltk.Button { return ui.browseButton }, func() *fltk.Button { return ui.themeToggle })
 	ui.retryButton.Hide()
 	ui.scroll.End()
@@ -449,6 +457,8 @@ func (ui *view) showSection(index int) {
 		ui.stopDetailLoad()
 		ui.searchModel.cancel()
 		ui.searchPreview = false
+		// The results page shows; a detail opened from it next must return to it.
+		ui.detailOrigin = detailFromSearch
 	}
 	if ui.selected == 4 && index != 4 {
 		ui.stopDetailLoad()
@@ -516,6 +526,8 @@ func (ui *view) showSection(index int) {
 	ui.window.Redraw()
 }
 
+// navigate shows a page after playback and focuses it: the search input for 搜尋, otherwise
+// the page's navigation button. Focus waits for the window to be shown again.
 func (ui *view) navigate(index int) {
 	alreadyHome := index == 0 && ui.selected == 0
 	ui.showSection(index)
@@ -523,6 +535,16 @@ func (ui *view) navigate(index int) {
 		// showSection reloads Home only when entering it; after playback Home may already be shown.
 		ui.refreshHome()
 	}
+	ui.focusAfterKey(func() {
+		if ui.selected != index {
+			return
+		}
+		if index == SearchSection {
+			ui.focusQuickSearchInput()
+		} else {
+			ui.focusNavigation()
+		}
+	})
 }
 
 // refreshHome reloads Home, or queues one more load when a load is already running.
@@ -586,6 +608,7 @@ func (ui *view) loadHome() {
 				ui.loadingText.SetLabel("無法載入作品資料。")
 				ui.loadingText.Show()
 				ui.retryButton.Show()
+				ui.restoreHomeFocus()
 				ui.window.Redraw()
 				return
 			}
@@ -599,6 +622,7 @@ func (ui *view) loadHome() {
 }
 
 func (ui *view) hideHomeContinue() {
+	ui.rememberHomeFocus()
 	for _, button := range ui.homeFocusables() {
 		button.Deactivate()
 		button.Hide()
@@ -636,6 +660,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		button.Destroy()
 	}
 	ui.homeUpdateButtons = nil
+	ui.homeUpdateIDs = nil
 	ui.homeUpdateOffsets = nil
 	ui.cardButtons = nil
 	ui.cards = nil
@@ -664,10 +689,11 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 				ui.openDetailFrom(detailFromHome, item)
 			}
 		}
-		ui.bindButton(button, openRow)
+		button.SetCallback(openRow)
 		// Keyboard order follows the page: these rows, then 繼續播放 cards, then the theme toggle.
 		ui.bindContentKeys(button, openRow, func() *fltk.Button {
-			if index > 0 {
+			// Focus moves after the key event, when a reload may have rebuilt fewer rows.
+			if index > 0 && index <= len(ui.homeUpdateButtons) {
 				return ui.homeUpdateButtons[index-1]
 			}
 			return ui.browseButton
@@ -681,6 +707,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 			return ui.themeToggle
 		})
 		ui.homeUpdateButtons = append(ui.homeUpdateButtons, button)
+		ui.homeUpdateIDs = append(ui.homeUpdateIDs, item.ID)
 		ui.homeUpdateOffsets = append(ui.homeUpdateOffsets, y-homeFirstRowY)
 	}
 
@@ -710,9 +737,9 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		ui.styleButton(button, func() bool { return true })
 		item := row.History
 		playRow := func() { ui.playHomeRow(item, rowGeneration) }
-		ui.bindButton(button, playRow)
+		button.SetCallback(playRow)
 		ui.bindContentKeys(button, playRow, func() *fltk.Button {
-			if index > 0 {
+			if index > 0 && index <= len(ui.cardButtons) {
 				return ui.cardButtons[index-1]
 			}
 			if len(ui.homeUpdateButtons) > 0 {
@@ -735,6 +762,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	ui.contentText(270, todayY+37, 620, 22, "目前沒有本機播出資料。", 12, true, false)
 	ui.scroll.End()
 	ui.applyTheme()
+	ui.restoreHomeFocus()
 	ui.resolveHomeEpisodes(ui.homeLoadGeneration)
 	// Home shows 近期更新 from stored data; this checks Anime1 for new episodes in the background.
 	ui.refreshFollowingIfDue()
@@ -782,46 +810,6 @@ func (ui *view) applyHomeEpisodeResult(generation uint64, index int, row homeRow
 	ui.window.Redraw()
 }
 
-func (ui *view) bindButton(button *fltk.Button, action func()) {
-	button.SetCallback(action)
-	activate := ui.deferredKeyAction(action)
-	button.SetEventHandler(func(event fltk.Event) bool {
-		if event != fltk.KEYDOWN {
-			return false
-		}
-		key := fltk.EventKey()
-		if key != fltk.ENTER_KEY && key != 13 && key != 0xff8d {
-			return false
-		}
-		activate()
-		return true
-	})
-}
-
-func (ui *view) deferredKeyAction(action func()) func() {
-	queued := false
-	return func() {
-		if queued {
-			return
-		}
-		queued = true
-		fltk.AddTimeout(0.01, func() {
-			queued = false
-			if ui.ctx.Err() == nil && !ui.closing {
-				action()
-			}
-		})
-	}
-}
-
-func (ui *view) focusAfterKey(action func()) {
-	fltk.AddTimeout(0.01, func() {
-		if ui.ctx.Err() == nil && !ui.closing {
-			action()
-		}
-	})
-}
-
 func (ui *view) bindNavigationKeys(button *fltk.Button, index int) {
 	position := navigationPosition(index)
 	button.SetCallback(func() { ui.showSection(index) })
@@ -830,19 +818,19 @@ func (ui *view) bindNavigationKeys(button *fltk.Button, index int) {
 		if event != fltk.KEYDOWN {
 			return false
 		}
-		switch fltk.EventKey() {
-		case fltk.ENTER_KEY, 13, 0xff8d:
+		switch classifyKey(fltk.EventKey(), fltk.EventState()) {
+		case keyActivate:
 			activate()
-		case 0xff52:
+		case keyUp, keyPrevious:
 			ui.focusAfterKey(func() { ui.navigation[navigationOrder[max(0, position-1)]].TakeFocus() })
-		case 0xff54:
+		case keyDown:
 			ui.focusAfterKey(func() { ui.navigation[navigationOrder[min(len(navigationOrder)-1, position+1)]].TakeFocus() })
-		case 0xff53:
+		case keyRight:
 			ui.focusAfterKey(ui.focusContent)
-		case 9, 0xff09:
-			if fltk.EventState()&fltk.SHIFT != 0 {
-				ui.focusAfterKey(func() { ui.navigation[navigationOrder[max(0, position-1)]].TakeFocus() })
-			} else if position+1 < len(navigationOrder) {
+		case keyLeft:
+			// The navigation is the left edge; FLTK must not move focus elsewhere.
+		case keyNext:
+			if position+1 < len(navigationOrder) {
 				ui.focusAfterKey(func() { ui.navigation[navigationOrder[position+1]].TakeFocus() })
 			} else {
 				ui.focusAfterKey(ui.focusContent)
@@ -929,16 +917,16 @@ func (ui *view) bindContentKeys(button *fltk.Button, action func(), previous, ne
 		if event != fltk.KEYDOWN {
 			return false
 		}
-		switch fltk.EventKey() {
-		case fltk.ENTER_KEY, 13, 0xff8d:
+		switch classifyKey(fltk.EventKey(), fltk.EventState()) {
+		case keyActivate:
 			activate()
-		case 0xff51:
+		case keyLeft:
 			if button == ui.browseButton || button == ui.retryButton {
 				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
 			} else {
 				ui.focusAfterKey(func() { ui.focusTarget(ui.browseButton) })
 			}
-		case 0xff53:
+		case keyRight:
 			if button == ui.browseButton && len(ui.homeFocusables()) > 0 {
 				ui.focusAfterKey(func() {
 					if list := ui.homeFocusables(); len(list) > 0 {
@@ -950,7 +938,7 @@ func (ui *view) bindContentKeys(button *fltk.Button, action func(), previous, ne
 			} else {
 				return true
 			}
-		case 0xff52:
+		case keyUp:
 			if button == ui.browseButton {
 				ui.focusAfterKey(func() { ui.focusTarget(ui.themeToggle) })
 			} else if previous == nil || previous() == nil {
@@ -958,20 +946,20 @@ func (ui *view) bindContentKeys(button *fltk.Button, action func(), previous, ne
 			} else {
 				ui.focusAfterKey(func() { ui.focusTarget(previous()) })
 			}
-		case 0xff54:
+		case keyDown:
 			if next != nil && next() != nil {
 				ui.focusAfterKey(func() { ui.focusTarget(next()) })
 			} else {
 				return false
 			}
-		case 9, 0xff09:
-			if fltk.EventState()&fltk.SHIFT != 0 {
-				if previous == nil || previous() == nil {
-					ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
-				} else {
-					ui.focusAfterKey(func() { ui.focusTarget(previous()) })
-				}
-			} else if next != nil && next() != nil {
+		case keyPrevious:
+			if previous == nil || previous() == nil {
+				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
+			} else {
+				ui.focusAfterKey(func() { ui.focusTarget(previous()) })
+			}
+		case keyNext:
+			if next != nil && next() != nil {
 				ui.focusAfterKey(func() { ui.focusTarget(next()) })
 			} else {
 				return false
@@ -989,14 +977,14 @@ func (ui *view) bindThemeKeys(action func()) {
 		if event != fltk.KEYDOWN {
 			return false
 		}
-		switch fltk.EventKey() {
-		case fltk.ENTER_KEY, 13, 0xff8d:
+		switch classifyKey(fltk.EventKey(), fltk.EventState()) {
+		case keyActivate:
 			activate()
-		case 0xff51:
+		case keyLeft:
 			ui.focusAfterKey(func() { ui.navigation[0].TakeFocus() })
-		case 0xff54:
+		case keyDown:
 			ui.focusAfterKey(ui.focusContent)
-		case 0xff52:
+		case keyUp:
 			if len(ui.homeFocusables()) > 0 && ui.scroll.Visible() {
 				ui.focusAfterKey(func() {
 					if list := ui.homeFocusables(); len(list) > 0 {
@@ -1008,10 +996,7 @@ func (ui *view) bindThemeKeys(action func()) {
 			} else {
 				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
 			}
-		case 9, 0xff09:
-			if fltk.EventState()&fltk.SHIFT == 0 {
-				return false
-			}
+		case keyPrevious:
 			if ui.scroll.Visible() && ui.retryButton != nil && ui.retryButton.Visible() {
 				ui.focusAfterKey(func() { ui.focusTarget(ui.retryButton) })
 			} else if len(ui.homeFocusables()) > 0 && ui.scroll.Visible() {

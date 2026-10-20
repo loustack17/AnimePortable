@@ -35,7 +35,7 @@ const (
 )
 
 func (ui *view) buildScheduleView() {
-	ui.schedulePage, ui.scheduleStatus, ui.scheduleRefresh, ui.scheduleScroll = ui.buildRowListPage("重新整理", ui.refreshSchedule)
+	ui.schedulePage, ui.scheduleStatus, ui.scheduleRefresh, ui.scheduleScroll = ui.buildRowListPage("重新整理", ui.refreshSchedule, func() { ui.focusScheduleNear(0, 0) })
 	ui.scheduleScroll.SetType(fltk.SCROLL_BOTH)
 }
 
@@ -271,20 +271,20 @@ func (ui *view) bindScheduleCard(card *fltk.Button, day, index int) {
 		if event != fltk.KEYDOWN {
 			return false
 		}
-		switch fltk.EventKey() {
-		case fltk.ENTER_KEY, 13, 0xff8d:
+		switch classifyKey(fltk.EventKey(), fltk.EventState()) {
+		case keyActivate:
 			activate()
-		case 0xff51:
+		case keyLeft:
 			ui.focusAfterKey(func() { ui.focusScheduleDay(day, index, -1) })
-		case 0xff53:
+		case keyRight:
 			ui.focusAfterKey(func() { ui.focusScheduleDay(day, index, 1) })
-		case 0xff52:
+		case keyUp:
 			if index == 0 {
 				ui.focusAfterKey(func() { ui.scheduleRefresh.TakeFocus() })
 			} else {
 				ui.focusAfterKey(func() { ui.focusScheduleCard(day, index-1) })
 			}
-		case 0xff54:
+		case keyDown:
 			if index+1 < len(ui.scheduleCards[day]) {
 				ui.focusAfterKey(func() { ui.focusScheduleCard(day, index+1) })
 			}

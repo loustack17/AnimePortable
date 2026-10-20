@@ -30,6 +30,10 @@ type homeRefreshTestService struct {
 	entered          chan struct{}
 	release          chan struct{}
 	following        []backend.Following
+	// library replaces the single stored anime when set.
+	library []backend.Anime
+	// schedule is returned by both the stored and the fetched schedule.
+	schedule []backend.ScheduleItem
 }
 
 func (service *homeRefreshTestService) Start(context.Context) error { return nil }
@@ -40,6 +44,11 @@ func (service *homeRefreshTestService) SaveSettings(context.Context, backend.Set
 	return nil
 }
 func (service *homeRefreshTestService) Library(context.Context) ([]backend.Anime, error) {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if service.library != nil {
+		return append([]backend.Anime(nil), service.library...), nil
+	}
 	return []backend.Anime{{ID: "anime", Title: "作品"}}, nil
 }
 func (service *homeRefreshTestService) Search(context.Context, string) ([]backend.Anime, error) {
@@ -353,11 +362,13 @@ func TestNativeHomeRefreshIsBoundedAndOnlyRunsForHomeNavigation(t *testing.T) {
 func (service *homeRefreshTestService) Follow(context.Context, string) error        { return nil }
 func (service *homeRefreshTestService) Unfollow(context.Context, string) error      { return nil }
 func (service *homeRefreshTestService) RemoveHistory(context.Context, string) error { return nil }
-func (service *homeRefreshTestService) Schedule(context.Context) ([]backend.ScheduleItem, error) {
-	return nil, nil
+func (service *homeRefreshTestService) Schedule(ctx context.Context) ([]backend.ScheduleItem, error) {
+	return service.CachedSchedule(ctx)
 }
 func (service *homeRefreshTestService) CachedSchedule(context.Context) ([]backend.ScheduleItem, error) {
-	return nil, nil
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return append([]backend.ScheduleItem(nil), service.schedule...), nil
 }
 
 func TestNativeReturningHomeFromMenuShowsRecentUpdate(t *testing.T) {

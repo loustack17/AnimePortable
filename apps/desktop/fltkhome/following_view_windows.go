@@ -25,7 +25,7 @@ const followingRefreshTimeout = 15 * time.Second
 const followingRefreshInterval = 10 * time.Minute
 
 func (ui *view) buildFollowingView() {
-	ui.followingPage, ui.followingStatus, ui.followingRefresh, ui.followingScroll = ui.buildRowListPage("更新集數", ui.refreshFollowing)
+	ui.followingPage, ui.followingStatus, ui.followingRefresh, ui.followingScroll = ui.buildRowListPage("更新集數", ui.refreshFollowing, func() { ui.followingList().focus(0, 0) })
 }
 
 func (ui *view) followingVisible() bool {
@@ -210,7 +210,7 @@ func (ui *view) leaveDetail() {
 
 func (ui *view) focusFollowing() {
 	if len(ui.followingButtons) > 0 {
-		ui.followingButtons[0].TakeFocus()
+		ui.followingList().focus(0, 0)
 		return
 	}
 	ui.followingRefresh.TakeFocus()

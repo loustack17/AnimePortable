@@ -6,6 +6,7 @@ package fltkhome
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"animeportable/apps/desktop/backend"
@@ -20,7 +21,7 @@ func (ui *view) buildSearchView() {
 	ui.searchInput.SetCallbackCondition(fltk.WhenChanged | fltk.WhenEnterKeyAlways)
 	ui.searchInput.SetCallback(func() {
 		query := ui.searchInput.Value()
-		enter := fltk.EventKey() == fltk.ENTER_KEY || fltk.EventKey() == 13 || fltk.EventKey() == 0xff8d
+		enter := isEnterKey(fltk.EventKey())
 		ui.searchInputVersion++
 		inputVersion := ui.searchInputVersion
 		pageGeneration := ui.pageGeneration
@@ -35,6 +36,7 @@ func (ui *view) buildSearchView() {
 			}
 		})
 	})
+	ui.searchInput.SetEventHandler(ui.handleSearchInputKey)
 	ui.searchButton = fltk.NewButton(741, 118, 104, 42, "搜尋")
 	ui.styleButton(ui.searchButton, nil)
 	ui.bindSearchButton(ui.searchButton, ui.submitSearch)
@@ -129,47 +131,7 @@ func (ui *view) buildSearchView() {
 	ui.previewGroup.End()
 	ui.previewGroup.Hide()
 
-	ui.window.SetEventHandler(func(event fltk.Event) bool {
-		if event != fltk.SHORTCUT || ui.mainGroup == nil || !ui.mainGroup.Visible() {
-			return false
-		}
-		key := fltk.EventKey()
-		state := fltk.EventState()
-		if ui.selected == 4 && (key == 27 || key == 0xff1b) {
-			ui.deferredSearchAction(ui.searchEscape, ui.searchPreview)()
-			return true
-		}
-		if ui.selected == 4 && ui.searchInput.HasFocus() {
-			return false
-		}
-		if ui.selected == 4 && ui.searchPreview && key == 32 {
-			ui.deferredSearchAction(ui.playSelectedDetailEpisode, true)()
-			return true
-		}
-		if key == 'k' || key == 'K' {
-			if state&fltk.CTRL != 0 {
-				ui.deferredMainAction(func() {
-					ui.showSection(4)
-					if ui.searchPreview {
-						ui.backToSearchResults()
-					}
-					ui.focusSearchInput()
-				})()
-				return true
-			}
-		}
-		if key == '/' {
-			ui.deferredMainAction(func() {
-				ui.showSection(4)
-				if ui.searchPreview {
-					ui.backToSearchResults()
-				}
-				ui.focusSearchInput()
-			})()
-			return true
-		}
-		return false
-	})
+	ui.window.SetEventHandler(ui.handleWindowShortcut)
 }
 
 func (ui *view) bindSearchButton(button *fltk.Button, action func()) {
@@ -180,23 +142,23 @@ func (ui *view) bindSearchButton(button *fltk.Button, action func()) {
 		if event != fltk.KEYDOWN {
 			return false
 		}
-		switch fltk.EventKey() {
-		case fltk.ENTER_KEY, 13, 0xff8d:
+		switch classifyKey(fltk.EventKey(), fltk.EventState()) {
+		case keyActivate:
 			activate()
-		case 27, 0xff1b:
-			ui.deferredSearchAction(ui.searchEscape, previewAction)()
-		case 0xff52:
-			if button == ui.searchNext {
-				ui.deferredSearchAction(func() { ui.focusSearchResult(max(0, len(ui.searchRows)-1)) }, false)()
-			} else if button == ui.searchPrevious {
+		case keyUp:
+			if button == ui.searchNext || button == ui.searchPrevious {
 				ui.deferredSearchAction(func() { ui.focusSearchResult(max(0, len(ui.searchRows)-1)) }, false)()
 			} else {
 				return false
 			}
-		case 0xff54:
-			if button == ui.searchPrevious || button == ui.searchButton {
+		case keyDown:
+			switch {
+			case button == ui.searchPrevious || button == ui.searchButton || button == ui.searchBack:
 				ui.deferredSearchAction(func() { ui.focusSearchResult(0) }, false)()
-			} else {
+			case previewAction && button != ui.previewPrevious && button != ui.previewNext && len(ui.previewEpisodeRows) > 0:
+				// The buttons above the episode list lead into it.
+				ui.deferredSearchAction(ui.focusDetailEpisodes, true)()
+			default:
 				return false
 			}
 		default:
@@ -358,6 +320,8 @@ func (ui *view) renderSearch() {
 	if ui.searchPage == nil {
 		return
 	}
+	// Results are rebuilt when stored or online results arrive; the focused row stays focused.
+	focusedRow := slices.IndexFunc(ui.searchRows, (*fltk.Button).HasFocus)
 	for _, button := range ui.searchRows {
 		ui.searchScroll.Remove(button)
 		button.Destroy()
@@ -380,25 +344,23 @@ func (ui *view) renderSearch() {
 			if event != fltk.KEYDOWN {
 				return false
 			}
-			switch fltk.EventKey() {
-			case fltk.ENTER_KEY, 13, 0xff8d:
+			switch classifyKey(fltk.EventKey(), fltk.EventState()) {
+			case keyActivate:
 				ui.deferredSearchAction(openItem, false)()
-			case 0xff52:
+			case keyUp:
 				ui.deferredSearchAction(func() {
 					ui.searchModel.selected = selectedIndex
 					ui.searchModel.moveSelection(-1)
 					ui.renderSearch()
 					ui.focusSelectedSearchResult()
 				}, false)()
-			case 0xff54:
+			case keyDown:
 				ui.deferredSearchAction(func() {
 					ui.searchModel.selected = selectedIndex
 					ui.searchModel.moveSelection(1)
 					ui.renderSearch()
 					ui.focusSelectedSearchResult()
 				}, false)()
-			case 27, 0xff1b:
-				ui.deferredSearchAction(ui.searchEscape, false)()
 			default:
 				return false
 			}
@@ -408,6 +370,9 @@ func (ui *view) renderSearch() {
 	}
 	ui.searchScroll.End()
 	ui.searchStatus.SetLabel(ui.searchStatusText())
+	// A deactivated button drops focus; remember which one had it.
+	controls := []*fltk.Button{ui.searchButton, ui.searchPrevious, ui.searchNext}
+	focusedControl := slices.ContainsFunc(controls, (*fltk.Button).HasFocus)
 	if ui.searchModel.phase == searchPhaseLoading || ui.searchModel.requestActive {
 		ui.searchButton.Deactivate()
 	} else {
@@ -426,6 +391,11 @@ func (ui *view) renderSearch() {
 		ui.searchNext.Activate()
 	}
 	ui.applyTheme()
+	if focusedRow >= 0 {
+		ui.focusSearchResult(focusedRow)
+	} else if focusedControl && !slices.ContainsFunc(controls, (*fltk.Button).HasFocus) {
+		ui.focusSearchResult(0)
+	}
 }
 
 func (ui *view) renderPreview() {
@@ -606,8 +576,7 @@ func (ui *view) searchEscape() {
 		ui.leaveDetail()
 		return
 	}
-	ui.showSection(0)
-	ui.navigation[0].TakeFocus()
+	ui.goHome()
 }
 
 func (ui *view) backToSearchResults() {

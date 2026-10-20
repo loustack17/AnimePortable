@@ -427,6 +427,9 @@ func TestPlayerRejectsModifiedShortcuts(t *testing.T) {
 	})
 	for _, modifier := range []int{fltk.CTRL, fltk.ALT, fltk.META} {
 		for _, key := range []int{'k', 'f', 'j', 0xff51} {
+			if modifier == fltk.CTRL && key == 'k' {
+				continue // Ctrl+K is quick search; TestPlayerSlashAndCtrlKOpenSearch covers it.
+			}
 			if keyDown(view, key, modifier) {
 				t.Fatalf("modified key %d with modifier %d was handled", key, modifier)
 			}
@@ -582,6 +585,48 @@ func TestPlayerEscapeDismissesListAndMenuBeforeFullscreen(t *testing.T) {
 	keyDown(view, 27, 0)
 	if fullscreen != 1 {
 		t.Fatalf("third Escape fullscreen callbacks=%d, want 1", fullscreen)
+	}
+}
+
+func TestPlayerEscapeInWindowLeavesOnce(t *testing.T) {
+	leaves, fullscreen := 0, 0
+	view := keyboardTestView(Callbacks{Leave: func() { leaves++ }, Fullscreen: func() { fullscreen++ }})
+	if !keyDown(view, 27, 0) || !keyDown(view, 27, 0) {
+		t.Fatal("Escape was not handled")
+	}
+	if leaves != 1 || fullscreen != 0 {
+		t.Fatalf("held Escape: leaves=%d fullscreen=%d, want 1 and 0", leaves, fullscreen)
+	}
+	keyUp(view, 27)
+	view.state.Fullscreen = true
+	keyDown(view, 0xff1b, 0)
+	if leaves != 1 || fullscreen != 1 {
+		t.Fatalf("Escape in fullscreen: leaves=%d fullscreen=%d, want 1 and 1", leaves, fullscreen)
+	}
+}
+
+func TestPlayerSlashAndCtrlKOpenSearch(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		key, modifiers int
+		want           int
+	}{
+		{"slash", '/', 0, 1},
+		{"ctrl-k", 'k', fltk.CTRL, 1},
+		{"ctrl-shift-k", 'K', fltk.CTRL | fltk.SHIFT, 1},
+		{"alt-k", 'k', fltk.ALT, 0},
+		{"ctrl-alt-k", 'k', fltk.CTRL | fltk.ALT, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			searches, plays := 0, 0
+			view := keyboardTestView(Callbacks{Search: func() { searches++ }, PlayPause: func() { plays++ }})
+			view.menuPinned = true
+			keyDown(view, test.key, test.modifiers)
+			keyDown(view, test.key, test.modifiers)
+			if searches != test.want || plays != 0 {
+				t.Fatalf("held key: searches=%d plays=%d, want %d and 0", searches, plays, test.want)
+			}
+		})
 	}
 }
 

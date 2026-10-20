@@ -91,12 +91,12 @@ func TestNativePreviewOnlyPlaysAfterEpisodeAction(t *testing.T) {
 	if len(playedEpisodes) != 0 || ui.previewContinue.Visible() {
 		t.Fatal("preview autoplayed or Continue appeared for an unwatched series")
 	}
-	ui.handleDetailEpisodeKey(1, 13)
+	ui.handleDetailEpisodeKey(1, classifyKey(13, 0))
 	pumpSearchEvents(t, func() bool { return len(playedEpisodes) == 1 })
 	if playedEpisodes[0] != "episode-2" {
 		t.Fatalf("Enter played episode %q, want exact row episode-2", playedEpisodes[0])
 	}
-	ui.handleDetailEpisodeKey(0, 32)
+	ui.handleDetailEpisodeKey(0, classifyKey(32, 0))
 	pumpSearchEvents(t, func() bool { return len(playedEpisodes) == 2 })
 	if playedEpisodes[1] != "episode-1" {
 		t.Fatalf("Space played episode %q, want exact row episode-1", playedEpisodes[1])

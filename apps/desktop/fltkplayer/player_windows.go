@@ -37,6 +37,10 @@ type Callbacks struct {
 	Fullscreen    func()
 	SelectEpisode func(index int)
 	Navigate      func(index int)
+	// Leave ends playback and returns to the app (Esc in a window).
+	Leave func()
+	// Search ends playback and opens 搜尋 (/ and Ctrl+K).
+	Search func()
 }
 
 type State struct {
@@ -499,7 +503,9 @@ func (view *View) handleKeyEvent(event fltk.Event, key, modifiers int) bool {
 		return false
 	}
 	view.showControls()
-	if modifiers&(fltk.CTRL|fltk.ALT|fltk.META) != 0 {
+	// Ctrl+K is the app's quick search; every other modified key is left to the system.
+	quickSearch := key == 'k' && modifiers&(fltk.CTRL|fltk.ALT|fltk.META) == fltk.CTRL
+	if modifiers&(fltk.CTRL|fltk.ALT|fltk.META) != 0 && !quickSearch {
 		return false
 	}
 	if isOneShotKey(key) {
@@ -511,12 +517,18 @@ func (view *View) handleKeyEvent(event fltk.Event, key, modifiers int) bool {
 		}
 		view.pressedKeys[key] = true
 	}
+	if quickSearch || key == '/' {
+		if view.callbacks.Search != nil {
+			view.callbacks.Search()
+		}
+		return true
+	}
 	return view.handleKey(key, modifiers)
 }
 
 func isOneShotKey(key int) bool {
 	switch key {
-	case 9, 0xff09, 27, 0xff1b, fltk.ENTER_KEY, 13, 0xff8d, ' ', 'k', 'm', 'f':
+	case 9, 0xff09, 27, 0xff1b, fltk.ENTER_KEY, 13, 0xff8d, ' ', 'k', 'm', 'f', '/':
 		return true
 	default:
 		return false
@@ -545,8 +557,12 @@ func (view *View) handleKey(key, modifiers int) bool {
 		} else if view.menuVisible() {
 			view.menuPinned = false
 			view.menuHover = false
-		} else if view.state.Fullscreen && view.callbacks.Fullscreen != nil {
-			view.callbacks.Fullscreen()
+		} else if view.state.Fullscreen {
+			if view.callbacks.Fullscreen != nil {
+				view.callbacks.Fullscreen()
+			}
+		} else if view.callbacks.Leave != nil {
+			view.callbacks.Leave()
 		}
 		view.Redraw()
 		return true

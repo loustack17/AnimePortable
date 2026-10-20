@@ -226,16 +226,17 @@ func (ui *view) focusDetailEpisodeRow(index int) {
 		return
 	}
 	row := ui.previewEpisodeRows[index]
-	viewportTop := ui.previewEpisodes.Y()
-	viewportBottom := viewportTop + ui.previewEpisodes.H()
-	rowTop := row.Y()
-	rowBottom := rowTop + row.H()
-	if rowTop < viewportTop {
-		ui.previewEpisodes.ScrollTo(ui.previewEpisodes.XPosition(), max(0, ui.previewEpisodes.YPosition()+rowTop-viewportTop))
-	} else if rowBottom > viewportBottom {
-		ui.previewEpisodes.ScrollTo(ui.previewEpisodes.XPosition(), ui.previewEpisodes.YPosition()+rowBottom-viewportBottom)
-	}
+	scrollIntoView(ui.previewEpisodes, row)
 	row.TakeFocus()
+}
+
+// focusDetailEpisodes focuses the selected episode, or the first one on the page.
+func (ui *view) focusDetailEpisodes() {
+	index := ui.detailModel.selected - ui.detailModel.page*detailEpisodePageSize
+	if index < 0 || index >= len(ui.previewEpisodeRows) {
+		index = 0
+	}
+	ui.focusDetailEpisodeRow(index)
 }
 
 func (ui *view) resizeDetailEpisodeRows() {
@@ -311,7 +312,7 @@ func (ui *view) renderDetailEpisodes() {
 			if event != fltk.KEYDOWN {
 				return false
 			}
-			return ui.handleDetailEpisodeKey(selectedIndex, fltk.EventKey())
+			return ui.handleDetailEpisodeKey(selectedIndex, classifyKey(fltk.EventKey(), fltk.EventState()))
 		})
 		ui.previewEpisodeRows = append(ui.previewEpisodeRows, button)
 		ui.previewEpisodeIDs = append(ui.previewEpisodeIDs, episode.ID)
@@ -358,26 +359,29 @@ func (ui *view) renderDetailEpisodes() {
 	}
 }
 
-func (ui *view) handleDetailEpisodeKey(index, key int) bool {
-	switch key {
-	case fltk.ENTER_KEY, 13, 0xff8d, 32:
+func (ui *view) handleDetailEpisodeKey(index int, command keyCommand) bool {
+	switch command {
+	case keyActivate:
 		ui.deferredSearchAction(func() { ui.playDetailEpisodeAt(index) }, true)()
-	case 0xff52:
+	case keyUp:
+		if index == 0 {
+			// Above the first episode are 返回 and the other buttons.
+			ui.deferredSearchAction(func() { ui.previewBack.TakeFocus() }, true)()
+			return true
+		}
 		ui.deferredSearchAction(func() {
 			ui.detailModel.selectEpisode(index)
 			ui.detailModel.moveSelection(-1)
 			ui.renderDetailEpisodes()
 			ui.focusSelectedDetailEpisode()
 		}, true)()
-	case 0xff54:
+	case keyDown:
 		ui.deferredSearchAction(func() {
 			ui.detailModel.selectEpisode(index)
 			ui.detailModel.moveSelection(1)
 			ui.renderDetailEpisodes()
 			ui.focusSelectedDetailEpisode()
 		}, true)()
-	case 27, 0xff1b:
-		ui.deferredSearchAction(ui.searchEscape, true)()
 	default:
 		return false
 	}

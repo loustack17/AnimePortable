@@ -245,6 +245,8 @@ func main() {
 			})
 		},
 		Navigate: stop,
+		Leave:    func() { stop(0) },
+		Search:   func() { stop(fltkhome.SearchSection) },
 	})
 	player.Window().SetCallback(func() { stop(0) })
 	// The failure log sits next to the database.

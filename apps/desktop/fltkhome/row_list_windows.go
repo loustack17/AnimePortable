@@ -27,8 +27,8 @@ type rowList struct {
 }
 
 // buildRowListPage builds a hidden page with a status line, a top-right action button and
-// an empty row list below them.
-func (ui *view) buildRowListPage(actionLabel string, onAction func()) (*fltk.Group, *fltk.Box, *fltk.Button, *fltk.Scroll) {
+// an empty row list below them. Down on the action button runs focusContent.
+func (ui *view) buildRowListPage(actionLabel string, onAction, focusContent func()) (*fltk.Group, *fltk.Box, *fltk.Button, *fltk.Scroll) {
 	page := fltk.NewGroup(236, 110, 741, 487)
 	page.Begin()
 	status := fltk.NewBox(fltk.NO_BOX, 252, 118, 580, 40, "")
@@ -36,7 +36,7 @@ func (ui *view) buildRowListPage(actionLabel string, onAction func()) (*fltk.Gro
 	status.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
 	action := fltk.NewButton(845, 118, 112, 40, actionLabel)
 	ui.styleButton(action, nil)
-	ui.bindButton(action, onAction)
+	ui.bindKeys(action, onAction, keyRoutes{up: ui.focusNavigation, left: ui.focusNavigation, down: focusContent})
 	scroll := fltk.NewScroll(236, 166, 741, 431)
 	scroll.SetType(fltk.SCROLL_VERTICAL)
 	scroll.SetBox(fltk.FLAT_BOX)
@@ -79,11 +79,11 @@ func (ui *view) renderRowList(list rowList, rows []listRow, renderStatus, focusE
 		open := fltk.NewButton(0, 0, 1, 1, row.title)
 		open.SetTooltip(row.tooltip)
 		ui.styleTitleStatusRow(open, row.title, row.status)
-		ui.bindButton(open, row.open)
+		ui.bindKeys(open, row.open, list.routes(ui, index, 0))
 		icon := fltk.NewButton(0, 0, 1, 1, row.iconLabel)
 		icon.SetTooltip(row.iconLabel)
 		row.styleIcon(icon)
-		ui.bindButton(icon, row.activateIcon)
+		ui.bindKeys(icon, row.activateIcon, list.routes(ui, index, 1))
 		*list.buttons = append(*list.buttons, open, icon)
 		*list.rowIDs = append(*list.rowIDs, row.id)
 		list.placeRow(index)
@@ -106,7 +106,45 @@ func (ui *view) renderRowList(list rowList, rows []listRow, renderStatus, focusE
 		focusEmpty()
 		return
 	}
-	(*list.buttons)[target*2+focusedColumn].TakeFocus()
+	list.focus(target, focusedColumn)
+}
+
+// routes moves focus from the row's title (column 0) or icon (column 1): Up and Down to the
+// same column of the neighbouring row, Left and Right between title and icon. Up from the
+// first row reaches the page button when it shows, and Left from a title the navigation.
+func (list rowList) routes(ui *view, index, column int) keyRoutes {
+	routes := keyRoutes{
+		up: func() {
+			if index > 0 {
+				list.focus(index-1, column)
+			} else if list.action.Visible() && list.action.IsActive() {
+				list.action.TakeFocus()
+			} else {
+				ui.focusNavigation()
+			}
+		},
+		down: func() { list.focus(index+1, column) },
+	}
+	if column == 0 {
+		routes.left = ui.focusNavigation
+		routes.right = func() { list.focus(index, 1) }
+	} else {
+		routes.left = func() { list.focus(index, 0) }
+		routes.right = stayFocused
+	}
+	return routes
+}
+
+// focus focuses a row's title or icon and scrolls it into view; a row that does not exist
+// leaves focus where it is.
+func (list rowList) focus(index, column int) {
+	position := index*2 + column
+	if index < 0 || position >= len(*list.buttons) {
+		return
+	}
+	button := (*list.buttons)[position]
+	scrollIntoView(list.scroll, button)
+	button.TakeFocus()
 }
 
 func (list rowList) placeRow(index int) {
