@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-32 are complete. Loops 33-38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-33 are complete. Loops 34-38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux, then macOS (see "After the MVP").
 
@@ -21,7 +21,7 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 | 5 | Anime1 catalog and search. |
 | 6 | Anime1 episodes. |
 | 7 | Anime1 playback resolver. |
-| 8 | Anime1 schedule. |
+| 8 | Anime1 schedule (removed in Loop 33). |
 | 9 | Anime1 adapter acceptance. |
 | 10 | Secure loopback playback proxy. |
 | 11 | Player process lifecycle (external player, replaced in Loop 28). |
@@ -44,39 +44,18 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 | 28 | M4: Windows FLTK and libmpv integrated gate (ADR-023). |
 | 29 | Search UI. |
 | 30 | Anime detail and episode UI, smooth playback, AniList/Bangumi metadata in Taiwan Traditional Chinese. |
+| 31 | Following: 追蹤 page, follow and unfollow, watched episode from local data. |
+| 32 | History and Continue Watching: 歷史紀錄 page, continue at the saved position, remove an entry. |
+| 33 | Schedule: Bangumi weekly calendar as a week grid, cached first; known shows open, others search. |
 
 ## Remaining loops
 
-Eight loops remain, run in this order. The owner changed the plan on 2026-10-14:
+Five loops remain, run in this order. The owner changed the plan on 2026-10-14:
 
 - Following and History now come before Schedule, because they build on the finished detail and playback work.
 - The former Loops 38 to 42 (security, resources, cross-platform, release, final acceptance) are now one Windows loop, Loop 38.
 
 Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.md) true.
-
-### Loop 31 - Following
-
-- Goal: The user can follow and unfollow anime and see which have new episodes.
-- In scope: A followed-anime list with the latest episode, the watched episode and a new-episode indicator. Follow and unfollow actions.
-- Out of scope: Notifications.
-- Done when: Following survives a restart, uses local anime IDs, still shows when Anime1 is unreachable, and the indicator matches the real episode state.
-- Owner check: Follow an anime, restart the app, and see it still followed with the correct episode state.
-
-### Loop 32 - History and Continue Watching
-
-- Goal: The user can see watch history and resume where they stopped.
-- In scope: A list of anime, episode, progress and last-played time. A continue action. Removing an entry.
-- Out of scope: Cloud sync.
-- Done when: Progress survives restart, Continue resumes at the saved position, removed entries stay removed, and history never leaves the device.
-- Owner check: Watch part of an episode, restart, continue from Home or History, then remove an entry.
-
-### Loop 33 - Schedule
-
-- Goal: The user can read the airing schedule.
-- In scope: A list grouped by day. Cached data shows first and refreshes in the background. Selecting an item opens that anime when the app knows it.
-- Out of scope: Notifications. (Owner decisions 2026-10-20: the schedule comes from Bangumi, not Anime1, and is shown as a week grid instead of a list.)
-- Done when: The schedule shows immediately from cache, then updates, and Enter on an item opens its anime.
-- Owner check: Open Schedule, see items immediately, and open one with Enter.
 
 ### Loop 34 - Keyboard navigation everywhere
 

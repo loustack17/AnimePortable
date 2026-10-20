@@ -7,19 +7,19 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: OWNER_PASS_COMMIT_PENDING
-branch: loustack17/exciting-chaum-3c5284 (worktree, based on origin/main 8a704d6; nothing committed)
+status: PASS
+branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  Loop 33 (Schedule) uncommitted (docs/loops/LOOP33.md): Bangumi weekly calendar as a week grid; known shows open,
-  others search; Anime1 schedule removed. Owner decisions 2026-10-20 are in LOOP33.md. Tests, race, reviews done. Owner check PASS 2026-10-20; commit/push pending.
-active_acceptance: docs/loops/LOOP33.md owner check
+  None. Loop 33 (Schedule) passed on 2026-10-20 (docs/loops/LOOP33.md; d7285ab, CI 39382115519). Loop 34 (Keyboard
+  navigation everywhere) is next and needs owner approval.
+active_acceptance: none
 next_actions:
   - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
-  - 2. Loop 33: after the approved push and green CI, mark LOOP33.md PASS, update docs/STATUS.md and move Loops 31-33 into the roadmap's completed table. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
+  - 2. Ask the owner before starting Loop 34. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
-  - Pre-existing flake: core TestTrackedRelayDropsQueuedOldOwnerEventsBeforeTargetTerminal fails under -race about 1 in 4 (also on 8a704d6).
+  - Pre-existing -race flake in core TestTrackedRelayDropsQueuedOldOwnerEventsBeforeTargetTerminal: relay fix 3a98db7 on branch loustack17/priceless-kowalevski-8d8512, not pushed; needs owner approval.
   - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
   - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt.
