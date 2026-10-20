@@ -661,3 +661,9 @@ func TestNativeCoverRedrawScalesWithinResizedBoxAndKeepsSourceDimensions(t *test
 func (service *searchViewTestService) Follow(context.Context, string) error        { return nil }
 func (service *searchViewTestService) Unfollow(context.Context, string) error      { return nil }
 func (service *searchViewTestService) RemoveHistory(context.Context, string) error { return nil }
+func (service *searchViewTestService) Schedule(context.Context) ([]backend.ScheduleItem, error) {
+	return nil, nil
+}
+func (service *searchViewTestService) CachedSchedule(context.Context) ([]backend.ScheduleItem, error) {
+	return nil, nil
+}

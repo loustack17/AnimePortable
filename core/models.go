@@ -54,12 +54,6 @@ type Episode struct {
 	Title   string
 }
 
-type ScheduleItem struct {
-	AnimeID   AnimeID
-	EpisodeID EpisodeID
-	AirsAt    time.Time
-}
-
 type AnimeMetadata struct {
 	Ref          MetadataRef
 	Title        string

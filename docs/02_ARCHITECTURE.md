@@ -10,9 +10,9 @@ The Windows UI is FLTK. It calls typed Go application actions. Playback is in-pr
 
 | Path | Responsibility |
 | --- | --- |
-| `core/` | Domain models, ports, matching and playback-tracking policy. No concrete infrastructure. Files: `app.go`, `errors.go`, `metadata.go`, `metadata_match.go`, `metadata_normalize.go`, `metadata_variants.go`, `models.go`, `playback.go`, `playback_tracking.go`, `source.go`, `store.go`. |
-| `adapters/source/anime1/` | Anime1 `AnimeSource`. Parser-only HTML extraction (`html_policy.go`), schedule. |
-| `adapters/metadata/anilist/`, `adapters/metadata/bangumi/` | `MetadataProvider` implementations. |
+| `core/` | Domain models, ports, matching and playback-tracking policy. No concrete infrastructure. Files: `app.go`, `errors.go`, `metadata.go`, `metadata_match.go`, `metadata_normalize.go`, `metadata_variants.go`, `models.go`, `playback.go`, `playback_tracking.go`, `schedule.go`, `source.go`, `store.go`. |
+| `adapters/source/anime1/` | Anime1 `AnimeSource`. Parser-only HTML extraction (`html_policy.go`). |
+| `adapters/metadata/anilist/`, `adapters/metadata/bangumi/` | `MetadataProvider` implementations; Bangumi is also the `ScheduleProvider` (weekly calendar). |
 | `adapters/metadata/cover/` | Validated cover loader (fixed origins, size and format limits). |
 | `adapters/metadata/internal/` | Helpers shared by the two metadata adapters only. |
 | `adapters/persistence/sqlite/` | `Store` implementation, embedded migrations in `migrations/`. |
@@ -40,7 +40,7 @@ The core must not import: FLTK, Anime1, AniList or Bangumi implementations, libm
 
 ## Ports
 
-Exactly four external-boundary abstractions, defined in `core/`.
+Exactly five external-boundary abstractions, defined in `core/`.
 
 ```go
 // core/source.go
@@ -49,13 +49,18 @@ type AnimeSource interface {
 	Search(ctx context.Context, query string) ([]SourceAnime, error)
 	Episodes(ctx context.Context, ref SourceRef) ([]SourceEpisode, error)
 	Resolve(ctx context.Context, ref EpisodeRef) (PlaybackSource, error)
-	Schedule(ctx context.Context, query ScheduleQuery) ([]SourceScheduleItem, error)
 }
 
 // core/metadata.go
 type MetadataProvider interface {
 	Search(ctx context.Context, query MetadataQuery) ([]MetadataCandidate, error)
 	Get(ctx context.Context, ref MetadataRef) (AnimeMetadata, error)
+}
+
+// core/schedule.go: the weekly airing schedule (Bangumi), matched to local anime by
+// stored metadata or a unique title (Loop 33, owner decision 2026-10-20).
+type ScheduleProvider interface {
+	Schedule(ctx context.Context) ([]ScheduleEntry, error)
 }
 
 // core/playback.go
@@ -83,6 +88,7 @@ type Store interface {
 	AddHistory / History / RemoveHistory
 	SaveProgress / SavePlaybackCheckpoint / Progress
 	SaveSettings / Settings
+	ReplaceSchedule / Schedule
 }
 ```
 
@@ -97,13 +103,13 @@ Create a port only for a genuinely external or replaceable dependency. Do not cr
 - Domain models carry no provider-specific fields. Provider mappings are separate (`SourceRef{Provider, ID}`). One local anime can map to Anime1, AniList and Bangumi IDs.
 - Following, history and progress use local canonical IDs (ADR-018), never Anime1 IDs. If Anime1 disappears the local library stays usable.
 - Anime1-only fields (such as `data-apireq` tokens) stay inside the Anime1 adapter. They never reach core models, UI, SQLite domain tables or logs.
-- Sources may have different capabilities (search, schedule, playback, latest updates). A missing capability degrades gracefully.
+- Sources may have different capabilities (search, playback, latest updates). A missing capability degrades gracefully.
 
 ## Graceful degradation
 
 Remote failure is not application failure.
 
-- Source down: Home from cache, Following, History, metadata and cached schedule still work. Only fresh catalog, fresh search and playback resolution fail.
+- Source down: Home from cache, Following, History, metadata and the schedule (Bangumi, cached) still work. Only fresh catalog, fresh search and playback resolution fail.
 - AniList down: Bangumi and cached metadata still work, and the reverse.
 - libmpv DLL missing or altered: browsing still works.
 
@@ -131,7 +137,7 @@ Every adapter passes the shared tests in `tests/contract/`.
 
 | Port | Checks |
 | --- | --- |
-| AnimeSource | valid IDs, ordered episodes, cancellation, no source secrets leak, structurally valid playback source, normalized schedule |
+| AnimeSource | valid IDs, ordered episodes, cancellation, no source secrets leak, structurally valid playback source |
 | MetadataProvider | malformed responses fail safely, no raw HTML leaks, cancellation, typed sanitized errors |
 | Player | session starts, `Load` replaces the current item without a second player, events stop after close, deterministic cleanup |
 | Store | persistence round trips, fail-closed validation |

@@ -165,6 +165,7 @@ const (
 	detailFromSearch detailOrigin = iota
 	detailFromHome
 	detailFromFollowing
+	detailFromSchedule
 )
 
 func (origin detailOrigin) backLabel() string {
@@ -173,6 +174,8 @@ func (origin detailOrigin) backLabel() string {
 		return "返回首頁"
 	case detailFromFollowing:
 		return "返回追蹤"
+	case detailFromSchedule:
+		return "返回時間表"
 	}
 	return "返回結果"
 }
@@ -197,6 +200,9 @@ func (ui *view) leaveDetail() {
 	case detailFromFollowing:
 		ui.showSection(followingSection)
 		ui.focusFollowing()
+	case detailFromSchedule:
+		ui.showSection(scheduleSection)
+		ui.focusSchedule()
 	default:
 		ui.backToSearchResults()
 	}

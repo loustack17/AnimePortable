@@ -7,6 +7,8 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"animeportable/adapters/player/libmpv"
@@ -272,69 +274,116 @@ func (service *Service) setFollowing(ctx context.Context, animeID string, follow
 	return nil
 }
 
-func (service *Service) Schedule(ctx context.Context, from string, to string) ([]ScheduleItem, error) {
+// scheduleLookupTimeout bounds a schedule fetch so a slow provider cannot hold an operation slot.
+const scheduleLookupTimeout = 20 * time.Second
+
+// Schedule fetches the weekly airing schedule, replaces the stored one with it, adds the
+// shows the source catalog has under the exact title to the local library, and returns it
+// matched to local anime.
+func (service *Service) Schedule(ctx context.Context) ([]ScheduleItem, error) {
 	operationCtx, done, err := service.begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer done()
-	start, err := parseTime(from)
-	if err != nil {
-		return nil, err
-	}
-	end, err := parseTime(to)
-	if err != nil || !end.After(start) {
-		return nil, ErrInvalidInput
-	}
 	_, store, source, err := service.appSnapshot()
 	if err != nil {
 		return nil, err
 	}
-	items, err := source.Schedule(operationCtx, core.ScheduleQuery{From: start, To: end})
+	service.mu.Lock()
+	provider := service.schedule
+	service.mu.Unlock()
+	if provider == nil {
+		return nil, ErrUnavailable
+	}
+	lookupCtx, cancel := context.WithTimeout(operationCtx, scheduleLookupTimeout)
+	entries, err := provider.Schedule(lookupCtx)
+	cancel()
 	if err != nil {
 		return nil, safeError(err)
 	}
-	for _, item := range items {
-		if item.Anime.Ref.Provider == "" || item.Anime.Ref.ID == "" || (item.Episode.Ref.ID != "" && item.Episode.Ref.Anime != item.Anime.Ref) || item.AirsAt.IsZero() || item.AirsAt.Before(start) || !item.AirsAt.Before(end) || (item.Precision != core.SchedulePrecisionDay && item.Precision != core.SchedulePrecisionTime) {
-			return nil, ErrInvalidInput
-		}
+	if len(entries) > core.MaxScheduleEntries {
+		return nil, ErrInvalidInput
 	}
-	animeInputs := make([]core.SourceAnime, 0, len(items))
-	for _, item := range items {
-		animeInputs = append(animeInputs, item.Anime)
+	if err := store.ReplaceSchedule(operationCtx, entries); err != nil {
+		return nil, safeError(err)
 	}
-	animeItems, ingestErr := service.ingestAnime(operationCtx, store, animeInputs)
-	if ingestErr != nil {
-		return nil, safeError(ingestErr)
-	}
-	byRef := make(map[core.SourceRef]sourceIdentity, len(animeItems))
-	for _, item := range animeItems {
-		byRef[item.ref] = item
-	}
-	result := make([]ScheduleItem, 0, len(items))
-	for _, item := range items {
-		animeItem, ok := byRef[item.Anime.Ref]
-		if !ok {
-			return nil, ErrUnavailable
-		}
-		entry := ScheduleItem{AnimeID: string(animeItem.anime.ID), AirsAt: item.AirsAt.UTC().Format(time.RFC3339Nano), Precision: precisionName(item.Precision)}
-		if item.Episode.Ref.ID != "" {
-			episodes, episodeErr := service.ingestEpisodes(operationCtx, store, animeItem.anime.ID, animeItem.ref, []core.SourceEpisode{item.Episode})
-			if episodeErr != nil || len(episodes) != 1 {
-				return nil, safeError(episodeErr)
-			}
-			entry.EpisodeID = episodes[0].ID
-		}
-		result = append(result, entry)
-	}
-	return result, nil
+	service.addScheduledCatalogAnime(operationCtx, store, source, entries)
+	return storedSchedule(operationCtx, store)
 }
 
-func precisionName(value core.SchedulePrecision) string {
-	if value == core.SchedulePrecisionTime {
-		return "time"
+// addScheduledCatalogAnime stores the catalog anime whose title matches a schedule entry, so
+// such a show opens even if the user never searched for it. It is best effort: the schedule
+// is already stored, so a catalog that cannot be fetched, or an item that cannot be stored,
+// only leaves those shows unlinked.
+func (service *Service) addScheduledCatalogAnime(ctx context.Context, store core.Store, source core.AnimeSource, entries []core.ScheduleEntry) {
+	catalogCtx, cancel := context.WithTimeout(ctx, scheduleLookupTimeout)
+	catalog, err := source.Catalog(catalogCtx)
+	cancel()
+	if err != nil {
+		return
 	}
-	return "day"
+	candidates := make([]core.Anime, 0, len(catalog))
+	for index, item := range catalog {
+		candidates = append(candidates, core.Anime{ID: core.AnimeID(strconv.Itoa(index)), Title: item.Title, NativeTitle: item.NativeTitle})
+	}
+	unmatched := make([]core.ScheduleEntry, len(entries))
+	for index, entry := range entries {
+		// Only candidate IDs, which are catalog positions, may come back.
+		entry.AnimeID = ""
+		unmatched[index] = entry
+	}
+	for _, entry := range core.MatchSchedule(unmatched, candidates) {
+		index, err := strconv.Atoi(string(entry.AnimeID))
+		if err != nil || index < 0 || index >= len(catalog) {
+			continue
+		}
+		// One item that cannot be stored is skipped; a cancelled refresh stops.
+		if _, err := service.ingestAnime(ctx, store, []core.SourceAnime{catalog[index]}); err != nil && ctx.Err() != nil {
+			return
+		}
+	}
+}
+
+// CachedSchedule lists the stored weekly schedule from local data only; it never waits on
+// the provider.
+func (service *Service) CachedSchedule(ctx context.Context) ([]ScheduleItem, error) {
+	operationCtx, done, err := service.begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	_, store, _, err := service.appSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	return storedSchedule(operationCtx, store)
+}
+
+// storedSchedule matches the stored schedule to local anime. A matched entry shows the
+// local title, the one the rest of the app uses.
+func storedSchedule(ctx context.Context, store core.Store) ([]ScheduleItem, error) {
+	entries, err := store.Schedule(ctx)
+	if err != nil {
+		return nil, safeError(err)
+	}
+	library, err := store.ListAnime(ctx)
+	if err != nil {
+		return nil, safeError(err)
+	}
+	titles := make(map[core.AnimeID]string, len(library))
+	for _, anime := range library {
+		titles[anime.ID] = anime.Title
+	}
+	result := make([]ScheduleItem, 0, len(entries))
+	for _, entry := range core.MatchSchedule(entries, library) {
+		item := ScheduleItem{AnimeID: string(entry.AnimeID), Title: entry.Title, Query: core.ScheduleSearchQuery(entry.Title), Weekday: int(entry.Weekday)}
+		if title := strings.TrimSpace(titles[entry.AnimeID]); entry.AnimeID != "" && title != "" {
+			item.Title = title
+		}
+		result = append(result, item)
+	}
+	return result, nil
 }
 
 func (service *Service) History(ctx context.Context) ([]History, error) {

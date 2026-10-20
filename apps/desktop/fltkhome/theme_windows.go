@@ -168,5 +168,24 @@ func (ui *view) applyTheme() {
 			button.Redraw()
 		}
 	}
+	if ui.schedulePage != nil {
+		ui.scheduleStatus.SetLabelColor(colors.muted)
+		ui.scheduleScroll.SetColor(colors.background)
+		for day, header := range ui.scheduleHeaders {
+			if day < len(ui.scheduleColumns) && ui.scheduleColumns[day].Today {
+				header.SetLabelColor(colors.accent)
+			} else {
+				header.SetLabelColor(colors.ink)
+			}
+		}
+		for _, cards := range ui.scheduleCards {
+			for _, card := range cards {
+				card.Redraw()
+			}
+		}
+		ui.scheduleStatus.Redraw()
+		ui.scheduleScroll.Redraw()
+		ui.scheduleRefresh.Redraw()
+	}
 	ui.window.Redraw()
 }

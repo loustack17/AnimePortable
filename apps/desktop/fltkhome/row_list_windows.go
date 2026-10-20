@@ -121,16 +121,22 @@ func (ui *view) resizeRowList(list rowList) {
 	if list.page == nil {
 		return
 	}
-	width := max(400, ui.window.W()-259)
-	height := max(250, ui.window.H()-131)
-	list.page.Resize(236, 110, width, height)
-	list.action.Resize(236+width-20-112, 118, 112, 40)
-	list.status.Resize(252, 118, max(150, width-32-112-12), 40)
-	list.scroll.Resize(236, 166, width, max(120, height-56))
-	list.scroll.ScrollTo(0, 0)
+	ui.resizeListPage(list.page, list.status, list.action, list.scroll)
 	for index := range *list.rowIDs {
 		list.placeRow(index)
 	}
+}
+
+// resizeListPage fits a page built by buildRowListPage to the window and scrolls it to the
+// top; the caller then lays out its content.
+func (ui *view) resizeListPage(page *fltk.Group, status *fltk.Box, action *fltk.Button, scroll *fltk.Scroll) {
+	width := max(400, ui.window.W()-259)
+	height := max(250, ui.window.H()-131)
+	page.Resize(236, 110, width, height)
+	action.Resize(236+width-20-112, 118, 112, 40)
+	status.Resize(252, 118, max(150, width-32-112-12), 40)
+	scroll.Resize(236, 166, width, max(120, height-56))
+	scroll.ScrollTo(0, 0)
 }
 
 // styleTitleStatusRow draws the title above a status line.

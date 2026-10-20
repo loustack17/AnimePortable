@@ -353,6 +353,12 @@ func TestNativeHomeRefreshIsBoundedAndOnlyRunsForHomeNavigation(t *testing.T) {
 func (service *homeRefreshTestService) Follow(context.Context, string) error        { return nil }
 func (service *homeRefreshTestService) Unfollow(context.Context, string) error      { return nil }
 func (service *homeRefreshTestService) RemoveHistory(context.Context, string) error { return nil }
+func (service *homeRefreshTestService) Schedule(context.Context) ([]backend.ScheduleItem, error) {
+	return nil, nil
+}
+func (service *homeRefreshTestService) CachedSchedule(context.Context) ([]backend.ScheduleItem, error) {
+	return nil, nil
+}
 
 func TestNativeReturningHomeFromMenuShowsRecentUpdate(t *testing.T) {
 	service := &homeRefreshTestService{}

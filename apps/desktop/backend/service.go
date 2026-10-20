@@ -35,6 +35,7 @@ type dependencies struct {
 	source    core.AnimeSource
 	cover     *cover.Loader
 	metadata  []core.MetadataProvider
+	schedule  core.ScheduleProvider
 	newPlayer func() (core.Player, error)
 	close     func() error
 }
@@ -57,6 +58,7 @@ type Service struct {
 	source          core.AnimeSource
 	cover           *cover.Loader
 	metadata        []core.MetadataProvider
+	schedule        core.ScheduleProvider
 	closeDeps       func() error
 	newPlayer       func() (core.Player, error)
 	databasePath    string
@@ -93,6 +95,7 @@ func newWithDependencies(deps dependencies) *Service {
 	service.source = stageSource{deps.source}
 	service.cover = deps.cover
 	service.metadata = deps.metadata
+	service.schedule = deps.schedule
 	service.closeDeps = deps.close
 	if deps.newPlayer != nil {
 		service.newPlayer = deps.newPlayer
@@ -151,6 +154,7 @@ func (service *Service) Start(ctx context.Context) error {
 	service.source = stageSource{deps.source}
 	service.cover = deps.cover
 	service.metadata = deps.metadata
+	service.schedule = deps.schedule
 	service.closeDeps = deps.close
 	service.app = core.NewApp(service.source, nil, service.store)
 	service.mu.Unlock()
@@ -319,11 +323,13 @@ func openProduction(ctx context.Context, databasePath string) (dependencies, err
 		_ = store.Close()
 		return dependencies{}, err
 	}
+	bangumiClient := bangumi.New(metadataClient)
 	return dependencies{
 		store:    store,
 		source:   anime1.New(client),
 		cover:    loader,
-		metadata: []core.MetadataProvider{anilist.New(metadataClient), bangumi.New(metadataClient)},
+		metadata: []core.MetadataProvider{anilist.New(metadataClient), bangumiClient},
+		schedule: bangumiClient,
 		close: func() error {
 			client.CloseIdleConnections()
 			metadataClient.CloseIdleConnections()

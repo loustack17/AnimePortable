@@ -92,26 +92,6 @@ func TestAnime1AdapterAcceptanceMalformedResponses(t *testing.T) {
 				},
 			},
 		},
-		{
-			name: "schedule",
-			client: func() *Client {
-				body := `<html><body><div>` + acceptanceSecret + `</div></body></html>`
-				return newWithDo(&fakeClient{scheduleResponses: []*securehttp.Response{scheduleResponse(body)}})
-			},
-			calls: []malformedAcceptanceCall{
-				{
-					name: "schedule",
-					want: errScheduleMalformed,
-					call: func(client *Client) (bool, error) {
-						items, err := client.Schedule(context.Background(), core.ScheduleQuery{
-							From: taipeiDate(2026, 1, 4),
-							To:   taipeiDate(2026, 1, 11),
-						})
-						return items == nil, err
-					},
-				},
-			},
-		},
 	}
 
 	for _, test := range cases {

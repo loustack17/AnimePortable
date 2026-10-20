@@ -299,6 +299,53 @@ func followingStatus(item backend.Following, history []backend.History) string {
 	return status
 }
 
+// scheduleDays is how many days 時間表 shows, starting today.
+const scheduleDays = 7
+
+// scheduleDay is one column of the 時間表 week, for example 週二 with date 今天 10/20.
+type scheduleDay struct {
+	Weekday string
+	Date    string
+	Today   bool
+	Shows   []scheduleShow
+}
+
+// scheduleShow is one show on a day. Anime.ID is empty when the app does not know the show;
+// Query is then what to search for.
+type scheduleShow struct {
+	Anime backend.Anime
+	Query string
+}
+
+var weekdayNames = [...]string{"週日", "週一", "週二", "週三", "週四", "週五", "週六"}
+
+// scheduleWeek lays the weekly schedule onto the scheduleDays days from today, in source
+// order within a day. Every day gets a column, with or without shows.
+func scheduleWeek(items []backend.ScheduleItem, now time.Time) []scheduleDay {
+	year, month, date := now.Date()
+	today := time.Date(year, month, date, 0, 0, 0, 0, now.Location())
+	days := make([]scheduleDay, 0, scheduleDays)
+	for offset := range scheduleDays {
+		day := today.AddDate(0, 0, offset)
+		column := scheduleDay{Weekday: weekdayNames[day.Weekday()], Date: fmt.Sprintf("%d/%d", day.Month(), day.Day()), Today: offset == 0}
+		if column.Today {
+			column.Date = "今天 " + column.Date
+		}
+		for _, item := range items {
+			if time.Weekday(item.Weekday) != day.Weekday() {
+				continue
+			}
+			show := scheduleShow{Anime: backend.Anime{ID: item.AnimeID, Title: strings.TrimSpace(item.Title)}, Query: item.Query}
+			if show.Anime.Title == "" {
+				show.Anime.Title = "未知作品"
+			}
+			column.Shows = append(column.Shows, show)
+		}
+		days = append(days, column)
+	}
+	return days
+}
+
 func episodeLabel(number string) string {
 	number = strings.TrimSpace(number)
 	if number == "" {

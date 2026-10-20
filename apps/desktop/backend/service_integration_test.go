@@ -45,10 +45,6 @@ func (*persistentSource) Resolve(context.Context, core.EpisodeRef) (core.Playbac
 	return core.NewPlaybackSource("https://media.example/video", nil), nil
 }
 
-func (*persistentSource) Schedule(context.Context, core.ScheduleQuery) ([]core.SourceScheduleItem, error) {
-	return nil, nil
-}
-
 func TestCanonicalIdentityPersistsAcrossSQLiteRestartAndConcurrentIngest(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "anime.sqlite")
 	item := core.SourceAnime{Ref: core.SourceRef{Provider: "anime1", ID: "show-42"}, Title: "Show 42"}
@@ -523,10 +519,6 @@ func (*fallbackEpisodeSource) Resolve(context.Context, core.EpisodeRef) (core.Pl
 	return core.NewPlaybackSource("https://media.example/video", nil), nil
 }
 
-func (*fallbackEpisodeSource) Schedule(context.Context, core.ScheduleQuery) ([]core.SourceScheduleItem, error) {
-	return nil, nil
-}
-
 func TestEpisodesFallsBackToTheNextPersistedSourceRef(t *testing.T) {
 	store := newFakeStore()
 	store.anime["anime"] = core.Anime{ID: "anime", Title: "Anime"}
@@ -627,71 +619,6 @@ func TestAdmissionIsBoundedAndCancellationUnblocksShutdown(t *testing.T) {
 	}
 }
 
-type scheduleResponseSource struct {
-	items []core.SourceScheduleItem
-}
-
-func (source *scheduleResponseSource) Catalog(context.Context) ([]core.SourceAnime, error) {
-	return nil, nil
-}
-
-func (*scheduleResponseSource) Search(context.Context, string) ([]core.SourceAnime, error) {
-	return nil, nil
-}
-
-func (*scheduleResponseSource) Episodes(context.Context, core.SourceRef) ([]core.SourceEpisode, error) {
-	return nil, nil
-}
-
-func (*scheduleResponseSource) Resolve(context.Context, core.EpisodeRef) (core.PlaybackSource, error) {
-	return core.NewPlaybackSource("https://media.example/video", nil), nil
-}
-
-func (source *scheduleResponseSource) Schedule(context.Context, core.ScheduleQuery) ([]core.SourceScheduleItem, error) {
-	return source.items, nil
-}
-
-func TestScheduleRejectsMalformedResponsesBeforePersisting(t *testing.T) {
-	from := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
-	to := from.Add(24 * time.Hour)
-	anime := core.SourceAnime{Ref: core.SourceRef{Provider: "anime1", ID: "show"}, Title: "Show"}
-	tests := []struct {
-		name string
-		item core.SourceScheduleItem
-	}{
-		{
-			name: "before range",
-			item: core.SourceScheduleItem{Anime: anime, AirsAt: from.Add(-time.Minute), Precision: core.SchedulePrecisionTime},
-		},
-		{
-			name: "after range",
-			item: core.SourceScheduleItem{Anime: anime, AirsAt: to.Add(time.Minute), Precision: core.SchedulePrecisionTime},
-		},
-		{
-			name: "year out of range",
-			item: core.SourceScheduleItem{Anime: anime, AirsAt: time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC), Precision: core.SchedulePrecisionTime},
-		},
-		{
-			name: "invalid precision",
-			item: core.SourceScheduleItem{Anime: anime, AirsAt: from.Add(time.Hour), Precision: core.SchedulePrecision(99)},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			store := newFakeStore()
-			service := newWithDependencies(dependencies{store: store, source: &scheduleResponseSource{items: []core.SourceScheduleItem{test.item}}})
-			t.Cleanup(func() { _ = service.Close() })
-			_, err := service.Schedule(context.Background(), from.Format(time.RFC3339Nano), to.Format(time.RFC3339Nano))
-			if err != ErrInvalidInput {
-				t.Fatalf("schedule error = %v, want ErrInvalidInput", err)
-			}
-			if len(store.anime) != 0 || len(store.refs) != 0 || len(store.mappings) != 0 {
-				t.Fatalf("malformed schedule persisted data: anime=%#v refs=%#v mappings=%#v", store.anime, store.refs, store.mappings)
-			}
-		})
-	}
-}
-
 type closeTrackingStore struct {
 	core.Store
 	log   *[]string
@@ -788,7 +715,7 @@ func TestDTOJSONContainsOnlyExplicitSafeFields(t *testing.T) {
 	}{
 		Anime:    Anime{ID: "anime", Title: "Title"},
 		Detail:   Detail{Anime: Anime{ID: "anime", Title: "Title"}},
-		Schedule: ScheduleItem{AnimeID: "anime", EpisodeID: "episode"},
+		Schedule: ScheduleItem{AnimeID: "anime", Title: "Title", Weekday: 2},
 		Play:     PlayRequest{AnimeID: "anime", EpisodeID: "episode"},
 	})
 	if err != nil {

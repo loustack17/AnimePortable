@@ -56,17 +56,6 @@ func (*fakeAnimeSource) Resolve(ctx context.Context, ref core.EpisodeRef) (core.
 	return core.NewPlaybackSource("https://media.example/episode?token=raw-secret", http.Header{"Cookie": {"raw-secret"}}), nil
 }
 
-func (*fakeAnimeSource) Schedule(ctx context.Context, _ core.ScheduleQuery) ([]core.SourceScheduleItem, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	start := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	return []core.SourceScheduleItem{
-		{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode1, Number: "1"}, AirsAt: start, Precision: core.SchedulePrecisionTime},
-		{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode2, Number: "2"}, AirsAt: start.Add(time.Hour), Precision: core.SchedulePrecisionTime},
-	}, nil
-}
-
 type unsupportedAnimeSource struct{}
 
 func (*unsupportedAnimeSource) Catalog(context.Context) ([]core.SourceAnime, error) {
@@ -80,9 +69,6 @@ func (*unsupportedAnimeSource) Episodes(context.Context, core.SourceRef) ([]core
 }
 func (*unsupportedAnimeSource) Resolve(context.Context, core.EpisodeRef) (core.PlaybackSource, error) {
 	return core.PlaybackSource{}, core.ErrUnsupported
-}
-func (*unsupportedAnimeSource) Schedule(context.Context, core.ScheduleQuery) ([]core.SourceScheduleItem, error) {
-	return nil, core.ErrUnsupported
 }
 
 type fakeMetadataProvider struct{}
@@ -346,6 +332,10 @@ func (store *memoryStore) SaveSettings(_ context.Context, settings core.Settings
 	store.settings = &settings
 	return nil
 }
+func (*memoryStore) ReplaceSchedule(context.Context, []core.ScheduleEntry) error { return nil }
+func (*memoryStore) Schedule(context.Context) ([]core.ScheduleEntry, error) {
+	return nil, nil
+}
 func (store *memoryStore) Settings(context.Context) (core.Settings, error) {
 	if store.settings == nil {
 		return core.DefaultSettings(), nil
@@ -365,15 +355,11 @@ var (
 
 func TestAnimeSourceContract(t *testing.T) {
 	RunAnimeSource(t, AnimeSourceSuite{
-		New:      func(*testing.T) core.AnimeSource { return &fakeAnimeSource{} },
-		Catalog:  SourceListCase{Supported: true, Expected: []core.SourceRef{fakeAnimeRef}},
-		Search:   SourceSearchCase{Supported: true, Query: "Anime", Expected: []core.SourceRef{fakeAnimeRef}},
-		Episodes: SourceEpisodesCase{Supported: true, Anime: fakeAnimeRef, Expected: []core.EpisodeRef{fakeEpisode1, fakeEpisode2}},
-		Resolve:  SourceResolveCase{Supported: true, Episode: fakeEpisode1},
-		Schedule: SourceScheduleCase{Supported: true, Expected: []core.SourceScheduleItem{
-			{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode1, Number: "1"}, AirsAt: time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC), Precision: core.SchedulePrecisionTime},
-			{Anime: core.SourceAnime{Ref: fakeAnimeRef, Title: "Anime"}, Episode: core.SourceEpisode{Ref: fakeEpisode2, Number: "2"}, AirsAt: time.Date(2026, 1, 1, 11, 0, 0, 0, time.UTC), Precision: core.SchedulePrecisionTime},
-		}},
+		New:              func(*testing.T) core.AnimeSource { return &fakeAnimeSource{} },
+		Catalog:          SourceListCase{Supported: true, Expected: []core.SourceRef{fakeAnimeRef}},
+		Search:           SourceSearchCase{Supported: true, Query: "Anime", Expected: []core.SourceRef{fakeAnimeRef}},
+		Episodes:         SourceEpisodesCase{Supported: true, Anime: fakeAnimeRef, Expected: []core.EpisodeRef{fakeEpisode1, fakeEpisode2}},
+		Resolve:          SourceResolveCase{Supported: true, Episode: fakeEpisode1},
 		ForbiddenStrings: []string{"raw-secret"},
 	})
 }

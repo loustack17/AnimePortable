@@ -130,7 +130,7 @@ Clicking an episode, or pressing Enter or Space on a focused episode row, plays 
 
 ### Schedule
 
-A readable chronological list, for example `Today · Friday`, then `18:00 Anime A EP07`, then `Tomorrow · Saturday`. No dense calendar grid unless later testing proves it better.
+A week grid like a calendar's week view, starting today: one column per day, a card per show (owner decision 2026-10-20, replacing the earlier chronological list). The weekly airing schedule comes from Bangumi. A show the app has a source for opens its detail screen; any other show searches the source.
 
 ### Following
 

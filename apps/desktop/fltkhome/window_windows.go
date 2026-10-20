@@ -26,6 +26,8 @@ type Service interface {
 	Following(context.Context) ([]backend.Following, error)
 	Follow(context.Context, string) error
 	Unfollow(context.Context, string) error
+	Schedule(context.Context) ([]backend.ScheduleItem, error)
+	CachedSchedule(context.Context) ([]backend.ScheduleItem, error)
 }
 
 const homeEpisodeLookupTimeout = 3 * time.Second
@@ -160,6 +162,23 @@ type view struct {
 	historyLoaded        bool
 	historyLoadFailed    bool
 	historyRemovePending bool
+
+	schedulePage          *fltk.Group
+	scheduleStatus        *fltk.Box
+	scheduleRefresh       *fltk.Button
+	scheduleScroll        *fltk.Scroll
+	scheduleHeaders       []*fltk.Box
+	scheduleCards         [][]*fltk.Button
+	scheduleColumns       []scheduleDay
+	scheduleGeneration    uint64
+	scheduleLoaded        bool
+	scheduleLoadFailed    bool
+	scheduleRefreshing    bool
+	scheduleRefreshFailed bool
+	// scheduleOpened is the day and index of the show last opened, for focus on return.
+	scheduleOpened [2]int
+	// scheduleRefreshAttemptedAt throttles the automatic fetch, success or not.
+	scheduleRefreshAttemptedAt time.Time
 }
 
 func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int)) {
@@ -310,6 +329,7 @@ func (ui *view) build() {
 	ui.buildSearchView()
 	ui.buildFollowingView()
 	ui.buildHistoryView()
+	ui.buildScheduleView()
 	ui.mainGroup.End()
 	ui.mainGroup.Hide()
 	navPanel := fltk.NewGroup(14, 18, 205, 582)
@@ -342,6 +362,7 @@ func (ui *view) build() {
 		ui.resizeSearch()
 		ui.resizeFollowing()
 		ui.resizeHistory()
+		ui.resizeSchedule()
 	})
 }
 
@@ -444,6 +465,9 @@ func (ui *view) showSection(index int) {
 	if ui.historyPage != nil && index != historySection {
 		ui.historyPage.Hide()
 	}
+	if ui.schedulePage != nil && index != scheduleSection {
+		ui.schedulePage.Hide()
+	}
 	for _, button := range ui.navigation {
 		button.Redraw()
 	}
@@ -477,6 +501,12 @@ func (ui *view) showSection(index int) {
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
 		ui.showHistory()
+	} else if index == scheduleSection && ui.schedulePage != nil {
+		ui.contentHint.SetLabel("接下來 7 天的新番時間表；按作品開啟詳情或搜尋片源。")
+		ui.scroll.Hide()
+		ui.searchPage.Hide()
+		ui.previewGroup.Hide()
+		ui.showSchedule()
 	} else {
 		ui.contentHint.SetLabel("此頁面尚未建立")
 		ui.scroll.Hide()
@@ -839,6 +869,10 @@ func (ui *view) focusContent() {
 	}
 	if ui.selected == historySection && ui.historyPage != nil {
 		ui.focusHistory()
+		return
+	}
+	if ui.selected == scheduleSection && ui.schedulePage != nil {
+		ui.focusSchedule()
 		return
 	}
 	if ui.scroll.Visible() && ui.browseButton != nil {

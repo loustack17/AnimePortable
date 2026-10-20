@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-30 are complete. Loops 31-38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-32 are complete. Loops 33-38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux, then macOS (see "After the MVP").
 
@@ -74,7 +74,7 @@ Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.m
 
 - Goal: The user can read the airing schedule.
 - In scope: A list grouped by day. Cached data shows first and refreshes in the background. Selecting an item opens that anime when the app knows it.
-- Out of scope: Notifications and a calendar grid.
+- Out of scope: Notifications. (Owner decisions 2026-10-20: the schedule comes from Bangumi, not Anime1, and is shown as a week grid instead of a list.)
 - Done when: The schedule shows immediately from cache, then updates, and Enter on an item opens its anime.
 - Owner check: Open Schedule, see items immediately, and open one with Enter.
 

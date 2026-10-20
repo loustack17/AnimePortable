@@ -69,11 +69,14 @@ type Settings struct {
 	Language       string `json:"language"`
 }
 
+// ScheduleItem is one show in the weekly airing schedule. AnimeID is the local anime it
+// matches, empty when the app does not know it; Query is what to search for then. Weekday
+// is 0 (Sunday) to 6.
 type ScheduleItem struct {
-	AnimeID   string `json:"animeId"`
-	EpisodeID string `json:"episodeId"`
-	AirsAt    string `json:"airsAt"`
-	Precision string `json:"precision"`
+	AnimeID string `json:"animeId"`
+	Title   string `json:"title"`
+	Query   string `json:"query"`
+	Weekday int    `json:"weekday"`
 }
 
 type PlayRequest struct {

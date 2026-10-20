@@ -29,8 +29,6 @@ type fakeClient struct {
 	episodeIndex      int
 	resolverResponses []*securehttp.Response
 	resolverIndex     int
-	scheduleResponses []*securehttp.Response
-	scheduleIndex     int
 	calls             int
 	requests          []*http.Request
 	started           chan struct{}
@@ -45,13 +43,9 @@ func (client *fakeClient) Do(request *http.Request) (*securehttp.Response, error
 	response := client.response
 	err := client.err
 	blockDone := client.blockDone
-	scheduleRequest := strings.Contains(request.URL.Path, "季新番")
 	_, resolverPost := parseBoundedPositiveDecimal(strings.TrimPrefix(request.URL.Path, "/"), maxEpisodeIDDigits)
 	resolverRequest := request.URL.Host == "v.anime1.me" || resolverPost
-	if scheduleRequest && client.scheduleIndex < len(client.scheduleResponses) {
-		response = client.scheduleResponses[client.scheduleIndex]
-		client.scheduleIndex++
-	} else if resolverRequest && client.resolverIndex < len(client.resolverResponses) {
+	if resolverRequest && client.resolverIndex < len(client.resolverResponses) {
 		response = client.resolverResponses[client.resolverIndex]
 		client.resolverIndex++
 	} else if request.URL.Path != "/animelist.json" && client.episodeIndex < len(client.episodeResponses) {
@@ -880,7 +874,6 @@ func TestAnime1AdapterAcceptanceContract(t *testing.T) {
 				episodeResponse(episodeFixture(t, "episodes-page-2.html")),
 			},
 			resolverResponses: resolverContractResponses(),
-			scheduleResponses: []*securehttp.Response{scheduleResponse(scheduleFixture())},
 		})
 	}
 	contract.RunAnimeSource(t, contract.AnimeSourceSuite{
@@ -892,15 +885,7 @@ func TestAnime1AdapterAcceptanceContract(t *testing.T) {
 			Anime:     core.SourceRef{Provider: providerID, ID: "42"},
 			Expected:  []core.EpisodeRef{episodeRef("98"), episodeRef("99"), episodeRef("100"), episodeRef("101")},
 		},
-		Resolve: contract.SourceResolveCase{Supported: true, Episode: episodeRef("101")},
-		Schedule: contract.SourceScheduleCase{
-			Supported: true,
-			Query: core.ScheduleQuery{
-				From: time.Date(2026, 1, 4, 0, 0, 0, 0, time.FixedZone("query", 8*60*60)),
-				To:   time.Date(2026, 1, 11, 0, 0, 0, 0, time.FixedZone("query", 8*60*60)),
-			},
-			Expected: scheduleExpected(),
-		},
+		Resolve:          contract.SourceResolveCase{Supported: true, Episode: episodeRef("101")},
 		ForbiddenStrings: []string{"do-not-return", "secret", "<script>"},
 	})
 }
@@ -911,9 +896,6 @@ func TestUnsupportedMethods(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := client.Resolve(context.Background(), core.EpisodeRef{}); !errors.Is(err, errResolverInvalidRef) {
-		t.Fatal(err)
-	}
-	if _, err := client.Schedule(context.Background(), core.ScheduleQuery{}); !errors.Is(err, errScheduleInvalidQuery) {
 		t.Fatal(err)
 	}
 }

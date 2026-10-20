@@ -25,4 +25,10 @@ type Store interface {
 	Progress(ctx context.Context, animeID AnimeID, episodeID EpisodeID) (PlaybackProgress, error)
 	SaveSettings(ctx context.Context, settings Settings) error
 	Settings(ctx context.Context) (Settings, error)
+	// ReplaceSchedule replaces the whole stored weekly schedule with the latest fetch. Entry
+	// AnimeID values are not stored.
+	ReplaceSchedule(ctx context.Context, entries []ScheduleEntry) error
+	// Schedule lists the stored weekly schedule by weekday, in source order within a day.
+	// AnimeID is set when an anime's stored metadata has the entry's Ref.
+	Schedule(ctx context.Context) ([]ScheduleEntry, error)
 }

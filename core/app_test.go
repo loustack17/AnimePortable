@@ -64,11 +64,6 @@ func (source *fakeSource) Resolve(ctx context.Context, ref EpisodeRef) (Playback
 	return source.resolved, source.resolveErr
 }
 
-func (source *fakeSource) Schedule(context.Context, ScheduleQuery) ([]SourceScheduleItem, error) {
-	source.called = true
-	return nil, source.searchErr
-}
-
 type fakePlayer struct {
 	context context.Context
 	calls   *[]string
@@ -307,6 +302,14 @@ func (store *fakeStore) Progress(context.Context, AnimeID, EpisodeID) (PlaybackP
 
 func (*fakeStore) SaveSettings(context.Context, Settings) error {
 	return nil
+}
+
+func (*fakeStore) ReplaceSchedule(context.Context, []ScheduleEntry) error {
+	return nil
+}
+
+func (*fakeStore) Schedule(context.Context) ([]ScheduleEntry, error) {
+	return nil, nil
 }
 
 func (store *fakeStore) Settings(context.Context) (Settings, error) {

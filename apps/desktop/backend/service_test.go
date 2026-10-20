@@ -219,7 +219,9 @@ func (s *fakeStore) Settings(context.Context) (core.Settings, error) {
 	defer s.mu.Unlock()
 	return s.settings, nil
 }
-func (s *fakeStore) Close() error { return nil }
+func (s *fakeStore) ReplaceSchedule(context.Context, []core.ScheduleEntry) error { return nil }
+func (s *fakeStore) Schedule(context.Context) ([]core.ScheduleEntry, error)      { return nil, nil }
+func (s *fakeStore) Close() error                                                { return nil }
 
 type fakeSource struct {
 	mu       sync.Mutex
@@ -246,9 +248,6 @@ func (s *fakeSource) Episodes(context.Context, core.SourceRef) ([]core.SourceEpi
 }
 func (s *fakeSource) Resolve(context.Context, core.EpisodeRef) (core.PlaybackSource, error) {
 	return core.NewPlaybackSource("", nil), nil
-}
-func (s *fakeSource) Schedule(context.Context, core.ScheduleQuery) ([]core.SourceScheduleItem, error) {
-	return nil, nil
 }
 
 func testService() (*Service, *fakeStore, *fakeSource) {
@@ -429,8 +428,9 @@ func TestFollowFollowingHistorySettingsSchedule(t *testing.T) {
 	if e != nil || hs[0].Position != 1500 || hs[0].UpdatedAt != now.Format(time.RFC3339Nano) {
 		t.Fatalf("history %+v %v", hs, e)
 	}
-	if _, e = s.Schedule(context.Background(), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); e != ErrInvalidInput {
-		t.Error("invalid schedule range")
+	// No schedule provider is configured in this service.
+	if _, e = s.Schedule(context.Background()); e != ErrUnavailable {
+		t.Errorf("schedule without provider: %v", e)
 	}
 }
 

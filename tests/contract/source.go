@@ -34,19 +34,12 @@ type SourceResolveCase struct {
 	Episode   core.EpisodeRef
 }
 
-type SourceScheduleCase struct {
-	Supported bool
-	Query     core.ScheduleQuery
-	Expected  []core.SourceScheduleItem
-}
-
 type AnimeSourceSuite struct {
 	New              func(t *testing.T) core.AnimeSource
 	Catalog          SourceListCase
 	Search           SourceSearchCase
 	Episodes         SourceEpisodesCase
 	Resolve          SourceResolveCase
-	Schedule         SourceScheduleCase
 	ForbiddenStrings []string
 }
 
@@ -114,18 +107,6 @@ func RunAnimeSource(t *testing.T, suite AnimeSourceSuite) {
 		requireValid(t, validateForbidden(string(encoded), suite.ForbiddenStrings))
 		checkCanceled(t, suite.ForbiddenStrings, func(ctx context.Context) error { _, err := source.Resolve(ctx, suite.Resolve.Episode); return err })
 	})
-	t.Run("schedule", func(t *testing.T) {
-		source := suite.New(t)
-		items, err := source.Schedule(context.Background(), suite.Schedule.Query)
-		if !suite.Schedule.Supported {
-			requireUnsupported(t, err, suite.ForbiddenStrings)
-			return
-		}
-		requireNoError(t, err, suite.ForbiddenStrings)
-		requireValid(t, validateForbidden(items, suite.ForbiddenStrings))
-		requireValid(t, validateSchedule(items, suite.Schedule.Expected))
-		checkCanceled(t, suite.ForbiddenStrings, func(ctx context.Context) error { _, err := source.Schedule(ctx, suite.Schedule.Query); return err })
-	})
 }
 
 func validateAnimeSourceSuite(t *testing.T, suite AnimeSourceSuite) {
@@ -140,7 +121,6 @@ func validateAnimeSourceSuite(t *testing.T, suite AnimeSourceSuite) {
 		{suite.Catalog.Supported, len(suite.Catalog.Expected)},
 		{suite.Search.Supported, len(suite.Search.Expected)},
 		{suite.Episodes.Supported, len(suite.Episodes.Expected)},
-		{suite.Schedule.Supported, len(suite.Schedule.Expected)},
 	} {
 		if contractCase.supported && contractCase.count == 0 {
 			t.Fatal("supported source case has no expected fixtures")
@@ -163,13 +143,6 @@ func validateAnimeSourceSuite(t *testing.T, suite AnimeSourceSuite) {
 		validateEpisodeFixtures(t, []core.EpisodeRef{suite.Resolve.Episode}, suite.Resolve.Episode.Anime)
 	} else if suite.Resolve.Episode != (core.EpisodeRef{}) {
 		t.Fatal("unsupported resolve case has episode fixture")
-	}
-	if suite.Schedule.Supported {
-		for _, item := range suite.Schedule.Expected {
-			if err := validateScheduleItem(item); err != nil {
-				t.Fatal(err)
-			}
-		}
 	}
 }
 
