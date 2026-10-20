@@ -7,16 +7,16 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: OWNER_CHECK_PENDING
+status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  Loop 34 (Keyboard navigation everywhere, docs/loops/LOOP34.md) implemented in worktree hungry-kowalevski-1f0f72,
-  not committed. Suite and race green, review has no MUST_FIX, owner check PASS 2026-10-20.
-active_acceptance: docs/loops/LOOP34.md (owner check steps 1-7)
+  None. Loop 34 (Keyboard navigation everywhere) passed on 2026-10-20 (docs/loops/LOOP34.md; c2ad61a, CI 39496901879).
+  Loop 35 (Cache-first startup and refresh) is next and needs owner approval.
+active_acceptance: none
 next_actions:
-  - 1. Owner check passed. Confirm the Ctrl+K player test change with the owner; then ask to commit and push to main and confirm Windows CI.
-  - 2. After PASS, move Loop 34 to the completed table in docs/04_ROADMAP.md and update its header count. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
+  - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
+  - 2. Ask the owner before starting Loop 35. Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md).
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
   - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.

@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-33 are complete. Loops 34-38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-34 are complete. Loops 35-38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux, then macOS (see "After the MVP").
 
@@ -47,23 +47,16 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 | 31 | Following: 追蹤 page, follow and unfollow, watched episode from local data. |
 | 32 | History and Continue Watching: 歷史紀錄 page, continue at the saved position, remove an entry. |
 | 33 | Schedule: Bangumi weekly calendar as a week grid, cached first; known shows open, others search. |
+| 34 | Keyboard navigation everywhere: one key policy, Esc back, `/` and Ctrl+K search, arrows with visible focus on every screen and in the player. |
 
 ## Remaining loops
 
-Five loops remain, run in this order. The owner changed the plan on 2026-10-14:
+Four loops remain, run in this order. The owner changed the plan on 2026-10-14:
 
 - Following and History now come before Schedule, because they build on the finished detail and playback work.
 - The former Loops 38 to 42 (security, resources, cross-platform, release, final acceptance) are now one Windows loop, Loop 38.
 
 Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.md) true.
-
-### Loop 34 - Keyboard navigation everywhere
-
-- Goal: The whole core workflow works with the keyboard only.
-- In scope: Arrow keys, Enter, Space, Esc, `/` and Ctrl+K on every screen; launch, find, open, select episode and play with no mouse.
-- Out of scope: New screens.
-- Done when: Every screen has visible focus and no keyboard trap, and the mouse still works.
-- Owner check: Launch the app, find an anime, open it and play an episode using only the keyboard.
 
 ### Loop 35 - Cache-first startup and refresh
 
