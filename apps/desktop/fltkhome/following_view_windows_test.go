@@ -106,7 +106,8 @@ func TestFollowingPageEmptyState(t *testing.T) {
 	ui := newFollowingViewTestFixture(t, &followingViewTestService{searchViewTestService: &searchViewTestService{}})
 	ui.showSection(followingSection)
 	pumpSearchEvents(t, func() bool { return ui.followingLoaded && !ui.followingRefreshing })
-	if status := ui.followingStatus.Label(); !strings.HasPrefix(status, "尚未追蹤任何作品。") || len(ui.followingButtons) != 0 {
+	// The first line is the list state; a refresh note may follow it.
+	if status, _, _ := strings.Cut(ui.followingStatus.Label(), "\n"); status != "尚未追蹤任何作品。在作品頁、歷史紀錄或播放中按星號即可追蹤。" || len(ui.followingButtons) != 0 {
 		t.Fatalf("status = %q, buttons = %d", status, len(ui.followingButtons))
 	}
 }

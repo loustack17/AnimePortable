@@ -187,9 +187,10 @@ func TestNativeWindowLayoutFollowsResizeAndAcceptsClicks(t *testing.T) {
 		checkPressReaches(t, ui, "取消追蹤", ui.followingButtons[1])
 
 		ui.showSection(historySection)
-		pumpSearchEvents(t, func() bool { return ui.historyLoaded && len(ui.historyButtons) == 2 })
+		pumpSearchEvents(t, func() bool { return ui.historyLoaded && len(ui.historyButtons) == 3 })
 		checkLayout(t, ui)
-		checkPressReaches(t, ui, "移除紀錄", ui.historyButtons[1])
+		checkPressReaches(t, ui, "歷史紀錄 追蹤", ui.historyList().button(0, 1))
+		checkPressReaches(t, ui, "移除紀錄", ui.historyList().button(0, 2))
 
 		ui.showSection(scheduleSection)
 		pumpSearchEvents(t, func() bool { return ui.scheduleLoaded && !ui.scheduleRefreshing && len(ui.scheduleCards) > 0 })

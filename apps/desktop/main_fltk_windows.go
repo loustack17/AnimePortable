@@ -82,6 +82,18 @@ func main() {
 		playbackContextMu.Unlock()
 	}
 	playQueue := newActionQueue()
+	follow := &playerFollow{
+		ctx:     ctx,
+		start:   func(work func()) { go work() },
+		awake:   func(update func()) { fltk.Awake(update) },
+		playing: func() string { return selection().AnimeID },
+		show: func(known, following bool) {
+			state := player.State()
+			state.FollowKnown, state.Following = known, following
+			player.SetState(state)
+		},
+		fail: func(err error) { fltk.MessageBox("追蹤失敗", fltkhome.FollowErrorMessage(err)) },
+	}
 	stop := func(destination int) {
 		generation := viewGeneration.Add(1)
 		cancelPlayback()
@@ -247,6 +259,11 @@ func main() {
 		Navigate: stop,
 		Leave:    func() { stop(0) },
 		Search:   func() { stop(fltkhome.SearchSection) },
+		ToggleFollow: func() {
+			if animeID := selection().AnimeID; animeID != "" {
+				follow.toggle(animeID, player.State().Following)
+			}
+		},
 	})
 	player.Window().SetCallback(func() { stop(0) })
 	// The failure log sits next to the database.
@@ -303,6 +320,7 @@ func main() {
 		}, failures.UpstreamRejected), nil
 	})
 	defer func() { _ = service.Close(); player.Close() }()
+	follow.service = service
 	play = func(request backend.PlayRequest) {
 		generation := viewGeneration.Add(1)
 		operationCtx, cancelOperation := newPlaybackContext()
@@ -315,6 +333,7 @@ func main() {
 		player.Show()
 		player.SetFocus(fltkplayer.FocusProgress)
 		home.Hide()
+		follow.load(request.AnimeID)
 		playQueue.Enqueue(func() {
 			if generation != viewGeneration.Load() {
 				cancelOperation()

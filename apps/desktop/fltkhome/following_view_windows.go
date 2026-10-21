@@ -132,26 +132,43 @@ func (ui *view) reloadHomeIfUpdatesChanged() {
 }
 
 func (ui *view) unfollow(animeID string) {
+	ui.setFollowing(animeID, false, func(error) {
+		if ui.followingVisible() {
+			ui.loadFollowing()
+		}
+	})
+}
+
+// setFollowing follows or unfollows an anime in the background, one change at a time, and
+// reports a failure in the message line. done runs on the UI thread unless the window is
+// closing. It returns false when the change was not started.
+func (ui *view) setFollowing(animeID string, follow bool, done func(error)) bool {
 	if ui.service == nil || ui.followPending || ui.closing {
-		return
+		return false
 	}
 	ui.followPending = true
 	go func() {
-		err := ui.service.Unfollow(ui.ctx, animeID)
+		var err error
+		if follow {
+			err = ui.service.Follow(ui.ctx, animeID)
+		} else {
+			err = ui.service.Unfollow(ui.ctx, animeID)
+		}
 		fltk.Awake(func() {
 			ui.followPending = false
 			if ui.closing || ui.ctx.Err() != nil {
 				return
 			}
-			ui.message.SetLabel(followErrorMessage(err))
-			if ui.followingVisible() {
-				ui.loadFollowing()
-			}
+			ui.message.SetLabel(FollowErrorMessage(err))
+			done(err)
 		})
 	}()
+	return true
 }
 
-func followErrorMessage(err error) string {
+// FollowErrorMessage is the message for a failed follow or unfollow; empty when err is nil.
+// The player's follow star shows it too.
+func FollowErrorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
@@ -224,7 +241,7 @@ func (ui *view) renderFollowingStatus() {
 	case ui.followingLoadFailed:
 		status = "無法載入追蹤清單，請按「更新集數」重試。"
 	case len(ui.followingItems) == 0:
-		status = "尚未追蹤任何作品。在作品頁按星號即可追蹤。"
+		status = "尚未追蹤任何作品。在作品頁、歷史紀錄或播放中按星號即可追蹤。"
 	default:
 		status = fmt.Sprintf("追蹤 %d 部。", len(ui.followingItems))
 	}
@@ -242,7 +259,7 @@ func (ui *view) renderFollowingStatus() {
 func (ui *view) followingList() rowList {
 	return rowList{
 		page: ui.followingPage, status: ui.followingStatus, action: ui.followingRefresh, scroll: ui.followingScroll,
-		buttons: &ui.followingButtons, rowIDs: &ui.followingRowIDs,
+		icons: 1, buttons: &ui.followingButtons, rowIDs: &ui.followingRowIDs,
 	}
 }
 
@@ -257,13 +274,15 @@ func (ui *view) renderFollowing() {
 					ui.openDetailFrom(detailFromFollowing, item)
 				}
 			},
-			iconLabel: "取消追蹤",
-			styleIcon: func(button *fltk.Button) { ui.styleFollowIcon(button, func() bool { return true }) },
-			activateIcon: func() {
-				if ui.followingVisible() {
-					ui.unfollow(item.ID)
-				}
-			},
+			icons: []rowIcon{{
+				label: "取消追蹤",
+				style: func(button *fltk.Button) { ui.styleFollowIcon(button, func() bool { return true }) },
+				activate: func() {
+					if ui.followingVisible() {
+						ui.unfollow(item.ID)
+					}
+				},
+			}},
 		})
 	}
 	ui.renderRowList(ui.followingList(), rows, ui.renderFollowingStatus, ui.focusFollowing)
@@ -275,31 +294,20 @@ func (ui *view) resizeFollowing() {
 
 func (ui *view) toggleDetailFollow() {
 	detail := ui.searchModel.preview
-	if detail == nil || ui.service == nil || ui.followPending || ui.closing {
+	if detail == nil {
 		return
 	}
 	animeID, follow := detail.Anime.ID, !detail.Following
-	ui.followPending = true
-	ui.renderPreview()
-	go func() {
-		var err error
-		if follow {
-			err = ui.service.Follow(ui.ctx, animeID)
-		} else {
-			err = ui.service.Unfollow(ui.ctx, animeID)
+	started := ui.setFollowing(animeID, follow, func(err error) {
+		if preview := ui.searchModel.preview; err == nil && preview != nil && preview.Anime.ID == animeID {
+			preview.Following = follow
 		}
-		fltk.Awake(func() {
-			ui.followPending = false
-			if ui.closing || ui.ctx.Err() != nil {
-				return
-			}
-			if preview := ui.searchModel.preview; err == nil && preview != nil && preview.Anime.ID == animeID {
-				preview.Following = follow
-			}
-			ui.message.SetLabel(followErrorMessage(err))
-			ui.renderPreview()
-		})
-	}()
+		ui.renderPreview()
+	})
+	if started {
+		// The button shows inactive while the change runs.
+		ui.renderPreview()
+	}
 }
 
 func (ui *view) renderDetailFollow() {

@@ -163,6 +163,7 @@ type view struct {
 	historyButtons       []*fltk.Button
 	historyRowIDs        []string
 	historyItems         []historyRow
+	historyFollowed      map[string]bool // anime IDs followed, as of the last history load
 	historyGeneration    uint64
 	historyLoading       bool
 	historyLoaded        bool
