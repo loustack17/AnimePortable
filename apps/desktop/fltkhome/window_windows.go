@@ -340,6 +340,7 @@ func (ui *view) build() {
 	ui.buildFollowingView()
 	ui.buildHistoryView()
 	ui.buildScheduleView()
+	pinChildren(ui.mainGroup)
 	ui.mainGroup.End()
 	ui.mainGroup.Hide()
 	navPanel := fltk.NewGroup(14, 18, 205, 582)
@@ -363,12 +364,23 @@ func (ui *view) build() {
 		ui.styleButton(button, func() bool { return ui.selected == index })
 		ui.navigation[index] = button
 	}
+	pinChildren(navPanel)
 	navPanel.End()
 	ui.window.End()
 	ui.applyTheme()
 	ui.staticLabels = len(ui.contentLabels)
 	ui.window.SetResizeHandler(func() {
-		ui.scroll.Resize(236, 110, max(400, ui.window.W()-259), max(250, ui.window.H()-131))
+		width, height := ui.window.W(), ui.window.H()
+		ui.message.Resize(280, 20, width-310, 38)
+		ui.themeToggle.Resize(width-72, 18, 42, 40)
+		navPanel.Resize(14, 18, 205, height-36)
+		// FLTK delivers a click only inside every group holding the widget.
+		ui.startupGroup.Resize(18, 78, width-36, height-98)
+		ui.mainGroup.Resize(0, 0, width, height)
+		ui.sectionTitle.Resize(252, 35, min(580, width-272), 38)
+		ui.contentHint.Resize(252, 74, min(580, width-272), 25)
+		ui.scroll.Resize(236, 110, max(400, width-259), max(250, height-131))
+		ui.resizeHome(hero)
 		ui.resizeSearch()
 		ui.resizeFollowing()
 		ui.resizeHistory()
@@ -383,10 +395,19 @@ func (ui *view) showStartupError(message string) {
 		ui.closeButton = fltk.NewButton(272, 132, 160, 40, "關閉")
 		ui.styleButton(ui.closeButton, nil)
 		ui.bindButton(ui.closeButton, ui.cancel)
+		pinChildren(ui.startupGroup)
 		ui.startupGroup.End()
 	}
 	ui.startupGroup.Show()
 	ui.window.Redraw()
+}
+
+// pinChildren makes resizing group return each child to the geometry FLTK remembered for it
+// (at the group's first resize, or after a child was added), moving only edges at or past the
+// resizable box; this empty box sits at the group's far corner. The window's resize handler
+// lays out the children that must move. Call it while group is being built.
+func pinChildren(group *fltk.Group) {
+	group.Resizable(fltk.NewBox(fltk.NO_BOX, group.X()+group.W(), group.Y()+group.H(), 0, 0))
 }
 
 func (ui *view) start() {
@@ -682,7 +703,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	}
 	for index, row := range updates {
 		y := homeFirstRowY + index*64
-		button := fltk.NewButton(250, y, 711, 56, row.Anime.Title)
+		button := fltk.NewButton(250, y, ui.homeContentWidth(), 56, row.Anime.Title)
 		button.SetTooltip(row.Status)
 		ui.styleTitleStatusRow(button, row.Anime.Title, row.Status)
 		item := row.Anime
@@ -728,14 +749,14 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	for index, row := range ui.rows {
 		y := cardsY + index*104
 		rowGeneration := ui.homeLoadGeneration
-		card := fltk.NewBox(fltk.NO_BOX, 250, y, 711, 92)
+		card := fltk.NewBox(fltk.NO_BOX, 250, y, ui.homeContentWidth(), 92)
 		card.SetDrawHandler(func(func()) { roundedRect(card.X(), card.Y(), card.W(), card.H(), 16, ui.colors().surface) })
 		ui.cards = append(ui.cards, card)
 		title := ui.contentText(273, y+14, 450, 25, row.Title, 15, false, true)
 		caption := ui.contentText(273, y+48, 450, 20, homeCaption(row), 12, true, false)
 		ui.homeCaptionLabels = append(ui.homeCaptionLabels, caption)
 		ui.homeCardLabels = append(ui.homeCardLabels, title, caption)
-		button := fltk.NewButton(813, y+28, 126, 36, "繼續播放")
+		button := fltk.NewButton(250+ui.homeContentWidth()-22-126, y+28, 126, 36, "繼續播放")
 		ui.styleButton(button, func() bool { return true })
 		item := row.History
 		playRow := func() { ui.playHomeRow(item, rowGeneration) }
@@ -877,6 +898,25 @@ func (ui *view) scrollTo(y int) {
 	targetY := ui.scrollOriginY + y
 	if ui.scroll.XPosition() != ui.scrollOriginX || ui.scroll.YPosition() != targetY {
 		ui.scroll.ScrollTo(ui.scrollOriginX, targetY)
+	}
+}
+
+// homeContentWidth is the width of Home's hero, 近期更新 rows and 繼續觀看 cards: the scroll
+// width, but never narrower than in the 1000-px window; Home scrolls sideways below that.
+func (ui *view) homeContentWidth() int {
+	return max(711, ui.scroll.W()-30)
+}
+
+func (ui *view) resizeHome(hero *fltk.Box) {
+	width := ui.homeContentWidth()
+	hero.Resize(hero.X(), hero.Y(), width, hero.H())
+	for _, row := range ui.homeUpdateButtons {
+		row.Resize(row.X(), row.Y(), width, row.H())
+	}
+	for index, card := range ui.cards {
+		card.Resize(card.X(), card.Y(), width, card.H())
+		play := ui.cardButtons[index]
+		play.Resize(card.X()+width-22-play.W(), play.Y(), play.W(), play.H())
 	}
 }
 
