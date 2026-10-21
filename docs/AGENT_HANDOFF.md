@@ -16,7 +16,7 @@ active_work: >
 active_acceptance: docs/loops/LOOP35.md
 next_actions:
   - 1. Owner disconnect check with LOOP35 steps 1-7; record the reply with TypeSafe owner-report.
-  - 2. Owner to confirm the removed live-lookup tests (LOOP35 Status), then approve commit and push to main.
+  - 2. Loop 35 (8bb524b) is merged with the resize hotfix (0371f05) and the 追蹤 star change (18b6c6a) and pushed together to main (owner approval 2026-10-21; removed live-lookup tests accepted).
   - 3. After push, confirm GitHub Windows CI; then mark LOOP35 PASS, move it to the roadmap's completed table (header count), update STATUS.md.
   - Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md); Home 今日播出 from the stored schedule (out of Loop 35 scope).
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
