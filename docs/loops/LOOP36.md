@@ -2,7 +2,7 @@
 
 # Loop 36: Autoplay next episode
 
-Status: owner check passed 2026-10-21 (owner approved the start the same day); waiting for commit, push and GitHub Windows CI.
+Status: PASS (owner accepted 2026-10-21). Commit 7ae546e on main; GitHub Windows CI 39658969901 green.
 
 ## Goal
 
@@ -69,4 +69,4 @@ Test build: `artifacts/test-build/AnimePortable.exe` (uncommitted worktree build
 - Owner check 2 (2026-10-21): "1. player上的dropdownlist沒有顯示完整 也沒有顯示drop bar, 容易誤會正確的集數 2. 我播放第12集, 不論是播一半 播完 首頁都停留在8 3. 我播完12集後 會停止, 但首頁沒有顯示已完成". TypeSafe owner-report HUMAN_FAIL (conf 0.99, new issue 0.82). Diagnosis (`owner-check-2-diagnosis.txt`): the player list opened at 00-07 with no scroll bar while 第 11 集 played; a half-watched episode does show on Home (checked on a test copy), but a finished newest episode fell back to 第 08 集 by the earlier Home rule. Owner decisions (2026-10-21): show the newest episode as 已看完 on Home; fix the episode list in this loop. Both done (scope bullets above).
 - Review of the follow-up: one MUST_FIX (an autoplay switch did not update the player's shown episode; `selectEpisode` now sets it) and one SHOULD_FIX (player labels duplicated Home's episode label rule; now `fltkhome.EpisodeLabel`) fixed; accepted NITs: the C overlay repeats the list geometry literals (comment ties them to `episode_list_windows.go`); a wheel scroll does not move the keyboard cursor; the ellipsis may run up to two character widths over its budget.
 - Owner check 3 (2026-10-21, test build 2): "Owner check 3 passed: all 5 steps behaved as described. The 30 s end rule is OK." TypeSafe owner-report HUMAN_PASS (conf 1.00). The 30 s normal-end rule is accepted.
-- Local after the last fixes: gofmt and vet clean; full native suite and race green (`full-suite-4.txt`, `full-suite-race-4.txt`). Next: commit and push after owner approval, then GitHub Windows CI.
+- Local after the last fixes: gofmt and vet clean; full native suite and race green (`full-suite-4.txt`, `full-suite-race-4.txt`). Owner approved commit and push; 7ae546e pushed to main, CI 39658969901 green (2026-10-21).
