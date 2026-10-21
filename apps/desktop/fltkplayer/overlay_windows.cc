@@ -36,7 +36,7 @@ static void focus(int current, int target, float x, float y, float w, float h) {
     line(x + w, y + h, x, y + h); line(x, y + h, x, y);
 }
 
-extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int resolution, int loading, int progress_hover, int scrubbing, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels) {
+extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int resolution, int loading, int progress_hover, int scrubbing, int follow_known, int following, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels) {
     if (!visible && !menu && !episodes) return;
     GLint oldMatrix = GL_MODELVIEW;
     glGetIntegerv(GL_MATRIX_MODE, &oldMatrix);
@@ -70,6 +70,15 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     label(episodeLabel.c_str(), width - 185, 39, 15);
     icon(u8"\uE70D", width - 102, 39, 14);
     focus(selected, 7, width - 195, 14, 114, 38);
+    if (follow_known) {
+        ink(0.15f, 0.19f, 0.29f, 0.92f); box(width - 241, 14, 38, 38);
+        if (following) {
+            ink(0.59f, 0.67f, 1); icon(u8"\uE735", width - 232, 41, 20);
+        } else {
+            ink(1, 1, 1); icon(u8"\uE734", width - 232, 41, 20);
+        }
+        focus(selected, 9, width - 241, 14, 38, 38);
+    }
     if (resolution > 0) {
         char quality[24]; std::snprintf(quality, sizeof(quality), "%dp", resolution);
         ink(0.8f, 0.84f, 0.94f); label(quality, width - 68, 39, 14);

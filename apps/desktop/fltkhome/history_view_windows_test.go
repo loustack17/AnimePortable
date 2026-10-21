@@ -22,6 +22,48 @@ type historyViewTestService struct {
 	historyErr error
 	removeErr  error
 	removed    []string
+	following  []string
+	followErr  error
+	followed   []string
+	unfollowed []string
+}
+
+func (service *historyViewTestService) Following(context.Context) ([]backend.Following, error) {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	result := make([]backend.Following, 0, len(service.following))
+	for _, animeID := range service.following {
+		result = append(result, backend.Following{AnimeID: animeID})
+	}
+	return result, nil
+}
+
+func (service *historyViewTestService) Follow(_ context.Context, animeID string) error {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if service.followErr != nil {
+		return service.followErr
+	}
+	service.followed = append(service.followed, animeID)
+	service.following = append(service.following, animeID)
+	return nil
+}
+
+func (service *historyViewTestService) Unfollow(_ context.Context, animeID string) error {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if service.followErr != nil {
+		return service.followErr
+	}
+	service.unfollowed = append(service.unfollowed, animeID)
+	service.following = slices.DeleteFunc(service.following, func(id string) bool { return id == animeID })
+	return nil
+}
+
+func (service *historyViewTestService) followCalls() (followed, unfollowed []string) {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return slices.Clone(service.followed), slices.Clone(service.unfollowed)
 }
 
 func (service *historyViewTestService) Library(context.Context) ([]backend.Anime, error) {
@@ -87,9 +129,13 @@ func TestNativeHistoryPageContinuesAndRemoves(t *testing.T) {
 	for _, size := range [][2]int{{1000, 618}, {760, 480}, {1400, 900}} {
 		ui.window.Resize(0, 0, size[0], size[1])
 		ui.resizeHistory()
-		remove := ui.historyButtons[1]
+		title, star, remove := ui.historyList().button(0, 0), ui.historyList().button(0, 1), ui.historyList().button(0, 2)
 		if remove.Label() != "移除紀錄" || remove.X()+remove.W() != ui.historyRetry.X()+ui.historyRetry.W() || remove.X()+remove.W() > ui.historyScroll.X()+ui.historyScroll.W() {
 			t.Fatalf("window %v: remove icon at x=%d w=%d", size, remove.X(), remove.W())
+		}
+		// The star sits between the title and the remove icon, with the same gaps.
+		if star.W() != rowIconSize || title.X()+title.W()+8 != star.X() || star.X()+star.W()+8 != remove.X() {
+			t.Fatalf("window %v: title ends at %d, star at x=%d w=%d, remove at x=%d", size, title.X()+title.W(), star.X(), star.W(), remove.X())
 		}
 	}
 
@@ -110,10 +156,10 @@ func TestNativeHistoryPageContinuesAndRemoves(t *testing.T) {
 	}
 
 	// Remove the focused first row: it disappears and focus moves to the row now in its place.
-	ui.historyButtons[1].TakeFocus()
+	ui.historyList().button(0, 2).TakeFocus()
 	ui.removeHistory("first")
 	pumpSearchEvents(t, func() bool { return slices.Equal(ui.historyRowIDs, []string{"second"}) })
-	if !ui.historyButtons[1].HasFocus() {
+	if !ui.historyList().button(0, 2).HasFocus() {
 		t.Fatal("focus did not stay on the remaining row's remove icon")
 	}
 	service.mu.Lock()
@@ -172,5 +218,51 @@ func TestNativeHistoryPageEmptyFailureAndRemoveError(t *testing.T) {
 	pumpSearchEvents(t, func() bool { return !ui.historyRemovePending && ui.message.Label() != "" })
 	if ui.message.Label() != "無法移除紀錄，請重試。" || len(ui.historyRowIDs) != 2 {
 		t.Fatalf("message = %q, rows = %#v", ui.message.Label(), ui.historyRowIDs)
+	}
+}
+
+func TestNativeHistoryStarFollowsAndUnfollows(t *testing.T) {
+	service := &historyViewTestService{searchViewTestService: &searchViewTestService{}, history: historyTestEntries(), following: []string{"second"}}
+	ui, played := newHistoryViewTestFixture(t, service)
+	ui.showSection(historySection)
+	pumpSearchEvents(t, func() bool { return !ui.historyLoading && len(ui.historyRowIDs) == 2 })
+	starLabel := func(row int) string { return ui.historyList().button(row, 1).Label() }
+	if starLabel(0) != "追蹤" || starLabel(1) != "取消追蹤" {
+		t.Fatalf("stars = %q, %q; want 追蹤 for the unfollowed row, 取消追蹤 for the followed one", starLabel(0), starLabel(1))
+	}
+
+	// Following keeps focus on the star; a second toggle while one is pending is ignored.
+	ui.historyList().button(0, 1).TakeFocus()
+	ui.toggleHistoryFollow("first")
+	ui.toggleHistoryFollow("second")
+	pumpSearchEvents(t, func() bool { return !ui.followPending && starLabel(0) == "取消追蹤" })
+	if followed, unfollowed := service.followCalls(); !slices.Equal(followed, []string{"first"}) || len(unfollowed) != 0 {
+		t.Fatalf("followed = %#v, unfollowed = %#v", followed, unfollowed)
+	}
+	if !ui.historyList().button(0, 1).HasFocus() || ui.message.Label() != "" || len(*played) != 0 {
+		t.Fatalf("focus on star = %v, message = %q, played = %#v", ui.historyList().button(0, 1).HasFocus(), ui.message.Label(), *played)
+	}
+
+	ui.toggleHistoryFollow("second")
+	pumpSearchEvents(t, func() bool { return !ui.followPending && starLabel(1) == "追蹤" })
+	if _, unfollowed := service.followCalls(); !slices.Equal(unfollowed, []string{"second"}) {
+		t.Fatalf("unfollowed = %#v", unfollowed)
+	}
+
+	// A failure keeps the old state and says so.
+	service.mu.Lock()
+	service.followErr = errors.New("database locked")
+	service.mu.Unlock()
+	ui.toggleHistoryFollow("first")
+	pumpSearchEvents(t, func() bool { return !ui.followPending && ui.message.Label() != "" })
+	if ui.message.Label() != "無法更新追蹤，請重試。" || starLabel(0) != "取消追蹤" {
+		t.Fatalf("message = %q, star = %q", ui.message.Label(), starLabel(0))
+	}
+
+	// A reload reads the stored state again.
+	ui.loadHistory()
+	pumpSearchEvents(t, func() bool { return !ui.historyLoading })
+	if starLabel(0) != "取消追蹤" || starLabel(1) != "追蹤" {
+		t.Fatalf("stars after reload = %q, %q", starLabel(0), starLabel(1))
 	}
 }

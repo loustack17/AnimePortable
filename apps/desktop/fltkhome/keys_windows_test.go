@@ -233,24 +233,37 @@ func TestNativeRowListArrowsScrollAndLeaveToNavigation(t *testing.T) {
 	ui.showSection(historySection)
 	pumpSearchEvents(t, func() bool { return !ui.historyLoading && len(ui.historyRowIDs) == rows })
 
-	ui.historyList().focus(0, 0)
+	list := ui.historyList()
+	list.focus(0, 0)
 	for row := 1; row < rows; row++ {
 		pressKey(t, ui.window, vkDown)
-		pumpSearchEvents(t, func() bool { return ui.historyButtons[row*2].HasFocus() })
-		button, scroll := ui.historyButtons[row*2], ui.historyScroll
+		pumpSearchEvents(t, func() bool { return list.button(row, 0).HasFocus() })
+		button, scroll := list.button(row, 0), ui.historyScroll
 		if button.Y() < scroll.Y() || button.Y()+button.H() > scroll.Y()+scroll.H() {
 			t.Fatalf("row %d at y=%d..%d is outside the list %d..%d", row, button.Y(), button.Y()+button.H(), scroll.Y(), scroll.Y()+scroll.H())
 		}
 	}
 	pressKey(t, ui.window, vkDown)
 	pumpFor(50 * time.Millisecond)
-	if !ui.historyButtons[(rows-1)*2].HasFocus() {
+	if !list.button(rows-1, 0).HasFocus() {
 		t.Fatal("Down on the last row moved focus")
 	}
+	// Right walks title, star, remove; Right on the last icon stays; Up keeps the column.
 	pressKey(t, ui.window, vkRight)
-	pumpSearchEvents(t, func() bool { return ui.historyButtons[(rows-1)*2+1].HasFocus() })
+	pumpSearchEvents(t, func() bool { return list.button(rows-1, 1).HasFocus() })
+	pressKey(t, ui.window, vkRight)
+	pumpSearchEvents(t, func() bool { return list.button(rows-1, 2).HasFocus() })
+	pressKey(t, ui.window, vkRight)
+	pumpFor(50 * time.Millisecond)
+	if !list.button(rows-1, 2).HasFocus() {
+		t.Fatal("Right on the remove icon moved focus")
+	}
+	pressKey(t, ui.window, vkUp)
+	pumpSearchEvents(t, func() bool { return list.button(rows-2, 2).HasFocus() })
 	pressKey(t, ui.window, vkLeft)
-	pumpSearchEvents(t, func() bool { return ui.historyButtons[(rows-1)*2].HasFocus() })
+	pumpSearchEvents(t, func() bool { return list.button(rows-2, 1).HasFocus() })
+	pressKey(t, ui.window, vkLeft)
+	pumpSearchEvents(t, func() bool { return list.button(rows-2, 0).HasFocus() })
 	pressKey(t, ui.window, vkLeft)
 	pumpSearchEvents(t, func() bool { return ui.navigation[historySection].HasFocus() })
 

@@ -10,18 +10,22 @@ import (
 	fltk "github.com/pwiecz/go-fltk"
 )
 
-// rowIconSize is the width of the icon button at the end of each list row.
+// rowIconSize is the width of each icon button at the end of a list row.
 const rowIconSize = 40
 
+// rowIconGap is the space before each icon button.
+const rowIconGap = 8
+
 // rowList is the scrolling list shared by 追蹤 and 歷史紀錄: each row is a title/status
-// button followed by an icon button. buttons and rowIDs point at the page's own view
-// fields, which hold the buttons in row order (title, icon, title, icon, …) and the
-// anime ID of each row.
+// button followed by the same number (icons) of icon buttons. buttons and rowIDs point at
+// the page's own view fields, which hold the buttons in row order (title, its icons, next
+// title, …) and the anime ID of each row.
 type rowList struct {
 	page    *fltk.Group
 	status  *fltk.Box
 	action  *fltk.Button // the page's top-right button, whose right edge the icons line up with
 	scroll  *fltk.Scroll
+	icons   int
 	buttons *[]*fltk.Button
 	rowIDs  *[]string
 }
@@ -46,12 +50,18 @@ func (ui *view) buildRowListPage(actionLabel string, onAction, focusContent func
 	return page, status, action, scroll
 }
 
+// listRow is one row; it has as many icons as its list's icons count.
 type listRow struct {
 	id, title, status, tooltip string
 	open                       func()
-	iconLabel                  string
-	styleIcon                  func(*fltk.Button)
-	activateIcon               func()
+	icons                      []rowIcon
+}
+
+// rowIcon is an icon button; its label is not drawn but names the action for the tooltip.
+type rowIcon struct {
+	label    string
+	style    func(*fltk.Button)
+	activate func()
 }
 
 // renderRowList rebuilds the rows, keeping the scroll position and the focused row. When the
@@ -62,9 +72,10 @@ func (ui *view) renderRowList(list rowList, rows []listRow, renderStatus, focusE
 		return
 	}
 	focusedID, focusedRow, focusedColumn := "", -1, 0
+	columns := list.columns()
 	for index, button := range *list.buttons {
-		if button.HasFocus() && index/2 < len(*list.rowIDs) {
-			focusedID, focusedRow, focusedColumn = (*list.rowIDs)[index/2], index/2, index%2
+		if button.HasFocus() && index/columns < len(*list.rowIDs) {
+			focusedID, focusedRow, focusedColumn = (*list.rowIDs)[index/columns], index/columns, index%columns
 		}
 		list.scroll.Remove(button)
 		button.Destroy()
@@ -80,11 +91,14 @@ func (ui *view) renderRowList(list rowList, rows []listRow, renderStatus, focusE
 		open.SetTooltip(row.tooltip)
 		ui.styleTitleStatusRow(open, row.title, row.status)
 		ui.bindKeys(open, row.open, list.routes(ui, index, 0))
-		icon := fltk.NewButton(0, 0, 1, 1, row.iconLabel)
-		icon.SetTooltip(row.iconLabel)
-		row.styleIcon(icon)
-		ui.bindKeys(icon, row.activateIcon, list.routes(ui, index, 1))
-		*list.buttons = append(*list.buttons, open, icon)
+		*list.buttons = append(*list.buttons, open)
+		for column, item := range row.icons {
+			icon := fltk.NewButton(0, 0, 1, 1, item.label)
+			icon.SetTooltip(item.label)
+			item.style(icon)
+			ui.bindKeys(icon, item.activate, list.routes(ui, index, column+1))
+			*list.buttons = append(*list.buttons, icon)
+		}
 		*list.rowIDs = append(*list.rowIDs, row.id)
 		list.placeRow(index)
 	}
@@ -109,9 +123,10 @@ func (ui *view) renderRowList(list rowList, rows []listRow, renderStatus, focusE
 	list.focus(target, focusedColumn)
 }
 
-// routes moves focus from the row's title (column 0) or icon (column 1): Up and Down to the
-// same column of the neighbouring row, Left and Right between title and icon. Up from the
-// first row reaches the page button when it shows, and Left from a title the navigation.
+// routes moves focus from the row's title (column 0) or one of its icons (columns 1 and up):
+// Up and Down to the same column of the neighbouring row, Left and Right along the row. Up
+// from the first row reaches the page button when it shows, and Left from a title the
+// navigation.
 func (list rowList) routes(ui *view, index, column int) keyRoutes {
 	routes := keyRoutes{
 		up: func() {
@@ -127,32 +142,44 @@ func (list rowList) routes(ui *view, index, column int) keyRoutes {
 	}
 	if column == 0 {
 		routes.left = ui.focusNavigation
-		routes.right = func() { list.focus(index, 1) }
 	} else {
-		routes.left = func() { list.focus(index, 0) }
+		routes.left = func() { list.focus(index, column-1) }
+	}
+	if column < list.icons {
+		routes.right = func() { list.focus(index, column+1) }
+	} else {
 		routes.right = stayFocused
 	}
 	return routes
 }
 
+func (list rowList) columns() int { return 1 + list.icons }
+
+// button is a row's title (column 0) or icon.
+func (list rowList) button(index, column int) *fltk.Button {
+	return (*list.buttons)[index*list.columns()+column]
+}
+
 // focus focuses a row's title or icon and scrolls it into view; a row that does not exist
 // leaves focus where it is.
 func (list rowList) focus(index, column int) {
-	position := index*2 + column
-	if index < 0 || position >= len(*list.buttons) {
+	if index < 0 || index*list.columns()+column >= len(*list.buttons) {
 		return
 	}
-	button := (*list.buttons)[position]
+	button := list.button(index, column)
 	scrollIntoView(list.scroll, button)
 	button.TakeFocus()
 }
 
 func (list rowList) placeRow(index int) {
 	scroll := list.scroll
-	openWidth := max(220, scroll.W()-35-rowIconSize-8)
+	openWidth := max(220, scroll.W()-35-list.icons*(rowIconGap+rowIconSize))
 	y := scroll.Y() + 9 + index*64
-	(*list.buttons)[index*2].Resize(scroll.X()+15, y, openWidth, 56)
-	(*list.buttons)[index*2+1].Resize(scroll.X()+15+openWidth+8, y+8, rowIconSize, 40)
+	list.button(index, 0).Resize(scroll.X()+15, y, openWidth, 56)
+	for column := 1; column <= list.icons; column++ {
+		x := scroll.X() + 15 + openWidth + column*rowIconGap + (column-1)*rowIconSize
+		list.button(index, column).Resize(x, y+8, rowIconSize, 40)
+	}
 }
 
 func (ui *view) resizeRowList(list rowList) {

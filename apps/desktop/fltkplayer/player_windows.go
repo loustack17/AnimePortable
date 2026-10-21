@@ -22,6 +22,7 @@ const (
 	focusProgress
 	focusEpisodes
 	focusFullscreen
+	focusFollow
 )
 
 const controlsIdleTimeout = 3 * time.Second
@@ -41,6 +42,8 @@ type Callbacks struct {
 	Leave func()
 	// Search ends playback and opens 搜尋 (/ and Ctrl+K).
 	Search func()
+	// ToggleFollow follows or unfollows the anime being played (the star left of 選集).
+	ToggleFollow func()
 }
 
 type State struct {
@@ -54,6 +57,9 @@ type State struct {
 	Focus      int
 	Fullscreen bool
 	Loading    bool
+	// FollowKnown shows the follow star; Following fills it.
+	FollowKnown bool
+	Following   bool
 }
 
 type View struct {
@@ -204,7 +210,7 @@ func (view *View) SetState(state State) {
 	if state.Volume > 0 {
 		view.lastVolume = state.Volume
 	}
-	if state.Focus < 0 || state.Focus > focusFullscreen {
+	if !state.focusable(state.Focus) {
 		state.Focus = focusProgress
 	}
 	if state.Episode < 0 || state.Episode >= len(view.episodes) {
@@ -225,7 +231,7 @@ func (view *View) SetState(state State) {
 }
 
 func (view *View) SetFocus(index int) {
-	if index < 0 || index > focusFullscreen {
+	if !view.state.focusable(index) {
 		index = focusProgress
 	}
 	view.state.Focus = index
@@ -289,6 +295,9 @@ func (view *View) actionAt(x, y int) int {
 	if x >= width-195 && x <= width-81 && y >= 14 && y <= 53 {
 		return focusEpisodes
 	}
+	if view.state.FollowKnown && x >= width-241 && x <= width-203 && y >= 14 && y <= 53 {
+		return focusFollow
+	}
 	if view.state.Duration > 0 && y >= height-82 && y < height-54 && x >= 24 && x <= width-24 {
 		return focusProgress
 	}
@@ -350,6 +359,10 @@ func (view *View) activate(index int) {
 	case focusFullscreen:
 		if view.callbacks.Fullscreen != nil {
 			view.callbacks.Fullscreen()
+		}
+	case focusFollow:
+		if view.callbacks.ToggleFollow != nil && view.state.FollowKnown {
+			view.callbacks.ToggleFollow()
 		}
 	}
 	view.showControls()
@@ -544,7 +557,7 @@ func normalizeLetterKey(key int) int {
 
 func (view *View) handleKey(key, modifiers int) bool {
 	key = normalizeLetterKey(key)
-	if view.state.Focus < 0 || view.state.Focus > focusFullscreen {
+	if !view.state.focusable(view.state.Focus) {
 		view.state.Focus = focusProgress
 	}
 	if key == 9 || key == 0xff09 {
@@ -612,6 +625,11 @@ func (view *View) handleKey(key, modifiers int) bool {
 			view.menuPinned = false
 			view.menuHover = false
 			view.Redraw()
+			return true
+		}
+		// Space plays or pauses from any control except the star, which it toggles.
+		if view.state.Focus == focusFollow {
+			view.activate(focusFollow)
 			return true
 		}
 		view.activate(focusPlayPause)
@@ -713,10 +731,21 @@ func (view *View) showControls() {
 	view.Redraw()
 }
 
-var tabFocusOrder = [...]int{focusMenu, focusEpisodes, focusProgress, focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusFullscreen}
+var tabFocusOrder = [...]int{focusMenu, focusFollow, focusEpisodes, focusProgress, focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusFullscreen}
+
+// focusable reports whether a control exists and shows; the follow star shows only once
+// the follow state is known.
+func (state State) focusable(index int) bool {
+	return index >= focusMenu && index <= focusFollow && (index != focusFollow || state.FollowKnown)
+}
 
 func (view *View) moveTabFocus(reverse bool) {
-	view.SetFocus(nextTabFocus(view.state.Focus, reverse))
+	next := nextTabFocus(view.state.Focus, reverse)
+	if !view.state.focusable(next) {
+		// The star is never first or last in the ring, so its neighbour exists.
+		next = nextTabFocus(next, reverse)
+	}
+	view.SetFocus(next)
 }
 
 func nextTabFocus(current int, reverse bool) int {

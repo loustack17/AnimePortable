@@ -43,17 +43,22 @@ func (ui *view) loadHistory() {
 	go func() {
 		library, libraryErr := ui.service.Library(ui.ctx)
 		history, historyErr := ui.service.History(ui.ctx)
+		following, followingErr := ui.service.Following(ui.ctx)
 		fltk.Awake(func() {
 			if generation != ui.historyGeneration || !ui.historyVisible() {
 				return
 			}
 			ui.historyLoading = false
 			ui.historyLoaded = true
-			ui.historyLoadFailed = firstError(libraryErr, historyErr) != nil
+			ui.historyLoadFailed = firstError(libraryErr, historyErr, followingErr) != nil
 			// A failed load drops the old rows: their positions may be stale or removed.
 			ui.historyItems = nil
+			ui.historyFollowed = map[string]bool{}
 			if !ui.historyLoadFailed {
 				ui.historyItems = historyRows(history, library, time.Now())
+				for _, item := range following {
+					ui.historyFollowed[item.AnimeID] = true
+				}
 			}
 			ui.renderHistory()
 		})
@@ -88,6 +93,25 @@ func (ui *view) removeHistory(animeID string) {
 			}
 		})
 	}()
+}
+
+func (ui *view) toggleHistoryFollow(animeID string) {
+	if !ui.historyVisible() {
+		return
+	}
+	follow := !ui.historyFollowed[animeID]
+	ui.setFollowing(animeID, follow, func(err error) {
+		if err == nil {
+			ui.historyFollowed[animeID] = follow
+		}
+		if ui.historyVisible() {
+			// Show the new state at once (the star's tooltip names the action, so the rows are
+			// rebuilt; focus stays), then reload: a load that started before the change may
+			// have read the old follow list, and the reload supersedes it.
+			ui.renderHistory()
+			ui.loadHistory()
+		}
+	})
 }
 
 func (ui *view) focusHistory() {
@@ -126,7 +150,7 @@ func (ui *view) renderHistoryStatus() {
 func (ui *view) historyList() rowList {
 	return rowList{
 		page: ui.historyPage, status: ui.historyStatus, action: ui.historyRetry, scroll: ui.historyScroll,
-		buttons: &ui.historyButtons, rowIDs: &ui.historyRowIDs,
+		icons: 2, buttons: &ui.historyButtons, rowIDs: &ui.historyRowIDs,
 	}
 }
 
@@ -134,12 +158,22 @@ func (ui *view) renderHistory() {
 	rows := make([]listRow, 0, len(ui.historyItems))
 	for _, row := range ui.historyItems {
 		item := row.History
+		followed := func() bool { return ui.historyFollowed[item.AnimeID] }
+		followLabel := "追蹤"
+		if followed() {
+			followLabel = "取消追蹤"
+		}
 		rows = append(rows, listRow{
 			id: item.AnimeID, title: row.Title, status: row.Status, tooltip: "繼續播放：" + row.Status,
-			open:         func() { ui.continueHistory(item) },
-			iconLabel:    "移除紀錄",
-			styleIcon:    ui.styleRemoveIcon,
-			activateIcon: func() { ui.removeHistory(item.AnimeID) },
+			open: func() { ui.continueHistory(item) },
+			icons: []rowIcon{
+				{
+					label:    followLabel,
+					style:    func(button *fltk.Button) { ui.styleFollowIcon(button, followed) },
+					activate: func() { ui.toggleHistoryFollow(item.AnimeID) },
+				},
+				{label: "移除紀錄", style: ui.styleRemoveIcon, activate: func() { ui.removeHistory(item.AnimeID) }},
+			},
 		})
 	}
 	ui.renderRowList(ui.historyList(), rows, ui.renderHistoryStatus, ui.focusHistory)
