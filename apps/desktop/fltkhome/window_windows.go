@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
@@ -29,8 +30,6 @@ type Service interface {
 	Schedule(context.Context) ([]backend.ScheduleItem, error)
 	CachedSchedule(context.Context) ([]backend.ScheduleItem, error)
 }
-
-const homeEpisodeLookupTimeout = 3 * time.Second
 
 // Home layout: the first section's heading and first row, and the gap between sections.
 const (
@@ -69,7 +68,6 @@ type view struct {
 	selected           int
 	rows               []homeRow
 	homeCaptionLabels  []*fltk.Box
-	homeLookupCancel   context.CancelFunc
 	loadFailed         bool
 	homeLoading        bool
 	homeRefreshPending bool
@@ -152,9 +150,11 @@ type view struct {
 	followingRefreshing      bool
 	followingRefreshFailures int
 	followingRefreshTotal    int
-	// followingRefreshAttemptedAt throttles the automatic refresh, success or not, so a
-	// failing source is not asked again on every visit to Home or 追蹤.
-	followingRefreshAttemptedAt time.Time
+	// refresh runs and throttles every background refresh from the network.
+	refresh *core.Refresher
+	// homeOffline is set when the last Following refresh could not reach Anime1 for any
+	// anime; Home then says it shows saved data.
+	homeOffline bool
 
 	historyPage          *fltk.Group
 	historyStatus        *fltk.Box
@@ -183,8 +183,6 @@ type view struct {
 	scheduleRefreshFailed bool
 	// scheduleOpened is the day and index of the show last opened, for focus on return.
 	scheduleOpened [2]int
-	// scheduleRefreshAttemptedAt throttles the automatic fetch, success or not.
-	scheduleRefreshAttemptedAt time.Time
 }
 
 func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int)) {
@@ -220,6 +218,7 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 }
 
 func (ui *view) build() {
+	ui.refresh = core.NewRefresher(ui.ctx, core.RefreshLimit, core.RefreshInterval)
 	fltk.SetScheme("oxy")
 	fltk.SetFont(fltk.HELVETICA, "Microsoft JhengHei UI")
 	fltk.SetFont(fltk.HELVETICA_BOLD, "Microsoft JhengHei UI Bold")
@@ -525,7 +524,23 @@ func (ui *view) showSection(index int) {
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
 	}
+	ui.syncHomeNotice()
 	ui.window.Redraw()
+}
+
+// homeOfflineNotice is Home's status line when no background refresh could reach the network.
+const homeOfflineNotice = "目前無法連線，顯示上次儲存的資料。"
+
+// syncHomeNotice shows the offline line on Home only. Any other notice in the shared message
+// line wins over it, and it is cleared once a refresh succeeds or another page shows.
+func (ui *view) syncHomeNotice() {
+	current := ui.message.Label()
+	switch {
+	case ui.selected == 0 && ui.homeOffline && current == "":
+		ui.message.SetLabel(homeOfflineNotice)
+	case current == homeOfflineNotice && (ui.selected != 0 || !ui.homeOffline):
+		ui.message.SetLabel("")
+	}
 }
 
 // navigate shows a page after playback and focuses it: the search input for 搜尋, otherwise
@@ -567,7 +582,6 @@ func (ui *view) loadHome() {
 	if ui.homeLoading || ui.ctx.Err() != nil || ui.closing {
 		return
 	}
-	ui.cancelHomeEpisodeLookup()
 	if ui.service == nil {
 		ui.hideHomeContinue()
 		ui.message.SetLabel(homeErrorMessage(fmt.Errorf("service unavailable")))
@@ -616,6 +630,7 @@ func (ui *view) loadHome() {
 			}
 			ui.loadFailed = false
 			ui.message.SetLabel("")
+			ui.syncHomeNotice()
 			ui.rows = selectHomeRows(history, library, rowLimit)
 			ui.populateHome(library, following)
 			ui.window.Redraw()
@@ -765,51 +780,8 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	ui.scroll.End()
 	ui.applyTheme()
 	ui.restoreHomeFocus()
-	ui.resolveHomeEpisodes(ui.homeLoadGeneration)
-	// Home shows 近期更新 from stored data; this checks Anime1 for new episodes in the background.
+	// Home shows only stored data; this checks Anime1 for new episodes in the background.
 	ui.refreshFollowingIfDue()
-}
-
-func (ui *view) cancelHomeEpisodeLookup() {
-	if ui.homeLookupCancel != nil {
-		ui.homeLookupCancel()
-		ui.homeLookupCancel = nil
-	}
-}
-
-func (ui *view) resolveHomeEpisodes(generation uint64) {
-	ui.cancelHomeEpisodeLookup()
-	if ui.service == nil || len(ui.rows) == 0 {
-		return
-	}
-	lookupContext, cancel := context.WithCancel(ui.ctx)
-	ui.homeLookupCancel = cancel
-	rows := append([]homeRow(nil), ui.rows[:min(len(ui.rows), rowLimit)]...)
-	for index, row := range rows {
-		go func(index int, row homeRow) {
-			ctx, cancel := context.WithTimeout(lookupContext, homeEpisodeLookupTimeout)
-			defer cancel()
-			episodes, err := ui.service.Episodes(ctx, row.History.AnimeID)
-			number := episodeNumber(episodes, row.History.EpisodeID, err)
-			fltk.Awake(func() {
-				ui.applyHomeEpisodeResult(generation, index, row, number)
-			})
-		}(index, row)
-	}
-}
-
-func (ui *view) applyHomeEpisodeResult(generation uint64, index int, row homeRow, number string) {
-	if generation != ui.homeLoadGeneration || ui.ctx.Err() != nil || ui.closing || ui.homeLoading || index < 0 || index >= len(ui.rows) || index >= len(ui.homeCaptionLabels) {
-		return
-	}
-	current := ui.rows[index]
-	if current.History.AnimeID != row.History.AnimeID || current.History.EpisodeID != row.History.EpisodeID {
-		return
-	}
-	current.EpisodeNumber = number
-	ui.rows[index] = current
-	ui.homeCaptionLabels[index].SetLabel(homeCaption(current))
-	ui.window.Redraw()
 }
 
 func (ui *view) bindNavigationKeys(button *fltk.Button, index int) {
@@ -1020,7 +992,6 @@ func (ui *view) bindThemeKeys(action func()) {
 func (ui *view) cancel() {
 	ui.closeOnce.Do(func() {
 		ui.closing = true
-		ui.cancelHomeEpisodeLookup()
 		ui.homeLoadGeneration++
 		ui.homeLoading = false
 		ui.homeRefreshPending = false
@@ -1029,6 +1000,8 @@ func (ui *view) cancel() {
 		ui.mainGroup.Deactivate()
 		ui.themeToggle.Deactivate()
 		go func() {
+			// Refresh work is stopped and waited for before the backend closes.
+			ui.refresh.Close()
 			var err error
 			if ui.appearance != nil {
 				err = ui.appearance.close()

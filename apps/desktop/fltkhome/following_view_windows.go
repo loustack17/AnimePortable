@@ -6,23 +6,18 @@ package fltkhome
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
 const followingSection = 2
-
-// followingRefreshTimeout bounds each anime's episode fetch, so one slow series cannot
-// stall the refresh of the others.
-const followingRefreshTimeout = 15 * time.Second
-
-// followingRefreshInterval is the least time between automatic refreshes, so returning to
-// Home or 追蹤 does not refetch every followed anime; 更新集數 forces one.
-const followingRefreshInterval = 10 * time.Minute
 
 func (ui *view) buildFollowingView() {
 	ui.followingPage, ui.followingStatus, ui.followingRefresh, ui.followingScroll = ui.buildRowListPage("更新集數", ui.refreshFollowing, func() { ui.followingList().focus(0, 0) })
@@ -41,10 +36,15 @@ func (ui *view) showFollowing() {
 	ui.refreshFollowingIfDue()
 }
 
+// refreshFollowingIfDue refreshes when the last automatic refresh, successful or not, was
+// long enough ago, so a failing source is not asked again on every visit to Home or 追蹤.
 func (ui *view) refreshFollowingIfDue() {
-	if ui.followingRefreshAttemptedAt.IsZero() || time.Since(ui.followingRefreshAttemptedAt) >= followingRefreshInterval {
-		ui.refreshFollowing()
-	}
+	ui.startFollowingRefresh(false)
+}
+
+// refreshFollowing is 更新集數: it refreshes now unless a refresh is already running.
+func (ui *view) refreshFollowing() {
+	ui.startFollowingRefresh(true)
 }
 
 func (ui *view) loadFollowing() {
@@ -71,30 +71,36 @@ func (ui *view) loadFollowing() {
 	}()
 }
 
-func (ui *view) refreshFollowing() {
-	if ui.service == nil || ui.followingRefreshing || ui.closing || ui.ctx.Err() != nil {
+func (ui *view) startFollowingRefresh(force bool) {
+	if ui.service == nil || ui.followingRefreshing || ui.closing || ui.ctx.Err() != nil || !ui.refresh.Attempt("following", force) {
 		return
 	}
 	ui.followingRefreshing = true
-	ui.followingRefreshAttemptedAt = time.Now()
 	ui.followingRefreshFailures = 0
 	ui.renderFollowingStatus()
 	go func() {
 		// Loading an episode list stores its episode numbers, which Following reads.
 		following, err := ui.service.Following(ui.ctx)
-		failures, total := 0, len(following)
+		var unreachable atomic.Int32
+		jobs := make([]func(context.Context) error, 0, len(following))
+		for _, item := range following {
+			jobs = append(jobs, func(ctx context.Context) error {
+				_, err := ui.service.Episodes(ctx, item.AnimeID)
+				if errors.Is(err, backend.ErrOffline) || errors.Is(err, context.DeadlineExceeded) {
+					unreachable.Add(1)
+				}
+				return err
+			})
+		}
+		// Even 更新集數 runs in the background share: nobody waits on any one of these
+		// lists, so a detail screen opened meanwhile must not wait behind them.
+		result := ui.refresh.RunInBackground(ui.ctx, core.EpisodeRefreshTimeout, jobs...)
+		failures, total := result.Failed, result.Total
+		// Offline only when every request failed to reach Anime1; a removed show or a
+		// storage error is not shown as offline.
+		offline := err == nil && total > 0 && int(unreachable.Load()) == total
 		if err != nil {
 			failures, total = 1, 1
-		}
-		for _, item := range following {
-			if ui.ctx.Err() != nil {
-				break
-			}
-			ctx, cancel := context.WithTimeout(ui.ctx, followingRefreshTimeout)
-			if _, err := ui.service.Episodes(ctx, item.AnimeID); err != nil {
-				failures++
-			}
-			cancel()
 		}
 		fltk.Awake(func() {
 			ui.followingRefreshing = false
@@ -102,6 +108,8 @@ func (ui *view) refreshFollowing() {
 				return
 			}
 			ui.followingRefreshFailures, ui.followingRefreshTotal = failures, total
+			ui.homeOffline = offline
+			ui.syncHomeNotice()
 			if ui.followingVisible() {
 				ui.loadFollowing()
 			} else if ui.selected == 0 && failures < total {

@@ -128,7 +128,7 @@ func (service *Service) Detail(ctx context.Context, animeID string) (Detail, err
 }
 
 // metadataLookupTimeout bounds a background lookup so a slow provider cannot hold an operation slot.
-const metadataLookupTimeout = 20 * time.Second
+const metadataLookupTimeout = core.MetadataRefreshTimeout
 
 // RefreshMetadata looks up and stores cover and synopsis metadata for an anime, replacing
 // any stored record. It reports whether metadata was stored; false means no provider had a
@@ -275,7 +275,7 @@ func (service *Service) setFollowing(ctx context.Context, animeID string, follow
 }
 
 // scheduleLookupTimeout bounds a schedule fetch so a slow provider cannot hold an operation slot.
-const scheduleLookupTimeout = 20 * time.Second
+const scheduleLookupTimeout = core.ScheduleStepTimeout
 
 // Schedule fetches the weekly airing schedule, replaces the stored one with it, adds the
 // shows the source catalog has under the exact title to the local library, and returns it

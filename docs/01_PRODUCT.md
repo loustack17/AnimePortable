@@ -170,7 +170,8 @@ Never implement:
 - automatic telemetry
 - mandatory account
 - remote JavaScript execution from content sources
+- video downloads or offline playback (owner decision 2026-10-21): playback is online only, to stay lightweight and avoid storing copies of videos. Without a network the app shows only its stored lists.
 
 ## Not in scope now
 
-Considered only after acceptance and an ADR: other players (VLC, IINA), mobile, downloads, cloud sync, plugins, multi-source UI, store distribution, notification system, Linux and macOS builds.
+Considered only after acceptance and an ADR: other players (VLC, IINA), mobile, cloud sync, plugins, multi-source UI, store distribution, notification system, Linux and macOS builds.

@@ -92,7 +92,7 @@ func newSearchViewTestFixture(t *testing.T, service Service) *view {
 	}
 	window := fltk.NewWindow(1000, 618, "Search test")
 	ctx, cancel := context.WithCancel(context.Background())
-	ui := &view{window: window, service: service, ctx: ctx}
+	ui := &view{window: window, service: service, ctx: ctx, refresh: core.NewRefresher(ctx, core.RefreshLimit, core.RefreshInterval)}
 	window.Begin()
 	ui.mainGroup = fltk.NewGroup(0, 0, 1000, 618)
 	ui.mainGroup.Begin()

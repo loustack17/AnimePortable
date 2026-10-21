@@ -9,18 +9,11 @@ import (
 	"fmt"
 	"time"
 
+	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
 const scheduleSection = 1
-
-// scheduleRefreshTimeout bounds one refresh: the schedule lookup and the catalog lookup the
-// backend bounds at 20 seconds each, with room to store the result.
-const scheduleRefreshTimeout = 45 * time.Second
-
-// scheduleRefreshInterval is the least time between automatic fetches, so returning to
-// 時間表 does not refetch every time; 重新整理 forces one.
-const scheduleRefreshInterval = 10 * time.Minute
 
 // Week grid layout: a day header above each column, then the day's show cards. Columns never
 // get narrower than scheduleMinColumnWidth, so a card keeps two readable lines; a narrow
@@ -48,9 +41,7 @@ func (ui *view) showSchedule() {
 	ui.schedulePage.Show()
 	ui.renderSchedule()
 	ui.loadSchedule()
-	if ui.scheduleRefreshAttemptedAt.IsZero() || time.Since(ui.scheduleRefreshAttemptedAt) >= scheduleRefreshInterval {
-		ui.refreshSchedule()
-	}
+	ui.startScheduleRefresh(false)
 }
 
 // loadSchedule reads the stored schedule; it never waits on the network.
@@ -77,26 +68,36 @@ func (ui *view) loadSchedule() {
 	}()
 }
 
-// refreshSchedule fetches the schedule, which replaces the stored one, then reloads the
-// page from storage.
+// refreshSchedule is 重新整理: it fetches now unless a fetch is already running.
 func (ui *view) refreshSchedule() {
-	if ui.service == nil || ui.scheduleRefreshing || ui.closing || ui.ctx.Err() != nil {
+	ui.startScheduleRefresh(true)
+}
+
+// startScheduleRefresh fetches the schedule, which replaces the stored one, then reloads the
+// page from storage. Unless forced, it fetches at most once per refresh interval, successful
+// or not, so returning to 時間表 does not refetch every time.
+func (ui *view) startScheduleRefresh(force bool) {
+	if ui.service == nil || ui.scheduleRefreshing || ui.closing || ui.ctx.Err() != nil || !ui.refresh.Attempt("schedule", force) {
 		return
 	}
 	ui.scheduleRefreshing = true
 	ui.scheduleRefreshFailed = false
-	ui.scheduleRefreshAttemptedAt = time.Now()
 	ui.renderScheduleStatus()
+	run := ui.refresh.RunInBackground
+	if force {
+		run = ui.refresh.Run
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(ui.ctx, scheduleRefreshTimeout)
-		_, err := ui.service.Schedule(ctx)
-		cancel()
+		result := run(ui.ctx, core.ScheduleRefreshTimeout, func(ctx context.Context) error {
+			_, err := ui.service.Schedule(ctx)
+			return err
+		})
 		fltk.Awake(func() {
 			ui.scheduleRefreshing = false
 			if ui.closing || ui.ctx.Err() != nil {
 				return
 			}
-			ui.scheduleRefreshFailed = err != nil
+			ui.scheduleRefreshFailed = result.Failed > 0
 			if ui.scheduleVisible() {
 				// The status must not say 正在更新 while the reload is still running.
 				ui.renderScheduleStatus()

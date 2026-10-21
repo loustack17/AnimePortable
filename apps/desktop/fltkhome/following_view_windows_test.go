@@ -176,7 +176,10 @@ func TestFollowingRefreshReportsPartialFailureAndIsNotRepeatedSoonAfterSuccess(t
 
 	failFresh.Store(false)
 	ui.refreshFollowing()
-	pumpSearchEvents(t, func() bool { return !ui.followingRefreshing && !ui.followingRefreshAttemptedAt.IsZero() })
+	if !ui.followingRefreshing {
+		t.Fatal("更新集數 did not start a refresh soon after the automatic one")
+	}
+	pumpSearchEvents(t, func() bool { return !ui.followingRefreshing })
 	before := calls.Load()
 	ui.showSection(0)
 	ui.showSection(followingSection)

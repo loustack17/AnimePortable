@@ -29,28 +29,13 @@ func navigationPosition(section int) int {
 }
 
 type homeRow struct {
-	History       backend.History
-	Title         string
-	EpisodeNumber string
+	History backend.History
+	Title   string
 }
 
-func episodeNumber(episodes []backend.Episode, episodeID string, err error) string {
-	if err != nil || strings.TrimSpace(episodeID) == "" {
-		return "未知"
-	}
-	for _, episode := range episodes {
-		if episode.ID == episodeID {
-			if number := strings.TrimSpace(episode.Number); number != "" {
-				return number
-			}
-			return "未知"
-		}
-	}
-	return "未知"
-}
-
+// homeCaption uses the stored episode number, so Home needs no network to show it.
 func homeCaption(row homeRow) string {
-	number := strings.TrimSpace(row.EpisodeNumber)
+	number := strings.TrimSpace(row.History.EpisodeNumber)
 	if number == "" {
 		number = "未知"
 	}

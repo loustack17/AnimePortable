@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"animeportable/adapters/metadata/cover"
+	"animeportable/adapters/network/securehttp"
 	"animeportable/adapters/player/libmpv"
 	"animeportable/core"
 )
@@ -329,10 +330,16 @@ func TestSafeError(t *testing.T) {
 		{libmpv.ErrPlayerFailed, ErrUnavailable},
 		{fmt.Errorf("secret path: %w", libmpv.ErrPlayerFailed), ErrUnavailable},
 		{errors.New("x"), ErrUnavailable},
+		{&securehttp.Error{Kind: securehttp.KindNetwork}, ErrOffline},
+		{fmt.Errorf("episodes: %w", &securehttp.Error{Kind: securehttp.KindNetwork}), ErrOffline},
+		{&securehttp.Error{Kind: securehttp.KindStatus, Status: 404}, ErrUnavailable},
 	} {
 		if e := safeError(x.in); e != x.want {
 			t.Errorf("%v => %v", x.in, e)
 		}
+	}
+	if !errors.Is(ErrOffline, ErrUnavailable) {
+		t.Error("ErrOffline is not ErrUnavailable for callers that do not tell them apart")
 	}
 }
 

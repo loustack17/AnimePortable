@@ -7,29 +7,31 @@ package fltkhome
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
 type homeRefreshTestService struct {
-	mu               sync.Mutex
-	history          []backend.History
-	historyErr       error
-	historyCall      int
-	episodes         map[string][]backend.Episode
-	episodeCall      int
-	blockEpisodeCall int
-	episodeEntered   chan struct{}
-	episodeRelease   chan struct{}
-	blockCall        int
-	entered          chan struct{}
-	release          chan struct{}
-	following        []backend.Following
+	mu          sync.Mutex
+	history     []backend.History
+	historyErr  error
+	historyCall int
+	episodes    map[string][]backend.Episode
+	blockCall   int
+	entered     chan struct{}
+	release     chan struct{}
+	following   []backend.Following
+	// fetch, when set, stands in for the network on every Episodes call.
+	fetch   func(context.Context, string) error
+	fetched []string
 	// library replaces the single stored anime when set.
 	library []backend.Anime
 	// schedule is returned by both the stored and the fetched schedule.
@@ -57,19 +59,24 @@ func (service *homeRefreshTestService) Search(context.Context, string) ([]backen
 func (service *homeRefreshTestService) Detail(context.Context, string) (backend.Detail, error) {
 	return backend.Detail{}, nil
 }
-func (service *homeRefreshTestService) Episodes(_ context.Context, animeID string) ([]backend.Episode, error) {
+func (service *homeRefreshTestService) Episodes(ctx context.Context, animeID string) ([]backend.Episode, error) {
 	service.mu.Lock()
-	service.episodeCall++
-	call := service.episodeCall
+	service.fetched = append(service.fetched, animeID)
 	episodes := append([]backend.Episode(nil), service.episodes[animeID]...)
-	block := call == service.blockEpisodeCall
-	entered, release := service.episodeEntered, service.episodeRelease
+	fetch := service.fetch
 	service.mu.Unlock()
-	if block {
-		entered <- struct{}{}
-		<-release
+	if fetch != nil {
+		if err := fetch(ctx, animeID); err != nil {
+			return nil, err
+		}
 	}
 	return episodes, nil
+}
+
+func (service *homeRefreshTestService) fetchedIDs() []string {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return append([]string(nil), service.fetched...)
 }
 func (service *homeRefreshTestService) History(context.Context) ([]backend.History, error) {
 	service.mu.Lock()
@@ -123,15 +130,6 @@ func (service *homeRefreshTestService) blockHistoryCall(call int) (<-chan struct
 	return service.entered, service.release
 }
 
-func (service *homeRefreshTestService) blockEpisodeLookup(call int) (<-chan struct{}, chan<- struct{}) {
-	service.mu.Lock()
-	defer service.mu.Unlock()
-	service.blockEpisodeCall = call
-	service.episodeEntered = make(chan struct{}, 1)
-	service.episodeRelease = make(chan struct{})
-	return service.episodeEntered, service.episodeRelease
-}
-
 func newHomeRefreshFixture(t *testing.T, service Service) *view {
 	t.Helper()
 	runtime.LockOSThread()
@@ -181,97 +179,111 @@ func TestNativeReturningHomeRefreshesContinuePosition(t *testing.T) {
 	}
 }
 
-func TestNativeHomeEpisodeLookupIsImmediate(t *testing.T) {
-	service := &homeRefreshTestService{history: []backend.History{{AnimeID: "anime", EpisodeID: "opaque-4", Position: 125000, LastPlayed: "2026-10-06T10:05:00Z"}}}
-	service.setEpisodes("anime", []backend.Episode{{ID: "opaque-4", Number: "04"}})
-	entered, release := service.blockEpisodeLookup(1)
-	var releaseOnce sync.Once
-	unblock := func() { releaseOnce.Do(func() { close(release) }) }
-	defer unblock()
+func TestNativeOfflineStartShowsStoredHomeWithoutNetwork(t *testing.T) {
+	seen := time.Now().UTC().Format(time.RFC3339Nano)
+	service := &homeRefreshTestService{
+		history:   []backend.History{{AnimeID: "watched", EpisodeID: "opaque-5", EpisodeNumber: "05", Position: 125000, LastPlayed: "2026-10-06T10:05:00Z"}},
+		following: []backend.Following{{AnimeID: "followed", HasAvailable: true, LatestAvailableNumber: "12", RecentlyUpdated: true, LatestSeenAt: seen}},
+		library:   []backend.Anime{{ID: "watched", Title: "看過的作品"}, {ID: "followed", Title: "追蹤的作品"}},
+		// The network holds every request until it is cancelled.
+		fetch: func(ctx context.Context, _ string) error { <-ctx.Done(); return ctx.Err() },
+	}
 	ui := newHomeRefreshFixture(t, service)
 	ui.loadHome()
-	lookupEntered := false
-	pumpSearchEvents(t, func() bool {
-		if len(ui.rows) == 0 || len(ui.homeCaptionLabels) == 0 {
-			return false
-		}
-		if !lookupEntered {
-			select {
-			case <-entered:
-				lookupEntered = true
-			default:
-			}
-		}
-		return lookupEntered
-	})
-	if got := ui.homeCaptionLabels[0].Label(); got != "集數：未知 · 上次播放位置 2:05" {
-		t.Fatalf("immediate Continue caption = %q", got)
+	pumpSearchEvents(t, func() bool { return !ui.homeLoading && len(ui.cards) == 1 && len(ui.homeUpdateButtons) == 1 })
+	if got := ui.homeCaptionLabels[0].Label(); got != "集數：05 · 上次播放位置 2:05" {
+		t.Fatalf("繼續觀看 caption = %q, want the stored episode number", got)
 	}
-	unblock()
-	pumpSearchEvents(t, func() bool { return ui.homeCaptionLabels[0].Label() == "集數：04 · 上次播放位置 2:05" })
-}
-
-func TestNativeHomeEpisodeLookupRejectsStaleResult(t *testing.T) {
-	service := &homeRefreshTestService{history: []backend.History{{AnimeID: "anime", EpisodeID: "opaque-4", Position: 125000, LastPlayed: "2026-10-06T10:05:00Z"}}}
-	service.setEpisodes("anime", []backend.Episode{{ID: "opaque-4", Number: "04"}})
-	ui := newHomeRefreshFixture(t, service)
-	ui.loadHome()
-	pumpSearchEvents(t, func() bool {
-		return len(ui.rows) == 1 && ui.homeCaptionLabels[0].Label() == "集數：04 · 上次播放位置 2:05"
-	})
-	staleGeneration := ui.homeLoadGeneration
-	staleRow := ui.rows[0]
-
-	service.setHistory([]backend.History{{AnimeID: "anime", EpisodeID: "opaque-4", Position: 42750, LastPlayed: "2026-10-06T10:06:00Z"}}, nil)
-	service.setEpisodes("anime", []backend.Episode{{ID: "opaque-4", Number: "05"}})
-	ui.navigate(0)
-	pumpSearchEvents(t, func() bool {
-		return !ui.homeLoading && len(ui.rows) == 1 && ui.homeCaptionLabels[0].Label() == "集數：05 · 上次播放位置 0:42"
-	})
-	ui.applyHomeEpisodeResult(staleGeneration, 0, staleRow, "04")
-	if got := ui.homeCaptionLabels[0].Label(); got != "集數：05 · 上次播放位置 0:42" {
-		t.Fatalf("stale lookup changed refreshed Continue caption to %q", got)
+	if got := ui.homeUpdateButtons[0].Label(); got != "追蹤的作品" {
+		t.Fatalf("近期更新 row = %q", got)
 	}
-	request := playRequest(ui.rows[0].History)
-	if request.AnimeID != "anime" || request.EpisodeID != "opaque-4" || request.StartAt != 42750 {
-		t.Fatalf("refreshed Continue request = %#v, want exact episode and resume position", request)
+	// Home itself asks nothing of the network; only the background Following refresh does.
+	pumpSearchEvents(t, func() bool { return len(service.fetchedIDs()) == 1 })
+	pumpFor(50 * time.Millisecond)
+	if got := service.fetchedIDs(); len(got) != 1 || got[0] != "followed" {
+		t.Fatalf("network requests = %v, want only the followed anime's refresh", got)
+	}
+	if ui.message.Label() != "" || ui.loadFailed {
+		t.Fatalf("held network showed %q (failed %v) while refreshing", ui.message.Label(), ui.loadFailed)
 	}
 }
 
-func TestNativeHomeEpisodeLookupUpdatesWhileSearchIsVisible(t *testing.T) {
-	service := &homeRefreshTestService{history: []backend.History{{AnimeID: "anime", EpisodeID: "opaque-4", Position: 125000, LastPlayed: "2026-10-06T10:05:00Z"}}}
-	service.setEpisodes("anime", []backend.Episode{{ID: "opaque-4", Number: "04"}})
-	entered, release := service.blockEpisodeLookup(1)
-	var releaseOnce sync.Once
-	unblock := func() { releaseOnce.Do(func() { close(release) }) }
-	defer unblock()
+func TestNativeFollowingRefreshIsBoundedAndStopsOnClose(t *testing.T) {
+	var running, highest atomic.Int32
+	following := make([]backend.Following, 10)
+	for index := range following {
+		following[index] = backend.Following{AnimeID: fmt.Sprintf("anime-%d", index)}
+	}
+	service := &homeRefreshTestService{following: following, fetch: func(ctx context.Context, _ string) error {
+		now := running.Add(1)
+		defer running.Add(-1)
+		for previous := highest.Load(); now > previous && !highest.CompareAndSwap(previous, now); previous = highest.Load() {
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	}}
+	ui := newHomeRefreshFixture(t, service)
+	baseline := runtime.NumGoroutine()
+	ui.loadHome()
+	// Background refresh leaves one of the RefreshLimit slots for what the user asks for.
+	background := int32(core.RefreshLimit - 1)
+	pumpSearchEvents(t, func() bool { return running.Load() == background })
+	// Give another request time to start if the limit did not hold.
+	pumpFor(50 * time.Millisecond)
+	if got := highest.Load(); got != background {
+		t.Fatalf("highest parallel refresh requests = %d, want %d", got, background)
+	}
+	ui.cancel()
+	pumpSearchEvents(t, func() bool { return ui.ctx.Err() != nil && running.Load() == 0 && runtime.NumGoroutine() <= baseline })
+	if got := len(service.fetchedIDs()); got != int(background) {
+		t.Fatalf("%d refresh requests started, want only the %d running when the window closed", got, background)
+	}
+}
+
+func TestNativeHomeSaysOfflineCalmlyAndClearsAfterRefresh(t *testing.T) {
+	var offline atomic.Bool
+	offline.Store(true)
+	service := &homeRefreshTestService{
+		history:   []backend.History{{AnimeID: "anime", EpisodeID: "episode", EpisodeNumber: "3", Position: 10000, LastPlayed: "2026-10-06T10:00:00Z"}},
+		following: []backend.Following{{AnimeID: "anime"}},
+		fetch: func(context.Context, string) error {
+			if offline.Load() {
+				return backend.ErrOffline
+			}
+			return nil
+		},
+	}
 	ui := newHomeRefreshFixture(t, service)
 	ui.loadHome()
-	lookupEntered := false
-	pumpSearchEvents(t, func() bool {
-		if len(ui.homeCaptionLabels) == 0 {
-			return false
-		}
-		if !lookupEntered {
-			select {
-			case <-entered:
-				lookupEntered = true
-			default:
-			}
-		}
-		return lookupEntered
-	})
-	ui.showSection(4)
-	unblock()
-	pumpSearchEvents(t, func() bool { return ui.homeCaptionLabels[0].Label() == "集數：04 · 上次播放位置 2:05" })
-	if ui.selected != 4 {
-		t.Fatal("episode lookup test left Search before the result was applied")
+	pumpSearchEvents(t, func() bool { return ui.message.Label() == homeOfflineNotice })
+	if ui.loadFailed || ui.retryButton.Visible() || len(ui.cardButtons) != 1 || !ui.cardButtons[0].IsActive() {
+		t.Fatal("offline refresh hid the stored Home content or offered Retry")
 	}
-	// Returning to Home reloads it; the refreshed caption must show the episode again.
+	// Other pages do not carry Home's line; it comes back on Home.
+	ui.showSection(followingSection)
+	if ui.message.Label() != "" {
+		t.Fatalf("message on 追蹤 = %q", ui.message.Label())
+	}
 	ui.showSection(0)
-	pumpSearchEvents(t, func() bool {
-		return !ui.homeLoading && len(ui.homeCaptionLabels) == 1 && ui.homeCaptionLabels[0].Label() == "集數：04 · 上次播放位置 2:05"
-	})
+	pumpSearchEvents(t, func() bool { return !ui.homeLoading && ui.message.Label() == homeOfflineNotice })
+
+	offline.Store(false)
+	ui.refreshFollowing()
+	pumpSearchEvents(t, func() bool { return !ui.followingRefreshing && ui.message.Label() == "" })
+}
+
+func TestNativeHomeDoesNotSayOfflineWhenTheSourceAnswers(t *testing.T) {
+	service := &homeRefreshTestService{
+		following: []backend.Following{{AnimeID: "removed"}},
+		// Anime1 answered, but the show is gone; that is not a lost connection.
+		fetch: func(context.Context, string) error { return backend.ErrUnavailable },
+	}
+	ui := newHomeRefreshFixture(t, service)
+	ui.loadHome()
+	pumpSearchEvents(t, func() bool { return len(service.fetchedIDs()) == 1 && !ui.followingRefreshing })
+	if ui.homeOffline || ui.message.Label() != "" {
+		t.Fatalf("a failed refresh that reached Anime1 showed %q", ui.message.Label())
+	}
 }
 
 func TestNativeHomeRefreshErrorRemovesStaleContinueAction(t *testing.T) {

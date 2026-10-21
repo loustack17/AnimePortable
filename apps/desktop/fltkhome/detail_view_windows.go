@@ -41,7 +41,12 @@ func (ui *view) loadDetailResources(generation uint64, animeID string) {
 			var refreshErr error
 			if errors.Is(err, core.ErrNotFound) && canRefresh {
 				var found bool
-				if found, refreshErr = metadataService.RefreshMetadata(ctx, animeID); refreshErr == nil && found {
+				refreshErr = context.Canceled // until the lookup gets a refresh slot and runs
+				ui.refresh.Run(ctx, core.MetadataRefreshTimeout, func(lookupCtx context.Context) error {
+					found, refreshErr = metadataService.RefreshMetadata(lookupCtx, animeID)
+					return refreshErr
+				})
+				if refreshErr == nil && found {
 					if detail, detailErr := ui.service.Detail(ctx, animeID); detailErr == nil {
 						refreshed = &detail
 					}

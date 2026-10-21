@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"sort"
@@ -28,6 +29,9 @@ var (
 	ErrClosed       = errors.New("application is closed")
 	ErrUnavailable  = errors.New("application unavailable")
 	ErrInvalidInput = errors.New("invalid input")
+	// ErrOffline means a source could not be reached at all, as when the network is off.
+	// It is still ErrUnavailable for callers that do not tell the two apart.
+	ErrOffline = fmt.Errorf("network unreachable: %w", ErrUnavailable)
 )
 
 type dependencies struct {
@@ -285,6 +289,10 @@ func safeError(err error) error {
 	}
 	if errors.Is(err, ErrInvalidInput) {
 		return ErrInvalidInput
+	}
+	var secure *securehttp.Error
+	if errors.As(err, &secure) && (secure.Kind == securehttp.KindNetwork || secure.Kind == securehttp.KindTimeout) {
+		return ErrOffline
 	}
 	return ErrUnavailable
 }
