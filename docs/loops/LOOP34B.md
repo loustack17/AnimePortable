@@ -2,7 +2,7 @@
 
 # Loop 34b: Follow from 歷史紀錄 and the player
 
-Status: IN PROGRESS. Owner approved the contract on 2026-10-20: history star between title and ✕, player star in the top bar left of 選集, numbered Loop 34b.
+Status: PASS (owner check passed 2026-10-21). Commit 18b6c6a, pushed to main with Loop 35 and the resize hotfix in ef97b6c; GitHub Windows CI 39532702396 green. Owner approved the contract on 2026-10-20: history star between title and ✕, player star in the top bar left of 選集, numbered Loop 34b.
 
 ## Goal
 

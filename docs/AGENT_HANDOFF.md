@@ -17,8 +17,8 @@ active_work: >
 active_acceptance: none
 next_actions:
   - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
-  - 2. docs/loops/LOOP34B.md still says IN PROGRESS although 18b6c6a is on main with green CI; its session (or the owner) closes it.
-  - 3. Ask the owner before starting Loop 36.
+  - 2. Ask the owner before starting Loop 36.
+  - Done 2026-10-21: Loop 34b (follow from 歷史紀錄 and the player) PASS (docs/loops/LOOP34B.md). CI flake in TestPlayerControlsRenderAfterEngineReentry fixed in 828028f: the 3 s fixture reached EOF before the seek on slow CI and mpv unloaded it; the test now uses a 60 s fixture (CI 39564341290 green).
   - Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md); Home 今日播出 from the stored schedule.
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
@@ -36,6 +36,7 @@ do_not_repeat:
   - Do not take the schedule from Anime1 (owner, 2026-10-20): its season pages lag; the schedule is Bangumi's calendar.
   - Never add offline playback or video downloads (owner, 2026-10-21): playback is online only; offline shows stored lists only.
   - Do not add refresh limits, timeouts or throttles in a screen; use core.Refresher (Loop 35). Home makes no network call.
+  - Do not use a playback fixture that can reach EOF before a test's last seek; a slow CI runner unloads it (fixed 828028f).
   - Do not chain `| Select-Object -First N` after `Tee-Object` for evidence: it stops the pipeline and truncates the file.
 boundaries:
   - Keep .codex/, artifacts/ and portable data untouched.
