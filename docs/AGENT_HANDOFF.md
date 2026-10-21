@@ -7,18 +7,19 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: IN_PROGRESS
+status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  Loop 35 (Cache-first startup and refresh), owner-approved 2026-10-21. Implementation, tests, review done and
-  uncommitted in worktree elastic-lehmann-94616f (docs/loops/LOOP35.md Status). Test build in artifacts/test-build.
-active_acceptance: docs/loops/LOOP35.md
+  None. Loop 35 (Cache-first startup and refresh) passed on 2026-10-21 (docs/loops/LOOP35.md; 8bb524b, pushed with
+  the resize hotfix 0371f05 and Loop 34b 18b6c6a in ef97b6c; CI Go 1.26.10 in 92868eb; CI 39532702396 green).
+  Loop 36 (Autoplay next episode) is next and needs owner approval.
+active_acceptance: none
 next_actions:
-  - 1. Owner disconnect check with LOOP35 steps 1-7; record the reply with TypeSafe owner-report.
-  - 2. Loop 35 (8bb524b) is merged with the resize hotfix (0371f05) and the 追蹤 star change (18b6c6a) and pushed together to main (owner approval 2026-10-21; removed live-lookup tests accepted).
-  - 3. After push, confirm GitHub Windows CI; then mark LOOP35 PASS, move it to the roadmap's completed table (header count), update STATUS.md.
-  - Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md); Home 今日播出 from the stored schedule (out of Loop 35 scope).
+  - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
+  - 2. docs/loops/LOOP34B.md still says IN PROGRESS although 18b6c6a is on main with green CI; its session (or the owner) closes it.
+  - 3. Ask the owner before starting Loop 36.
+  - Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md); Home 今日播出 from the stored schedule.
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
   - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.

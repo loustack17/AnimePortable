@@ -2,7 +2,7 @@
 
 # Loop 35: Cache-first startup and refresh
 
-Status: IN_PROGRESS (owner approved the start on 2026-10-21).
+Status: PASS (owner accepted 2026-10-21). Commit 8bb524b, pushed to main in merge ef97b6c with the resize hotfix and Loop 34b; GitHub Windows CI 39532702396 green on 92868eb.
 
 ## Goal
 
@@ -88,3 +88,4 @@ Test build: `artifacts/test-build/AnimePortable.exe` (uncommitted worktree build
 - Owner check (2026-10-21): the owner could not disconnect the network (other work needs it) and accepted the offline part as passed without running it; keep the Home offline line. TypeSafe owner-report HUMAN_EXCEPTION_APPROVED (conf 0.37, REVIEW; adjudicated by reading the reply: an explicit acceptance without running the check). The offline behavior is covered by the native offline tests and the held-network timing measurement only.
 - Owner decision 2026-10-21: no offline playback or video downloads, ever (recorded in 01_PRODUCT.md permanent exclusions).
 - Independent review: no MUST_FIX. TypeSafe review-triage rated S1 (offline line for non-network failures) and S3 (schedule timeout split between core and backend) MUST_FIX; both fixed with tests. S2 fixed (background share leaves a slot for what the user waits on); NITs N1-N4 fixed; N5 rated invalid. Re-review: no MUST_FIX; its last SHOULD_FIX (更新集數 filled every slot) and two NITs fixed.
+- CI (2026-10-21): run 39531980794 on ef97b6c passed tests, race and vet but failed govulncheck on a new standard-library advisory GO-2026-6809 (crypto/x509, fixed in Go 1.26.10; TypeSafe ci-log stage vet_or_security, conf 1.00). Owner approved the CI Go bump to 1.26.10 (92868eb); run 39532702396 green.

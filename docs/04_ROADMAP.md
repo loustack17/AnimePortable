@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-34 are complete. Loops 35-38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-35 are complete. Loops 36-38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux, then macOS (see "After the MVP").
 
@@ -48,23 +48,16 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 | 32 | History and Continue Watching: 歷史紀錄 page, continue at the saved position, remove an entry. |
 | 33 | Schedule: Bangumi weekly calendar as a week grid, cached first; known shows open, others search. |
 | 34 | Keyboard navigation everywhere: one key policy, Esc back, `/` and Ctrl+K search, arrows with visible focus on every screen and in the player. |
+| 35 | Cache-first startup and refresh: Home shows stored data with no network call, one bounded refresh policy in core, calm offline line on Home. |
 
 ## Remaining loops
 
-Four loops remain, run in this order. The owner changed the plan on 2026-10-14:
+Three loops remain, run in this order. The owner changed the plan on 2026-10-14:
 
 - Following and History now come before Schedule, because they build on the finished detail and playback work.
 - The former Loops 38 to 42 (security, resources, cross-platform, release, final acceptance) are now one Windows loop, Loop 38.
 
 Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.md) true.
-
-### Loop 35 - Cache-first startup and refresh
-
-- Goal: The app starts from cached data and does not need the Internet.
-- In scope: Startup through SQLite and the UI; background refresh of Anime1, schedule and metadata with bounded parallel requests; cached content stays visible while refreshing.
-- Out of scope: New data sources.
-- Done when: With the network off, cached content shows within about 1 second, and refresh work is bounded and cancellable.
-- Owner check: Disconnect the network, start the app, and see cached content within about 1 second.
 
 ### Loop 36 - Autoplay next episode
 
