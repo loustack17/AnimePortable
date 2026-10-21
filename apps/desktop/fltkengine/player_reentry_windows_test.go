@@ -128,7 +128,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 		stateCallbacks := 0
 		engine.SetStateHandler(func(position, duration time.Duration, paused bool, resolution int) {
 			stateCallbacks++
-			mediaReady = duration >= 2900*time.Millisecond && duration <= 3100*time.Millisecond && resolution == 180
+			mediaReady = duration >= 59900*time.Millisecond && duration <= 60100*time.Millisecond && resolution == 180
 		})
 		var drawContext uintptr
 		view.SetRenderHook(func(width, height int) {
@@ -396,11 +396,14 @@ func findSevenZip() string {
 	return ""
 }
 
+// writeBlackVideo copies a fixture longer than the sum of the timeouts a pass spends playing
+// before its checks, so the file cannot reach EOF first. At EOF mpv unloads the file: the
+// seek fails and the duration readiness check turns false.
 func writeBlackVideo(t *testing.T, path string) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testdata", "black-3s.mp4"))
+	data, err := os.ReadFile(filepath.Join("testdata", "black-60s.mp4"))
 	if err != nil {
-		t.Fatalf("read three-second H264 fixture: %v", err)
+		t.Fatalf("read sixty-second H264 fixture: %v", err)
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("write black video: %v", err)
