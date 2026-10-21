@@ -676,7 +676,7 @@ func (ui *view) hideHomeContinue() {
 
 func (ui *view) playHomeRow(item backend.History, generation uint64) {
 	if ui.onPlay != nil && ui.ctx.Err() == nil && !ui.closing && !ui.homeLoading && !ui.loadFailed && ui.selected == 0 && generation == ui.homeLoadGeneration {
-		ui.onPlay(playRequest(item))
+		ui.onPlay(historyPlayRequest(item))
 	}
 }
 

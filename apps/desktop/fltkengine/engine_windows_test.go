@@ -205,3 +205,38 @@ func TestSeekAcceptsPositionAfterSeekStartsAndResumeFallback(t *testing.T) {
 		t.Fatalf("landed keyframe position after SEEK was dropped: %v", engine.observed.positionSeconds)
 	}
 }
+
+func TestEndsNormallyOnlyForEOFOfTheCurrentFile(t *testing.T) {
+	const full = 1440 * time.Second
+	cases := []struct {
+		name       string
+		reason     mpvwin.EndFileReason
+		generation uint64
+		pending    bool
+		position   time.Duration
+		duration   time.Duration
+		normal     bool
+		early      bool
+	}{
+		{"eof", mpvwin.EndFileEOF, 1, false, full, full, true, false},
+		{"eof near the end", mpvwin.EndFileEOF, 1, false, 1420 * time.Second, full, true, false},
+		{"eof exactly the tolerance before the end", mpvwin.EndFileEOF, 1, false, full - endTolerance, full, true, false},
+		{"eof just beyond the tolerance", mpvwin.EndFileEOF, 1, false, full - endTolerance - time.Nanosecond, full, false, true},
+		{"eof of a stream cut short", mpvwin.EndFileEOF, 1, false, 576 * time.Second, full, false, true},
+		{"eof without a duration", mpvwin.EndFileEOF, 1, false, 0, 0, false, true},
+		{"stop", mpvwin.EndFileStop, 1, false, full, full, false, false},
+		{"quit", mpvwin.EndFileQuit, 1, false, full, full, false, false},
+		{"redirect", mpvwin.EndFileRedirect, 1, false, full, full, false, false},
+		{"error", mpvwin.EndFileError, 1, false, full, full, false, false},
+		{"eof of a replaced file while a load is pending", mpvwin.EndFileEOF, 1, true, 576 * time.Second, full, false, false},
+		{"eof without a loaded generation", mpvwin.EndFileEOF, 0, false, 576 * time.Second, full, false, false},
+	}
+	for _, test := range cases {
+		if got := endsNormally(test.reason, test.generation, test.pending, test.position, test.duration); got != test.normal {
+			t.Errorf("%s: endsNormally = %t, want %t", test.name, got, test.normal)
+		}
+		if got := endsEarly(test.reason, test.generation, test.pending, test.position, test.duration); got != test.early {
+			t.Errorf("%s: endsEarly = %t, want %t", test.name, got, test.early)
+		}
+	}
+}

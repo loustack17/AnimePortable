@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -129,11 +130,10 @@ func main() {
 			playQueue.Enqueue(func() { _ = current.Control(ctx, command, value) })
 		}
 	}
-	stopInPlayer := func() {
-		if !awaitingPlayback.Load() {
-			control("stop", 0)
-			return
-		}
+	// endPlayback ends the playback session and keeps the player open showing the stopped
+	// episode. Awaiting is set first so engine ticks cannot mark the player playing again.
+	endPlayback := func() {
+		awaitingPlayback.Store(true)
 		generation := viewGeneration.Add(1)
 		cancelPlayback()
 		expectedPlaybackGeneration.Store(0)
@@ -174,6 +174,77 @@ func main() {
 			})
 		})
 	}
+	stopInPlayer := func() {
+		if !awaitingPlayback.Load() {
+			control("stop", 0)
+			return
+		}
+		endPlayback()
+	}
+	var autoplay *playerAutoplay
+	// selectEpisode switches the player to episodes[index]. failed, when set, replaces the
+	// message shown for a failed switch.
+	selectEpisode := func(index int, failed func()) {
+		if index < 0 || index >= len(episodes) {
+			return
+		}
+		generation := viewGeneration.Add(1)
+		operationCtx, cancelOperation := newPlaybackContext()
+		previousGeneration := expectedPlaybackGeneration.Swap(0)
+		awaitingPlayback.Store(true)
+		loading := player.State()
+		loading.Loading = true
+		loading.Position = 0
+		loading.Duration = 0
+		// A list click already set this; an autoplay switch relies on it to show the new episode.
+		loading.Episode = index
+		player.SetState(loading)
+		request := selection()
+		request.EpisodeID = episodes[index].ID
+		request.StartAt = 0
+		playQueue.Enqueue(func() {
+			defer cancelOperation()
+			if generation != viewGeneration.Load() {
+				return
+			}
+			actionGeneration.Store(generation)
+			if err := service.Play(operationCtx, request); err != nil {
+				if generation == viewGeneration.Load() {
+					// A failed switch leaves the previous file playing; keep hearing its end and
+					// failures unless a load already replaced it.
+					expectedPlaybackGeneration.CompareAndSwap(0, previousGeneration)
+					awaitingPlayback.Store(false)
+				}
+				fltk.Awake(func() {
+					if generation == viewGeneration.Load() {
+						previous := 0
+						playing := selection()
+						for current, episode := range episodes {
+							if episode.ID == playing.EpisodeID {
+								previous = current
+								break
+							}
+						}
+						state := player.State()
+						state.Episode = previous
+						state.Loading = false
+						player.SetState(state)
+						if failed != nil {
+							failed()
+							return
+						}
+						fltk.MessageBox("播放失敗", "無法播放此集，請重試。")
+					}
+				})
+				return
+			}
+			if generation == viewGeneration.Load() {
+				// Before awaiting clears: autoplay must never read the previous episode.
+				setSelection(request)
+				awaitingPlayback.Store(false)
+			}
+		})
+	}
 	player = fltkplayer.NewWindow(fltkplayer.Callbacks{
 		PlayPause: func() {
 			state := player.State()
@@ -205,60 +276,10 @@ func main() {
 			state.Fullscreen = fullscreen
 			player.SetState(state)
 		},
-		SelectEpisode: func(index int) {
-			if index < 0 || index >= len(episodes) {
-				return
-			}
-			generation := viewGeneration.Add(1)
-			operationCtx, cancelOperation := newPlaybackContext()
-			expectedPlaybackGeneration.Store(0)
-			awaitingPlayback.Store(true)
-			loading := player.State()
-			loading.Loading = true
-			loading.Position = 0
-			loading.Duration = 0
-			player.SetState(loading)
-			request := selection()
-			request.EpisodeID = episodes[index].ID
-			request.StartAt = 0
-			playQueue.Enqueue(func() {
-				defer cancelOperation()
-				if generation != viewGeneration.Load() {
-					return
-				}
-				actionGeneration.Store(generation)
-				if err := service.Play(operationCtx, request); err != nil {
-					if generation == viewGeneration.Load() {
-						awaitingPlayback.Store(false)
-					}
-					fltk.Awake(func() {
-						if generation == viewGeneration.Load() {
-							previous := 0
-							playing := selection()
-							for current, episode := range episodes {
-								if episode.ID == playing.EpisodeID {
-									previous = current
-									break
-								}
-							}
-							state := player.State()
-							state.Episode = previous
-							state.Loading = false
-							player.SetState(state)
-							fltk.MessageBox("播放失敗", "無法播放此集，請重試。")
-						}
-					})
-					return
-				}
-				if generation == viewGeneration.Load() {
-					awaitingPlayback.Store(false)
-					setSelection(request)
-				}
-			})
-		},
-		Navigate: stop,
-		Leave:    func() { stop(0) },
-		Search:   func() { stop(fltkhome.SearchSection) },
+		SelectEpisode: func(index int) { selectEpisode(index, nil) },
+		Navigate:      stop,
+		Leave:         func() { stop(0) },
+		Search:        func() { stop(fltkhome.SearchSection) },
 		ToggleFollow: func() {
 			if animeID := selection().AnimeID; animeID != "" {
 				follow.toggle(animeID, player.State().Following)
@@ -312,6 +333,18 @@ func main() {
 				go failures.PlayerFailed() // off the UI thread: the log writes to disk
 				fltk.MessageBox("播放失敗", "此集暫時無法播放。請重新選取該集或稍後再試。")
 			})
+			created.SetEndHandler(func(generation uint64) {
+				if ctx.Err() != nil {
+					return
+				}
+				engineMu.Lock()
+				current := active == created
+				engineMu.Unlock()
+				if !current || generation != expectedPlaybackGeneration.Load() || awaitingPlayback.Load() {
+					return
+				}
+				autoplay.ended(generation)
+			})
 			engineMu.Lock()
 			active = created
 			engineMu.Unlock()
@@ -321,6 +354,21 @@ func main() {
 	})
 	defer func() { _ = service.Close(); player.Close() }()
 	follow.service = service
+	autoplay = &playerAutoplay{
+		ctx:      ctx,
+		settings: service,
+		start:    func(work func()) { go work() },
+		awake:    func(update func()) { fltk.Awake(update) },
+		still: func(generation uint64) bool {
+			return ctx.Err() == nil && generation == expectedPlaybackGeneration.Load() && !awaitingPlayback.Load()
+		},
+		view:     viewGeneration.Load,
+		episodes: func() []backend.Episode { return episodes },
+		playing:  func() string { return selection().EpisodeID },
+		advance:  selectEpisode,
+		finish:   endPlayback,
+		fail:     func() { fltk.MessageBox("播放失敗", "無法播放下一集，請重試。") },
+	}
 	play = func(request backend.PlayRequest) {
 		generation := viewGeneration.Add(1)
 		operationCtx, cancelOperation := newPlaybackContext()
@@ -345,8 +393,8 @@ func main() {
 					return err
 				}
 				if generation == viewGeneration.Load() {
-					awaitingPlayback.Store(false)
 					setSelection(request)
+					awaitingPlayback.Store(false)
 				}
 				return nil
 			}, func(episodeCtx context.Context) {
@@ -357,9 +405,10 @@ func main() {
 				labels := make([]string, len(items))
 				current := 0
 				for index, item := range items {
-					labels[index] = item.Number
-					if item.Title != "" {
-						labels[index] += " · " + item.Title
+					labels[index] = fltkhome.EpisodeLabel(item.Number)
+					// The overlay splits labels on newlines, so a title keeps to one line.
+					if title := strings.Join(strings.Fields(item.Title), " "); title != "" {
+						labels[index] += " · " + title
 					}
 					if item.ID == request.EpisodeID {
 						current = index

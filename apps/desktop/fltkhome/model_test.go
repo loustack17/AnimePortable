@@ -37,17 +37,34 @@ func TestSelectHomeRowsSortsBoundsAndUsesSafeTitleFallback(t *testing.T) {
 	}
 }
 
-func TestSelectHomeRowsUsesOnlyLatestResumableEpisodePerAnime(t *testing.T) {
+func TestSelectHomeRowsUsesLatestStartedOrFinishedEpisodePerAnime(t *testing.T) {
 	history := []backend.History{
 		{AnimeID: "same", EpisodeID: "old", Position: 1000, Duration: 10000, LastPlayed: "2026-01-01T00:00:00Z"},
 		{AnimeID: "same", EpisodeID: "new", Position: 2000, Duration: 10000, LastPlayed: "2026-02-01T00:00:00Z"},
 		{AnimeID: "completed", EpisodeID: "done", Position: 10000, Duration: 10000, LastPlayed: "2026-03-01T00:00:00Z"},
 		{AnimeID: "unstarted", EpisodeID: "zero", Position: 0, LastPlayed: "2026-03-02T00:00:00Z"},
 		{AnimeID: "same", EpisodeID: "opened-not-watched", Position: 0, Duration: 10000, LastPlayed: "2026-03-03T00:00:00Z"},
+		// Finishing the newest episode shows it, not an older unfinished one (owner decision 2026-10-21).
+		{AnimeID: "series", EpisodeID: "ep-08", Position: 10000, Duration: 1440000, LastPlayed: "2026-01-02T00:00:00Z"},
+		{AnimeID: "series", EpisodeID: "ep-12", Position: 1422000, Duration: 1436000, Completed: true, LastPlayed: "2026-01-03T00:00:00Z"},
 	}
 	rows := selectHomeRows(history, nil, rowLimit)
-	if len(rows) != 1 || rows[0].History.EpisodeID != "new" {
-		t.Fatalf("resumable rows = %#v, want latest episode only", rows)
+	got := make([]string, 0, len(rows))
+	for _, row := range rows {
+		got = append(got, row.History.EpisodeID)
+	}
+	if want := []string{"done", "new", "ep-12"}; !slices.Equal(got, want) {
+		t.Fatalf("Home rows = %v, want %v", got, want)
+	}
+}
+
+func TestHomeShowsFinishedEpisodeAsWatchedAndReplaysItFromTheStart(t *testing.T) {
+	item := backend.History{AnimeID: "series", EpisodeID: "ep-12", EpisodeNumber: "12", Position: 1422000, Duration: 1436000, Completed: true}
+	if got := homeCaption(homeRow{History: item}); got != "集數：12 · 已看完" {
+		t.Fatalf("finished caption = %q", got)
+	}
+	if got := historyPlayRequest(item); got != (backend.PlayRequest{AnimeID: "series", EpisodeID: "ep-12"}) {
+		t.Fatalf("finished play request = %#v, want a start from the beginning", got)
 	}
 }
 

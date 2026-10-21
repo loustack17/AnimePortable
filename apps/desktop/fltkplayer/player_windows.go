@@ -353,8 +353,10 @@ func (view *View) activate(index int) {
 			view.callbacks.SeekTo(int(math.Round(view.state.Position)))
 		}
 	case focusEpisodes:
-		if len(view.episodes) > 0 {
-			view.episodesOpen = !view.episodesOpen
+		if view.episodesOpen {
+			view.episodesOpen = false
+		} else if len(view.episodes) > 0 {
+			view.openEpisodes()
 		}
 	case focusFullscreen:
 		if view.callbacks.Fullscreen != nil {
@@ -461,8 +463,12 @@ func (view *View) handle(event fltk.Event) bool {
 			view.Redraw()
 			return true
 		}
-		if view.episodesOpen && x >= view.video.W()-195 && x <= view.video.W()-81 && y >= 58 && y < 58+34*min(len(view.episodes)-view.episodeStart, 8) {
-			index := view.episodeStart + (y-58)/34
+		if view.episodesOpen && episodeInBar(x, y, view.video.W(), len(view.episodes)) {
+			view.episodeStart = episodeStartAtTrack(y, len(view.episodes))
+			view.Redraw()
+			return true
+		}
+		if index, ok := episodeRowAt(x, y, view.video.W(), view.episodeStart, len(view.episodes)); view.episodesOpen && ok {
 			view.episodesOpen = false
 			view.selectEpisode(index)
 			view.Redraw()
@@ -668,8 +674,8 @@ func (view *View) handleKey(key, modifiers int) bool {
 			if view.episodeCursor < view.episodeStart {
 				view.episodeStart = view.episodeCursor
 			}
-			if view.episodeCursor >= view.episodeStart+8 {
-				view.episodeStart = view.episodeCursor - 7
+			if view.episodeCursor >= view.episodeStart+episodeRows {
+				view.episodeStart = view.episodeCursor - (episodeRows - 1)
 			}
 			view.Redraw()
 			return true
@@ -784,13 +790,7 @@ func (view *View) selectEpisode(index int) {
 }
 
 func (view *View) clampEpisodeStart() {
-	maxStart := max(0, len(view.episodes)-8)
-	if view.episodeStart < 0 {
-		view.episodeStart = 0
-	}
-	if view.episodeStart > maxStart {
-		view.episodeStart = maxStart
-	}
+	view.episodeStart = clampEpisodeWindow(view.episodeStart, len(view.episodes))
 }
 
 func joinLines(values []string) string { return strings.Join(values, "\n") }

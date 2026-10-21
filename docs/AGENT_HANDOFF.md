@@ -7,22 +7,23 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: PASS
-branch: main
+status: IN_PROGRESS
+branch: loustack17/nifty-napier-93e83c (worktree; based on origin/main b7b9f86)
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 35 (Cache-first startup and refresh) passed on 2026-10-21 (docs/loops/LOOP35.md; 8bb524b, pushed with
-  the resize hotfix 0371f05 and Loop 34b 18b6c6a in ef97b6c; CI Go 1.26.10 in 92868eb; CI 39532702396 green).
-  Loop 36 (Autoplay next episode) is next and needs owner approval.
-active_acceptance: none
+  Loop 36 (Autoplay next episode), owner approved the start 2026-10-21 (docs/loops/LOOP36.md). Implementation,
+  tests, full native suite and race done, uncommitted. Independent review: no MUST_FIX after two fix rounds.
+  Owner checks 1-2 found UI issues, fixed; owner check 3 passed. Waiting for commit/push approval.
+active_acceptance: docs/loops/LOOP36.md (Owner check section)
 next_actions:
-  - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
-  - 2. Ask the owner before starting Loop 36.
-  - Done 2026-10-21: Loop 34b (follow from 歷史紀錄 and the player) PASS (docs/loops/LOOP34B.md). CI flake in TestPlayerControlsRenderAfterEngineReentry fixed in 828028f: the 3 s fixture reached EOF before the seek on slow CI and mpv unloaded it; the test now uses a 60 s fixture (CI 39564341290 green).
+  - 1. Owner check 3 HUMAN_PASS 2026-10-21 (test build 2, EXE A408D1ED...FAEE); 30 s end rule accepted. Next: commit and push to main after owner approval, confirm CI, then a docs commit: LOOP36 PASS with CI run, roadmap completed table + header count, STATUS.md.
+  - Observed, not in scope: the exe is a console-subsystem build (PE subsystem 3), so a console window opens next to the app; ask the owner whether to build with -H windowsgui.
+  - 2. On PASS and owner approval: commit, push to main, confirm GitHub Windows CI; move Loop 36 to the completed table in docs/04_ROADMAP.md and update the header count; update docs/STATUS.md.
+  - 3. Loop 37 (Settings) switches autoplay via the stored AutoplayNext setting only (autoplayEnabled in apps/desktop/player_autoplay.go); no other change needed.
   - Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md); Home 今日播出 from the stored schedule.
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
-  - 3. When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
-  - 4. If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
+  - When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
+  - If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
   - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt.
   - Do not research libmpv licensing again; settled in ADR-023.
@@ -38,19 +39,14 @@ do_not_repeat:
   - Do not add refresh limits, timeouts or throttles in a screen; use core.Refresher (Loop 35). Home makes no network call.
   - Do not use a playback fixture that can reach EOF before a test's last seek; a slow CI runner unloads it (fixed 828028f).
   - Do not chain `| Select-Object -First N` after `Tee-Object` for evidence: it stops the pipeline and truncates the file.
+  - Do not key per-end or per-load guards in the UI by load generation alone; it restarts at 1 in every playback session (Loop 36 review). Use viewGeneration.
 boundaries:
   - Keep .codex/, artifacts/ and portable data untouched.
   - Commit, push, workflow and release need owner approval.
 references:
+  - docs/loops/LOOP36.md
+  - artifacts/evidence/loop36/
   - docs/loops/LOOP35.md
-  - artifacts/evidence/loop35/
-  - docs/loops/LOOP34.md
-  - docs/loops/LOOP33.md
-  - docs/loops/LOOP32.md
-  - docs/loops/LOOP31.md
-  - docs/loops/LOOP30.md
+  - docs/loops/LOOP34B.md
   - docs/STATUS.md
-  - artifacts/evidence/loop31/
-  - artifacts/evidence/loop32/
-  - artifacts/evidence/loop33/
 ```

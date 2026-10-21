@@ -46,6 +46,7 @@ type Engine struct {
 	paused           bool
 	observed         observedProperties
 	pending          bool
+	ended            bool
 	pendingStarted   bool
 	failed           bool
 	seekPending      bool
@@ -55,6 +56,7 @@ type Engine struct {
 	onState          func(time.Duration, time.Duration, bool, int)
 	onLoad           func(uint64)
 	onFailure        func(uint64)
+	onEnd            func(uint64)
 	closeOnce        sync.Once
 }
 
@@ -246,6 +248,7 @@ func (engine *Engine) Load(ctx context.Context, url string, startAt time.Duratio
 		engine.duration = 0
 		engine.pending = true
 		engine.pendingStarted = false
+		engine.ended = false
 		engine.failed = false
 		engine.seekPending = false
 		engine.seekStarted = false
@@ -271,6 +274,14 @@ func (engine *Engine) SetStateHandler(handler func(time.Duration, time.Duration,
 func (engine *Engine) SetFailureHandler(handler func(uint64)) {
 	engine.mu.Lock()
 	engine.onFailure = handler
+	engine.mu.Unlock()
+}
+
+// SetEndHandler sets the handler called on the UI thread, once, when the current file
+// reaches a normal end of file. Stop, quit, redirect and error ends do not call it.
+func (engine *Engine) SetEndHandler(handler func(uint64)) {
+	engine.mu.Lock()
+	engine.onEnd = handler
 	engine.mu.Unlock()
 }
 
@@ -329,9 +340,10 @@ func (engine *Engine) snapshot(ctx context.Context) (core.PlaybackSnapshot, erro
 			return errSeekPending
 		}
 		snapshot = core.PlaybackSnapshot{Position: engine.position, Duration: engine.duration, Paused: engine.paused}
-		// While a load is pending the observed values still describe the previous file.
-		positionKnown := engine.observed.positionKnown && !engine.pending
-		durationKnown := engine.observed.durationKnown && !engine.pending
+		// While a load is pending the observed values still describe the previous file; after a
+		// normal end mpv unloads the file and reports them as unavailable.
+		positionKnown := engine.observed.positionKnown && !engine.pending && !engine.ended
+		durationKnown := engine.observed.durationKnown && !engine.pending && !engine.ended
 		positionSeconds, durationSeconds := engine.observed.positionSeconds, engine.observed.durationSeconds
 		engine.mu.Unlock()
 		var err error
@@ -472,6 +484,26 @@ func (engine *Engine) advanceSeek(event *mpv.Event) {
 		engine.seekPending, engine.seekStarted = false, false
 	}
 }
+
+// endTolerance separates a file that played to its real end from a network stream that mpv
+// reports as eof after it was cut short. A position from the last tick is at most 0.5 s old
+// and the cache is 5 s, so a real end is always well inside 30 s of the duration.
+const endTolerance = 30 * time.Second
+
+// endsNormally reports whether an end-file event is the current file reaching its end.
+// An EOF that arrives while a load is pending belongs to the file being replaced.
+func endsNormally(reason mpv.EndFileReason, generation uint64, pending bool, position, duration time.Duration) bool {
+	return generation != 0 && !pending && reason == mpv.EndFileEOF &&
+		duration > 0 && duration-position <= endTolerance
+}
+
+// endsEarly reports an eof of the current file far from its end: a stream that stopped early,
+// which the user must hear about like any other playback failure.
+func endsEarly(reason mpv.EndFileReason, generation uint64, pending bool, position, duration time.Duration) bool {
+	return generation != 0 && !pending && reason == mpv.EndFileEOF &&
+		!endsNormally(reason, generation, pending, position, duration)
+}
+
 func (engine *Engine) pollEvents() {
 	for index := 0; index < 128; index++ {
 		event := engine.core.WaitEvent(0)
@@ -497,11 +529,34 @@ func (engine *Engine) pollEvents() {
 			engine.pending = false
 			engine.pendingStarted = false
 		}
+		var notifyEnd func(uint64)
+		normalEnd, cutShort := false, false
+		if event.EventID == mpv.EventEnd {
+			// Prefer what mpv last reported for the file; the last tick covers the rest.
+			position, duration := engine.position, engine.duration
+			if engine.observed.positionKnown {
+				position = time.Duration(math.Max(engine.observed.positionSeconds, 0) * float64(time.Second))
+			}
+			if engine.observed.durationKnown {
+				duration = time.Duration(math.Max(engine.observed.durationSeconds, 0) * float64(time.Second))
+			}
+			normalEnd = endsNormally(event.EndFile().Reason, generation, pending, position, duration)
+			if normalEnd {
+				// Keep reporting the finished file's end: mpv unloads it, so its position and
+				// duration are unavailable from now on.
+				engine.duration = duration
+				engine.position = duration
+				engine.ended = true
+				notifyEnd = engine.onEnd
+			}
+			cutShort = endsEarly(event.EndFile().Reason, generation, pending, position, duration)
+		}
 		var notifyFailure func(uint64)
-		if event.EventID == mpv.EventEnd && event.EndFile().Reason == mpv.EndFileError && (!pending || started) && !engine.failed {
+		if event.EventID == mpv.EventEnd && (event.EndFile().Reason == mpv.EndFileError && (!pending || started) || cutShort) && !engine.failed {
 			engine.failed = true
 			notifyFailure = engine.onFailure
 		}
+		endPosition, endDuration := engine.position, engine.duration
 		engine.mu.Unlock()
 		if generation == 0 || event.EventID != mpv.EventEnd {
 			continue
@@ -511,17 +566,20 @@ func (engine *Engine) pollEvents() {
 			continue
 		}
 		kind := libmpv.EventStopped
-		if ended.Reason == mpv.EndFileEOF {
+		if normalEnd {
 			kind = libmpv.EventEnded
-		} else if ended.Reason == mpv.EndFileError {
+		} else if ended.Reason == mpv.EndFileError || cutShort {
 			kind = libmpv.EventFailed
 		}
 		select {
-		case engine.events <- libmpv.Event{Generation: generation, Kind: kind}:
+		case engine.events <- libmpv.Event{Generation: generation, Kind: kind, Position: endPosition, Duration: endDuration}:
 		default:
 		}
 		if notifyFailure != nil {
 			fltk.Awake(func() { notifyFailure(generation) })
+		}
+		if notifyEnd != nil {
+			fltk.Awake(func() { notifyEnd(generation) })
 		}
 	}
 }
@@ -543,11 +601,16 @@ func (engine *Engine) tick() {
 	sample := engine.observed.diagnostics
 	// Until mpv reports a position, keep the requested start so resume progress is not reset to 0.
 	position, duration := engine.position.Seconds(), 0.0
-	if engine.observed.positionKnown {
-		position = math.Max(engine.observed.positionSeconds, 0)
-	}
-	if engine.observed.durationKnown {
-		duration = math.Max(engine.observed.durationSeconds, 0)
+	if engine.ended {
+		duration = engine.duration.Seconds()
+		position = duration
+	} else {
+		if engine.observed.positionKnown {
+			position = math.Max(engine.observed.positionSeconds, 0)
+		}
+		if engine.observed.durationKnown {
+			duration = math.Max(engine.observed.durationSeconds, 0)
+		}
 	}
 	paused := engine.paused
 	resolution := engine.observed.videoHeight

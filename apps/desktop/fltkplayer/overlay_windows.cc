@@ -28,6 +28,26 @@ static std::string itemAt(const char* values, int index) {
     const char* end = std::strchr(start, '\n');
     return end == nullptr ? std::string(start) : std::string(start, end);
 }
+// Labels read "第 11 集 · title"; the collapsed header keeps only the number part.
+static std::string beforeTitle(const std::string& value) {
+    size_t cut = value.find(" \xC2\xB7 ");
+    return cut == std::string::npos ? value : value.substr(0, cut);
+}
+// Drops trailing characters (UTF-8 aware) until the label fits max_units, where a wide CJK character counts as two.
+static std::string fitLabel(const std::string& value, int max_units) {
+    int units = 0;
+    size_t i = 0;
+    while (i < value.size()) {
+        size_t length = 1;
+        unsigned char lead = static_cast<unsigned char>(value[i]);
+        if (lead >= 0xF0) length = 4; else if (lead >= 0xE0) length = 3; else if (lead >= 0xC0) length = 2;
+        int width = length >= 3 ? 2 : 1;
+        if (units + width > max_units) return value.substr(0, i) + "…";
+        units += width;
+        i += length;
+    }
+    return value;
+}
 static void focus(int current, int target, float x, float y, float w, float h) {
     if (current != target) return;
     ink(0.58f, 0.66f, 1.0f);
@@ -36,7 +56,7 @@ static void focus(int current, int target, float x, float y, float w, float h) {
     line(x + w, y + h, x, y + h); line(x, y + h, x, y);
 }
 
-extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int resolution, int loading, int progress_hover, int scrubbing, int follow_known, int following, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels) {
+extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int thumb_top, int thumb_height, int resolution, int loading, int progress_hover, int scrubbing, int follow_known, int following, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels) {
     if (!visible && !menu && !episodes) return;
     GLint oldMatrix = GL_MODELVIEW;
     glGetIntegerv(GL_MATRIX_MODE, &oldMatrix);
@@ -67,7 +87,7 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     ink(1, 1, 1);
     std::string episodeLabel = episode_count > 0 ? itemAt(episode_labels, episode) : "選集";
     if (episodeLabel.empty()) episodeLabel = "選集";
-    label(episodeLabel.c_str(), width - 185, 39, 15);
+    label(beforeTitle(episodeLabel).c_str(), width - 185, 39, 15);
     icon(u8"\uE70D", width - 102, 39, 14);
     focus(selected, 7, width - 195, 14, 114, 38);
     if (follow_known) {
@@ -124,14 +144,24 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
         }
     }
     if (episodes) {
+        // Panel geometry mirrors episode_list_windows.go: 200 px wide, right edge 81 px from the window edge.
+        const int left = width - 281, panelWidth = 200, barWidth = thumb_height > 0 ? 14 : 0;
         int rows = std::min(episode_count - episode_start, 8);
-        ink(0.04f, 0.06f, 0.11f, 0.95f); box(width - 195, 58, 114, 34 * rows + 8);
+        ink(0.04f, 0.06f, 0.11f, 0.95f); box(left, 58, panelWidth, 34 * rows + 8);
         for (int i = 0; i < rows; ++i) {
             int entry = episode_start + i;
-            if (entry == episode_cursor) { ink(0.22f, 0.27f, 0.44f); box(width - 190, 62 + 34 * i, 104, 32); }
-            ink(1, 1, 1);
-            std::string item = itemAt(episode_labels, entry);
-            label(item.c_str(), width - 180, 84 + i * 34, 14);
+            if (entry == episode_cursor) { ink(0.22f, 0.27f, 0.44f); box(left + 5, 62 + 34 * i, panelWidth - 10 - barWidth, 32); }
+            if (entry == episode) {
+                ink(0.59f, 0.67f, 1); box(left + 5, 62 + 34 * i, 3, 32);
+            } else {
+                ink(1, 1, 1);
+            }
+            std::string item = fitLabel(itemAt(episode_labels, entry), (panelWidth - 24 - barWidth) / 8);
+            label(item.c_str(), left + 15, 84 + i * 34, 14);
+        }
+        if (thumb_height > 0) {
+            ink(0.50f, 0.54f, 0.66f, 0.45f); box(left + panelWidth - 9, 62, 4, 34 * rows);
+            ink(0.59f, 0.67f, 1); box(left + panelWidth - 9, 62 + thumb_top, 4, thumb_height);
         }
     }
     glPopMatrix(); glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(oldMatrix); glPopAttrib();

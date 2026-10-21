@@ -39,6 +39,9 @@ func homeCaption(row homeRow) string {
 	if number == "" {
 		number = "未知"
 	}
+	if finished(row.History) {
+		return fmt.Sprintf("集數：%s · 已看完", number)
+	}
 	return fmt.Sprintf("集數：%s · 上次播放位置 %s", number, formatPosition(row.History.Position))
 }
 
@@ -47,9 +50,10 @@ func selectHomeRows(history []backend.History, library []backend.Anime, limit in
 		return nil
 	}
 	titles := animeTitles(library)
-	// Pick the newest resumable episode per series, so opening another episode
-	// without watching it does not hide the series from Continue Watching.
-	ordered := newestPerAnime(history, resumable)
+	// Pick the newest started or finished episode per series: opening another episode
+	// without watching it does not hide the series, and finishing the newest one shows it
+	// as watched instead of an older unfinished episode (owner decision 2026-10-21).
+	ordered := newestPerAnime(history, func(item backend.History) bool { return resumable(item) || finished(item) })
 	if len(ordered) > limit {
 		ordered = ordered[:limit]
 	}
@@ -63,6 +67,11 @@ func selectHomeRows(history []backend.History, library []backend.Anime, limit in
 // resumable reports whether an entry has a saved position to continue from.
 func resumable(item backend.History) bool {
 	return !item.Completed && item.Position > 0 && (item.Duration <= 0 || item.Position < item.Duration)
+}
+
+// finished reports whether an entry was watched to the end.
+func finished(item backend.History) bool {
+	return item.Completed || item.Duration > 0 && item.Position >= item.Duration
 }
 
 // newestPerAnime keeps the most recently played entry per anime among those include
@@ -113,7 +122,7 @@ func historyRows(history []backend.History, library []backend.Anime, now time.Ti
 	ordered := newestPerAnime(history, func(backend.History) bool { return true })
 	rows := make([]historyRow, 0, len(ordered))
 	for _, item := range ordered {
-		status := episodeLabel(item.EpisodeNumber) + " · " + historyProgress(item)
+		status := EpisodeLabel(item.EpisodeNumber) + " · " + historyProgress(item)
 		if played, err := time.Parse(time.RFC3339Nano, item.LastPlayed); err == nil {
 			status += " · 上次觀看：" + daysAgo(now, played)
 		}
@@ -124,7 +133,7 @@ func historyRows(history []backend.History, library []backend.Anime, now time.Ti
 
 func historyProgress(item backend.History) string {
 	switch {
-	case item.Completed || item.Duration > 0 && item.Position >= item.Duration:
+	case finished(item):
 		return "已看完"
 	case item.Position <= 0:
 		return "尚未開始"
@@ -227,7 +236,7 @@ func recentUpdateRows(following []backend.Following, library []backend.Anime, li
 	rows := followingRows(updated, library, nil)
 	for index := range rows {
 		id := rows[index].Anime.ID
-		rows[index].Status = episodeLabel(numbers[id]) + " · " + daysAgo(now, seen[id])
+		rows[index].Status = EpisodeLabel(numbers[id]) + " · " + daysAgo(now, seen[id])
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		return seen[rows[i].Anime.ID].After(seen[rows[j].Anime.ID])
@@ -274,7 +283,7 @@ func followingStatus(item backend.Following, history []backend.History) string {
 	if !item.HasWatched {
 		return "尚未觀看"
 	}
-	status := "看到：" + episodeLabel(item.LatestWatchedNumber)
+	status := "看到：" + EpisodeLabel(item.LatestWatchedNumber)
 	for _, entry := range history {
 		// An episode only opened has no position worth showing.
 		if entry.AnimeID == item.AnimeID && entry.EpisodeID == item.LatestWatched && (entry.Completed || entry.Position > 0) {
@@ -331,7 +340,8 @@ func scheduleWeek(items []backend.ScheduleItem, now time.Time) []scheduleDay {
 	return days
 }
 
-func episodeLabel(number string) string {
+// EpisodeLabel names an episode by its stored number; the player's episode list uses it too.
+func EpisodeLabel(number string) string {
 	number = strings.TrimSpace(number)
 	if number == "" {
 		return "集數未知"
