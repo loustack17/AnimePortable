@@ -62,6 +62,14 @@ func main() {
 	var play func(backend.PlayRequest)
 	var player *fltkplayer.View
 	var service *backend.Service
+	// noticeParent is the window a message belongs over: the player while it is shown, else Home.
+	// Both live as long as the process.
+	noticeParent := func() *fltk.Window {
+		if player != nil && player.Window().IsShown() {
+			return player.Window()
+		}
+		return home
+	}
 	var selectedMu sync.Mutex
 	var selected backend.PlayRequest
 	selection := func() backend.PlayRequest {
@@ -109,7 +117,7 @@ func main() {
 			state.FollowKnown, state.Following = known, following
 			player.SetState(state)
 		},
-		fail: func(err error) { fltkhome.ShowNotice("追蹤失敗", fltkhome.FollowErrorMessage(err)) },
+		fail: func(err error) { fltkhome.ShowNotice(noticeParent(), "追蹤失敗", fltkhome.FollowErrorMessage(err)) },
 	}
 	stop := func(destination int) {
 		generation := viewGeneration.Add(1)
@@ -133,7 +141,7 @@ func main() {
 					navigateHome(destination)
 				}
 				if stopErr != nil {
-					fltkhome.ShowNotice("播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
+					fltkhome.ShowNotice(noticeParent(), "播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
 				}
 			})
 		})
@@ -184,7 +192,7 @@ func main() {
 				if generation == viewGeneration.Load() {
 					player.SetRenderHook(nil)
 					if stopErr != nil {
-						fltkhome.ShowNotice("播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
+						fltkhome.ShowNotice(noticeParent(), "播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
 					}
 				}
 			})
@@ -278,7 +286,7 @@ func main() {
 							failed()
 							return
 						}
-						fltkhome.ShowNotice("播放失敗", "無法播放此集，請重試。")
+						fltkhome.ShowNotice(noticeParent(), "播放失敗", "無法播放此集，請重試。")
 					}
 				})
 				return
@@ -348,7 +356,7 @@ func main() {
 				playbackSettingsMu.Unlock()
 				if notify {
 					fltk.Awake(func() {
-						fltkhome.ShowNotice("播放速度", "無法儲存播放速度，下次開啟可能恢復先前的速度。")
+						fltkhome.ShowNotice(noticeParent(), "播放速度", "無法儲存播放速度，下次開啟可能恢復先前的速度。")
 					})
 				}
 			})
@@ -417,7 +425,7 @@ func main() {
 				state.Loading = false
 				player.SetState(state)
 				go failures.PlayerFailed() // off the UI thread: the log writes to disk
-				fltkhome.ShowNotice("播放失敗", "此集暫時無法播放。請重新選取該集或稍後再試。")
+				fltkhome.ShowNotice(noticeParent(), "播放失敗", "此集暫時無法播放。請重新選取該集或稍後再試。")
 			})
 			created.SetEndHandler(func(generation uint64) {
 				if ctx.Err() != nil {
@@ -453,7 +461,7 @@ func main() {
 		playing:  func() string { return selection().EpisodeID },
 		advance:  selectEpisode,
 		finish:   endPlayback,
-		fail:     func() { fltkhome.ShowNotice("播放失敗", "無法播放下一集，請重試。") },
+		fail:     func() { fltkhome.ShowNotice(noticeParent(), "播放失敗", "無法播放下一集，請重試。") },
 	}
 	play = func(request backend.PlayRequest) {
 		generation := viewGeneration.Add(1)
@@ -519,7 +527,7 @@ func main() {
 					player.Window().Hide()
 					home.Show()
 					// Shown after Home so a late Home reload cannot clear it.
-					fltkhome.ShowNotice("播放失敗", "無法播放此集，請重試。")
+					fltkhome.ShowNotice(noticeParent(), "播放失敗", "無法播放此集，請重試。")
 				})
 			}
 		})

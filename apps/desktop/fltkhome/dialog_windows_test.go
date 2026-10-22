@@ -6,6 +6,7 @@ package fltkhome
 
 import (
 	"math"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -85,10 +86,28 @@ func TestDialogFocusKeys(t *testing.T) {
 	}
 }
 
+// lockDialogThread pins the test to one OS thread for the dialogs it builds. A Windows window is
+// bound to the thread that created it and cannot be deleted from another, so a goroutine that
+// migrated between building and destroying a dialog leaves a window behind that later crashes
+// the event loop of the next test.
+func lockDialogThread(t *testing.T) {
+	t.Helper()
+	runtime.LockOSThread()
+	if !fltk.Lock() {
+		runtime.UnlockOSThread()
+		t.Fatal("FLTK threading initialization failed")
+	}
+	t.Cleanup(func() {
+		fltk.Unlock()
+		runtime.UnlockOSThread()
+	})
+}
+
 // The dialogs below are built but never shown, so nothing opens on screen.
 func TestDialogKeysAnswerAndTheFirstAnswerStands(t *testing.T) {
+	lockDialogThread(t)
 	d := newDialog(nil, "資料位置", "要使用嗎？", false, "否", "使用")
-	defer d.window.Destroy()
+	defer d.destroy()
 	if !d.handleKey(keyNext) || d.state.focus != 1 || d.done {
 		t.Fatalf("Tab: focus %d, done %v", d.state.focus, d.done)
 	}
@@ -106,8 +125,9 @@ func TestDialogKeysAnswerAndTheFirstAnswerStands(t *testing.T) {
 }
 
 func TestDialogEscapeAnswersTheSafeButtonEvenWithFocusElsewhere(t *testing.T) {
+	lockDialogThread(t)
 	d := newDialog(nil, "資料位置", "訊息", true, "取消", "覆蓋")
-	defer d.window.Destroy()
+	defer d.destroy()
 	d.handleKey(keyNext)
 	d.handleKey(keyBack)
 	if !d.done || d.answer != 0 {
@@ -116,9 +136,10 @@ func TestDialogEscapeAnswersTheSafeButtonEvenWithFocusElsewhere(t *testing.T) {
 }
 
 func TestDialogOpensOnTheSafeButtonAndFitsItsMessage(t *testing.T) {
+	lockDialogThread(t)
 	long := strings.Repeat("資料夾位置很長", 20)
 	d := newDialog(nil, "標題", long+"\n\n第二段", false, "結束", "使用預設位置")
-	defer d.window.Destroy()
+	defer d.destroy()
 	if d.state.focus != 0 || len(d.buttons) != 2 {
 		t.Fatalf("focus %d, %d buttons", d.state.focus, len(d.buttons))
 	}
@@ -142,10 +163,11 @@ func TestMissingFolderQuestionNamesThePathAndExitsOnEscape(t *testing.T) {
 }
 
 func TestDialogTallerThanTheScreenScrollsAndKeepsEveryLine(t *testing.T) {
+	lockDialogThread(t)
 	_, _, _, workH := fltk.ScreenWorkArea(0)
 	message := strings.Repeat("很長的路徑\n", workH)
 	d := newDialog(nil, "標題", message, false, "確定")
-	defer d.window.Destroy()
+	defer d.destroy()
 	if d.height > workH || d.visible >= len(d.lines) {
 		t.Fatalf("height %d of %d, %d of %d lines visible; want a capped dialog that scrolls", d.height, workH, d.visible, len(d.lines))
 	}
@@ -153,7 +175,7 @@ func TestDialogTallerThanTheScreenScrollsAndKeepsEveryLine(t *testing.T) {
 		t.Fatalf("scrolling to the end left offset %d of %d lines, %d visible", d.offset, len(d.lines), d.visible)
 	}
 	short := newDialog(nil, "標題", "短訊息", false, "確定")
-	defer short.window.Destroy()
+	defer short.destroy()
 	if short.scroll(1) {
 		t.Fatal("a short message claimed the scroll")
 	}

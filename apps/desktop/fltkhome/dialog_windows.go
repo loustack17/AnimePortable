@@ -36,10 +36,10 @@ func AskMissingDataFolder(path string) bool {
 // Read and written on the UI thread only.
 var shownDark bool
 
-// ShowNotice shows a message with one 確定 button in the app's style and the theme on screen.
-// It must run on the UI thread.
-func ShowNotice(title, message string) {
-	showDialog(nil, title, message, shownDark, dialogOKLabel)
+// ShowNotice shows a message with one 確定 button in the app's style and the theme on screen,
+// centred over parent, a live top-level window. It must run on the UI thread.
+func ShowNotice(parent *fltk.Window, title, message string) {
+	showDialog(parent, title, message, shownDark, dialogOKLabel)
 }
 
 // useAppFonts selects the scheme and the CJK-capable fonts every window of the app uses.
@@ -101,6 +101,7 @@ const (
 // one button per label, in the palette of the current theme.
 type dialog struct {
 	window  *fltk.Window
+	card    *fltk.Box
 	buttons []*fltk.Button
 	labels  []string
 	lines   []string
@@ -138,20 +139,14 @@ func dialogScreen(parent *fltk.Window) (workX, workY, workW, workH, centerX, cen
 	return
 }
 
-// homeWindow is the Home window of the running app, for dialogs that have no parent. It lives
-// as long as the process. Read and written on the UI thread only.
-var homeWindow *fltk.Window
-
 // leaveOpenGroups makes sure the next window is a top-level window. FLTK adds a new widget to
 // the group last opened with Begin, and ending a nested group reopens its parent, so a page that
 // rebuilds its rows after construction leaves a group of the Home window open. A dialog created
 // then becomes a child of the Home window: it is drawn inside it, outside its bounds, and the
-// modal wait never ends. Ending a top-level window reopens no parent, which clears the state
-// for the whole process.
+// modal wait never ends. Ending any top-level window reopens no parent, which clears the state
+// for the whole process. The parent is passed in rather than remembered, so a destroyed window
+// is never ended; a dialog without one only runs before the Home window exists.
 func leaveOpenGroups(parent *fltk.Window) {
-	if parent == nil {
-		parent = homeWindow
-	}
 	if parent != nil {
 		parent.End()
 	}
@@ -195,9 +190,9 @@ func newDialog(parent *fltk.Window, title, message string, dark bool, labels ...
 	d.window = fltk.NewWindowWithPosition(x, y, d.width, d.height, title)
 	d.window.SetColor(d.colors().background)
 	d.window.Begin()
-	card := fltk.NewBox(fltk.NO_BOX, 0, 0, d.width, d.height, "")
-	card.SetDrawHandler(func(func()) { d.drawCard(messageTop) })
-	card.SetEventHandler(func(event fltk.Event) bool {
+	d.card = fltk.NewBox(fltk.NO_BOX, 0, 0, d.width, d.height, "")
+	d.card.SetDrawHandler(func(func()) { d.drawCard(messageTop) })
+	d.card.SetEventHandler(func(event fltk.Event) bool {
 		return event == fltk.MOUSEWHEEL && d.scroll(fltk.EventDY()*3)
 	})
 	buttonX := d.width - inset - rowWidth
@@ -246,8 +241,20 @@ func (d *dialog) run() int {
 	for !d.done {
 		fltk.Wait()
 	}
-	d.window.Destroy()
+	d.destroy()
 	return d.answer
+}
+
+// destroy deletes the dialog. Its widgets are deleted one by one first: go-fltk's deletion handler
+// of a child that still has a draw handler unregisters that handler's id from the plain callback
+// map, which drops an unrelated live callback and later crashes the event loop. A widget
+// destroyed on its own has its handler ids cleared before FLTK deletes it.
+func (d *dialog) destroy() {
+	for _, button := range d.buttons {
+		button.Destroy()
+	}
+	d.card.Destroy()
+	d.window.Destroy()
 }
 
 // finish records the answer and closes the window; only the first answer counts.

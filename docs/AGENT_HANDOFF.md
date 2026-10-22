@@ -25,6 +25,7 @@ next_actions:
   - When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
   - If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
+  - Do not destroy an FLTK group or window whose children have draw handlers: go-fltk's deletion handler unregisters the draw id from the callback map and a later callback crashes at address 0 (Loop 37 CI). Destroy children one by one first (dialogs), or hide (test teardown).
   - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt.
   - Do not research libmpv licensing again; settled in ADR-023.
   - Do not enable mpv log-file in production; it records the proxy session token.

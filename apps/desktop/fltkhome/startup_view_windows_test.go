@@ -47,8 +47,7 @@ func TestNativeStartupOpensHomeWithoutRecordChoiceAndKeepsLegacyUntouched(t *tes
 	t.Cleanup(func() {
 		ui.searchModel.close()
 		cancel()
-		window.Hide()
-		window.Destroy()
+		releaseTestWindow(window)
 	})
 	ui.start()
 	pumpSearchEvents(t, func() bool { return ui.mainGroup.Visible() })

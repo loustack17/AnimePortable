@@ -222,7 +222,6 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 		cancel = func() {}
 	}
 	window := fltk.NewWindow(1000, 618, "AnimePortable")
-	homeWindow = window
 	window.SetSizeRange(760, 480, 0, 0, 0, 0, false)
 	ui := &view{window: window, service: service, plan: plan, ctx: ctx, cancelContext: cancel, onPlay: onPlay, onClose: onClose, onRestart: onRestart}
 	ui.settingsWriter = newSettingsWriter(service, ui.settingsSaveFailed, ui.settingsSaved)

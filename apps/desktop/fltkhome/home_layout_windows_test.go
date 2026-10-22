@@ -22,7 +22,7 @@ func TestContinueWatchingLoadedRowsStayAdjacentToHeading(t *testing.T) {
 	ui.build()
 	ui.mainGroup.Show()
 	window.Show()
-	t.Cleanup(func() { ui.searchModel.close(); window.Hide(); window.Destroy() })
+	t.Cleanup(func() { ui.searchModel.close(); releaseTestWindow(window) })
 	for cycle, count := range []int{1, rowLimit, 1, 0, 1} {
 		if cycle > 0 {
 			ui.scroll.ScrollTo(ui.scroll.XPosition()+31, ui.scroll.YPosition()+173)
