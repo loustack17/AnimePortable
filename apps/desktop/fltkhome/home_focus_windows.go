@@ -69,5 +69,5 @@ func (ui *view) focusOutsideHomeRows() bool {
 			return true
 		}
 	}
-	return ui.themeToggle.HasFocus() || ui.retryButton.HasFocus()
+	return ui.retryButton.HasFocus()
 }

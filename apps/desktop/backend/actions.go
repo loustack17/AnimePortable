@@ -440,28 +440,19 @@ func (service *Service) Settings(ctx context.Context) (Settings, error) {
 	if err != nil {
 		return Settings{}, safeError(err)
 	}
-	return settingValues(value), nil
+	// Resolved so no caller sees "unspecified" or needs its own defaults.
+	return settingValues(value.Resolved()), nil
 }
 
+// SaveSettings stores the settings page's values. The speed is not one of them: it is kept as
+// stored so a page that loaded earlier cannot overwrite a speed chosen in the player since.
 func (service *Service) SaveSettings(ctx context.Context, input Settings) error {
 	operationCtx, done, err := service.begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer done()
-	appearance, err := parseAppearance(input.Appearance)
-	if err != nil {
-		return err
-	}
-	autoplay, err := parseToggle(input.AutoplayNext)
-	if err != nil {
-		return err
-	}
-	resume, err := parseToggle(input.ResumePlayback)
-	if err != nil {
-		return err
-	}
-	language, err := parseLanguage(input.Language)
+	settings, err := settingsFromInput(input)
 	if err != nil {
 		return err
 	}
@@ -469,7 +460,46 @@ func (service *Service) SaveSettings(ctx context.Context, input Settings) error 
 	if err != nil {
 		return err
 	}
-	return safeError(store.SaveSettings(operationCtx, core.Settings{Appearance: appearance, AutoplayNext: autoplay, ResumePlayback: resume, Language: language}))
+	service.settingsMu.Lock()
+	defer service.settingsMu.Unlock()
+	stored, err := store.Settings(operationCtx)
+	if err != nil {
+		return safeError(err)
+	}
+	settings.PlaybackSpeed = stored.PlaybackSpeed
+	if err := store.SaveSettings(operationCtx, settings); err != nil {
+		return safeError(err)
+	}
+	// New connections use the saved proxy; clients close their idle ones when it changes.
+	resolved := settings.Resolved()
+	service.proxy.Set(resolved.ProxyMode, resolved.ProxyAddress)
+	return nil
+}
+
+// SavePlaybackSpeed remembers the speed chosen in the player, in percent, and leaves every
+// other stored setting as it is.
+func (service *Service) SavePlaybackSpeed(ctx context.Context, percent int) error {
+	operationCtx, done, err := service.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer done()
+	speed := core.PlaybackSpeed(percent)
+	if speed == core.PlaybackSpeedUnspecified || !speed.Valid() {
+		return ErrInvalidInput
+	}
+	_, store, _, err := service.appSnapshot()
+	if err != nil {
+		return err
+	}
+	service.settingsMu.Lock()
+	defer service.settingsMu.Unlock()
+	stored, err := store.Settings(operationCtx)
+	if err != nil {
+		return safeError(err)
+	}
+	stored.PlaybackSpeed = speed
+	return safeError(store.SaveSettings(operationCtx, stored))
 }
 
 // playError carries the unsanitized cause of a playback failure to Play, which logs the
@@ -540,7 +570,7 @@ func (service *Service) play(ctx context.Context, input PlayRequest) error {
 	service.mu.Unlock()
 	startAt := time.Duration(input.StartAt) * time.Millisecond
 	if session != nil {
-		if err := app.SwitchEpisode(operationCtx, session, animeID, episodeID, ref, startAt); err == nil {
+		if err := app.SwitchEpisode(operationCtx, session, animeID, episodeID, ref, startAt, input.Paused); err == nil {
 			return nil
 		} else if !terminalPlaybackError(err) {
 			return &playError{cause: err}
@@ -559,7 +589,7 @@ func (service *Service) play(ctx context.Context, input PlayRequest) error {
 			return err
 		}
 	}
-	started, err := app.PlayEpisode(operationCtx, animeID, episodeID, ref, startAt)
+	started, err := app.PlayEpisode(operationCtx, animeID, episodeID, ref, startAt, input.Paused)
 	if err != nil {
 		return &playError{cause: err}
 	}

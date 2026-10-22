@@ -6,6 +6,7 @@ package fltkhome
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -16,7 +17,8 @@ import (
 )
 
 type Service interface {
-	appearanceService
+	settingsService
+	settingsActionService
 	Start(context.Context) error
 	Library(context.Context) ([]backend.Anime, error)
 	Search(context.Context, string) ([]backend.Anime, error)
@@ -46,6 +48,8 @@ type view struct {
 	cancelContext context.CancelFunc
 	onPlay        func(backend.PlayRequest)
 	onClose       func()
+	// onRestart tells main to start the program again once it has shut down.
+	onRestart func()
 
 	message            *fltk.Box
 	header             *fltk.Box
@@ -117,10 +121,34 @@ type view struct {
 	// backKey and quickSearchKey run Esc and `/` or Ctrl+K; see bindWindowKeys.
 	backKey, quickSearchKey func()
 	closeButton             *fltk.Button
-	themeToggle             *fltk.Button
-	dark                    bool
-	appearance              *appearancePersistence
-	closing                 bool
+	// settings is the whole settings value the UI holds and saves; dark is the theme on screen.
+	settings         backend.Settings
+	dark             bool
+	settingsWriter   *settingsWriter
+	settingsPage     *fltk.Group
+	settingsScroll   *fltk.Scroll
+	settingsNotice   *fltk.Box
+	settingsEnd      *fltk.Box
+	settingsOrigin   *fltk.Box
+	settingsHeadings []*fltk.Box
+	settingsRows     []*settingsRow
+	settingsToggles  []settingsToggle
+	themeControl     *segmentedControl
+	proxyControl     *segmentedControl
+	proxyField       *proxyAddressField
+	proxyTest        *settingsAction
+	dataChange       *settingsAction
+	dataRestore      *settingsAction
+	updateCheck      *settingsAction
+	updateOpen       *settingsAction
+	projectOpen      *settingsAction
+	tasks            settingsTasks
+	// settingsLoadFailed means settings holds defaults, not the stored choices; nothing is saved.
+	settingsLoadFailed bool
+	closing            bool
+	// restarting is set when the window closes to start the program again after a data move:
+	// the open database refuses writes then, which is expected and not a failed save.
+	restarting bool
 
 	previewFollow *fltk.Button
 	// followPending blocks a second follow or unfollow until the first one finishes.
@@ -186,7 +214,7 @@ type view struct {
 	scheduleOpened [2]int
 }
 
-func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose func()) (*fltk.Window, func(int)) {
+func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx context.Context, cancel context.CancelFunc, onPlay func(backend.PlayRequest), onClose, onRestart func()) (*fltk.Window, func(int)) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -194,16 +222,10 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 		cancel = func() {}
 	}
 	window := fltk.NewWindow(1000, 618, "AnimePortable")
+	homeWindow = window
 	window.SetSizeRange(760, 480, 0, 0, 0, 0, false)
-	ui := &view{window: window, service: service, plan: plan, ctx: ctx, cancelContext: cancel, onPlay: onPlay, onClose: onClose}
-	ui.appearance = newAppearancePersistence(service, func(error) {
-		fltk.Awake(func() {
-			if ui.ctx.Err() == nil && !ui.closing {
-				ui.message.SetLabel("無法儲存主題設定，請重試。")
-				ui.window.Redraw()
-			}
-		})
-	})
+	ui := &view{window: window, service: service, plan: plan, ctx: ctx, cancelContext: cancel, onPlay: onPlay, onClose: onClose, onRestart: onRestart}
+	ui.settingsWriter = newSettingsWriter(service, ui.settingsSaveFailed, ui.settingsSaved)
 	window.SetCallback(func() {
 		if !isEscapeClose() {
 			ui.cancel()
@@ -220,9 +242,7 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 
 func (ui *view) build() {
 	ui.refresh = core.NewRefresher(ui.ctx, core.RefreshLimit, core.RefreshInterval)
-	fltk.SetScheme("oxy")
-	fltk.SetFont(fltk.HELVETICA, "Microsoft JhengHei UI")
-	fltk.SetFont(fltk.HELVETICA_BOLD, "Microsoft JhengHei UI Bold")
+	useAppFonts()
 	ui.window.Begin()
 	header := fltk.NewBox(fltk.NO_BOX, 22, 16, 250, 42, "AnimePortable")
 	header.SetLabelFont(fltk.HELVETICA_BOLD)
@@ -233,44 +253,6 @@ func (ui *view) build() {
 	ui.message = fltk.NewBox(fltk.NO_BOX, 280, 20, 690, 38, "")
 	ui.message.SetLabelSize(14)
 	ui.message.SetLabelColor(fltk.ColorFromRgb(85, 96, 116))
-	ui.themeToggle = fltk.NewButton(928, 18, 42, 40, "")
-	ui.themeToggle.SetBox(fltk.NO_BOX)
-	ui.themeToggle.SetTooltip("切換暗色")
-	ui.themeToggle.SetDrawHandler(func(func()) {
-		colors := ui.colors()
-		x, y, width, height := ui.themeToggle.X(), ui.themeToggle.Y(), ui.themeToggle.W(), ui.themeToggle.H()
-		if ui.themeToggle.HasFocus() {
-			roundedRect(x, y, width, height, 13, colors.accent)
-		} else {
-			roundedRect(x, y, width, height, 13, colors.soft)
-		}
-		roundedRect(x+3, y+3, width-6, height-6, 11, colors.soft)
-		fltk.SetDrawColor(colors.accent)
-		centerX, centerY := x+width/2, y+height/2
-		if ui.dark {
-			fltk.DrawPie(centerX-6, centerY-6, 12, 12, 0, 360)
-			for _, ray := range [][4]int{{0, -13, 0, -9}, {0, 9, 0, 13}, {-13, 0, -9, 0}, {9, 0, 13, 0}, {-9, -9, -7, -7}, {7, 7, 9, 9}, {-9, 9, -7, 7}, {7, -7, 9, -9}} {
-				fltk.DrawLine(centerX+ray[0], centerY+ray[1], centerX+ray[2], centerY+ray[3])
-			}
-		} else {
-			fltk.DrawPie(centerX-9, centerY-9, 18, 18, 0, 360)
-			fltk.SetDrawColor(colors.soft)
-			fltk.DrawPie(centerX-4, centerY-13, 18, 18, 0, 360)
-		}
-	})
-	toggleTheme := func() {
-		if ui.closing {
-			return
-		}
-		ui.dark = !ui.dark
-		if ui.appearance != nil {
-			ui.appearance.setDark(ui.dark)
-		}
-		ui.applyTheme()
-	}
-	ui.themeToggle.SetCallback(toggleTheme)
-	ui.bindThemeKeys(toggleTheme)
-	ui.themeToggle.Deactivate()
 	ui.startupGroup = fltk.NewGroup(18, 78, 964, 520)
 	ui.startupGroup.End()
 	ui.startupGroup.Hide()
@@ -324,7 +306,7 @@ func (ui *view) build() {
 		if list := ui.homeFocusables(); len(list) > 0 {
 			return list[0]
 		}
-		return ui.themeToggle
+		return nil
 	})
 	ui.continueHeading = ui.contentText(253, homeFirstSectionY, 600, 32, "繼續觀看", 20, false, true)
 	ui.loadingText = fltk.NewBox(fltk.NO_BOX, 253, 326, 680, 36, "正在載入繼續觀看…")
@@ -333,13 +315,14 @@ func (ui *view) build() {
 	ui.retryButton = fltk.NewButton(253, 365, 126, 36, "重新載入")
 	ui.styleButton(ui.retryButton, func() bool { return true })
 	ui.retryButton.SetCallback(ui.loadHome)
-	ui.bindContentKeys(ui.retryButton, ui.loadHome, func() *fltk.Button { return ui.browseButton }, func() *fltk.Button { return ui.themeToggle })
+	ui.bindContentKeys(ui.retryButton, ui.loadHome, func() *fltk.Button { return ui.browseButton }, nil)
 	ui.retryButton.Hide()
 	ui.scroll.End()
 	ui.buildSearchView()
 	ui.buildFollowingView()
 	ui.buildHistoryView()
 	ui.buildScheduleView()
+	ui.buildSettingsView()
 	pinChildren(ui.mainGroup)
 	ui.mainGroup.End()
 	ui.mainGroup.Hide()
@@ -372,7 +355,6 @@ func (ui *view) build() {
 	ui.window.SetResizeHandler(func() {
 		width, height := ui.window.W(), ui.window.H()
 		ui.message.Resize(280, 20, width-310, 38)
-		ui.themeToggle.Resize(width-72, 18, 42, 40)
 		navPanel.Resize(14, 18, 205, height-36)
 		// FLTK delivers a click only inside every group holding the widget.
 		ui.startupGroup.Resize(18, 78, width-36, height-98)
@@ -385,6 +367,7 @@ func (ui *view) build() {
 		ui.resizeFollowing()
 		ui.resizeHistory()
 		ui.resizeSchedule()
+		ui.resizeSettings()
 	})
 }
 
@@ -418,8 +401,8 @@ func (ui *view) start() {
 	ui.startupGroup.Deactivate()
 	go func() {
 		var err error
-		var dark bool
-		var appearanceErr error
+		var settings backend.Settings
+		var settingsErr error
 		if ui.ctx.Err() != nil {
 			return
 		}
@@ -432,17 +415,17 @@ func (ui *view) start() {
 			} else {
 				err = ui.service.Start(ui.ctx)
 				if err == nil {
-					dark, appearanceErr = loadAppearance(ui.ctx, ui.service)
+					settings, settingsErr = loadSettings(ui.ctx, ui.service)
 				}
 			}
 		}
 		fltk.Awake(func() {
-			ui.finishStartup(err, dark, appearanceErr)
+			ui.finishStartup(err, settings, settingsErr)
 		})
 	}()
 }
 
-func (ui *view) finishStartup(err error, dark bool, appearanceErr error) {
+func (ui *view) finishStartup(err error, settings backend.Settings, settingsErr error) {
 	if ui.ctx.Err() != nil || ui.closing {
 		return
 	}
@@ -452,11 +435,17 @@ func (ui *view) finishStartup(err error, dark bool, appearanceErr error) {
 		return
 	}
 	ui.startupGroup.Hide()
-	ui.dark = dark
+	ui.settingsLoadFailed = settingsErr != nil
+	if ui.settingsLoadFailed {
+		settings = backend.DefaultSettings()
+	}
+	ui.settings = settings
+	ui.dark = resolveDark(settings.Appearance)
+	ui.proxyField.input.SetValue(settings.ProxyAddress)
+	ui.syncSettings()
 	ui.applyTheme()
-	ui.themeToggle.Activate()
-	if appearanceErr != nil {
-		ui.message.SetLabel("無法載入主題設定，暫時使用亮色。")
+	if settingsErr != nil {
+		ui.message.SetLabel("無法載入設定，暫時使用預設值。")
 	} else {
 		ui.message.SetLabel("")
 	}
@@ -472,6 +461,9 @@ func (ui *view) showSection(index int) {
 		return
 	}
 	enteringHome := index == 0 && ui.selected != 0
+	if ui.selected == settingsSection && index != settingsSection {
+		ui.commitProxyAddress()
+	}
 	if ui.selected != index {
 		ui.pageGeneration++
 	}
@@ -500,6 +492,9 @@ func (ui *view) showSection(index int) {
 	}
 	if ui.schedulePage != nil && index != scheduleSection {
 		ui.schedulePage.Hide()
+	}
+	if ui.settingsPage != nil && index != settingsSection {
+		ui.settingsPage.Hide()
 	}
 	for _, button := range ui.navigation {
 		button.Redraw()
@@ -540,6 +535,14 @@ func (ui *view) showSection(index int) {
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
 		ui.showSchedule()
+	} else if index == settingsSection && ui.settingsPage != nil {
+		ui.contentHint.SetLabel("變更後會立即儲存。")
+		ui.scroll.Hide()
+		ui.searchPage.Hide()
+		ui.previewGroup.Hide()
+		ui.settingsPage.Show()
+		ui.layoutSettings()
+		ui.refreshDataLocation()
 	} else {
 		ui.contentHint.SetLabel("此頁面尚未建立")
 		ui.scroll.Hide()
@@ -729,7 +732,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 			}
 		}
 		button.SetCallback(openRow)
-		// Keyboard order follows the page: these rows, then 繼續播放 cards, then the theme toggle.
+		// Keyboard order follows the page: these rows, then 繼續播放 cards.
 		ui.bindContentKeys(button, openRow, func() *fltk.Button {
 			// Focus moves after the key event, when a reload may have rebuilt fewer rows.
 			if index > 0 && index <= len(ui.homeUpdateButtons) {
@@ -743,7 +746,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 			if len(ui.cardButtons) > 0 {
 				return ui.cardButtons[0]
 			}
-			return ui.themeToggle
+			return nil
 		})
 		ui.homeUpdateButtons = append(ui.homeUpdateButtons, button)
 		ui.homeUpdateIDs = append(ui.homeUpdateIDs, item.ID)
@@ -789,7 +792,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 			if index+1 < len(ui.cardButtons) {
 				return ui.cardButtons[index+1]
 			}
-			return ui.themeToggle
+			return nil
 		})
 		ui.cardButtons = append(ui.cardButtons, button)
 	}
@@ -859,12 +862,16 @@ func (ui *view) focusContent() {
 		ui.focusSchedule()
 		return
 	}
+	if ui.selected == settingsSection && ui.settingsPage != nil {
+		ui.focusSettings()
+		return
+	}
 	if ui.scroll.Visible() && ui.browseButton != nil {
 		ui.scrollTo(0)
 		ui.browseButton.TakeFocus()
 		return
 	}
-	ui.themeToggle.TakeFocus()
+	ui.focusNavigation()
 }
 
 func (ui *view) scrollTo(y int) {
@@ -905,7 +912,7 @@ func (ui *view) focusTarget(button *fltk.Button) {
 		} else if ui.browseButton != nil && ui.browseButton.Visible() && ui.browseButton.IsActive() {
 			button = ui.browseButton
 		} else {
-			button = ui.themeToggle
+			button = ui.navigation[ui.selected]
 		}
 	}
 	if button == ui.browseButton || button == ui.retryButton {
@@ -948,15 +955,11 @@ func (ui *view) bindContentKeys(button *fltk.Button, action func(), previous, ne
 						ui.focusTarget(list[0])
 					}
 				})
-			} else if button == ui.retryButton {
-				ui.focusAfterKey(func() { ui.focusTarget(ui.themeToggle) })
 			} else {
 				return true
 			}
 		case keyUp:
-			if button == ui.browseButton {
-				ui.focusAfterKey(func() { ui.focusTarget(ui.themeToggle) })
-			} else if previous == nil || previous() == nil {
+			if previous == nil || previous() == nil {
 				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
 			} else {
 				ui.focusAfterKey(func() { ui.focusTarget(previous()) })
@@ -986,52 +989,11 @@ func (ui *view) bindContentKeys(button *fltk.Button, action func(), previous, ne
 	})
 }
 
-func (ui *view) bindThemeKeys(action func()) {
-	activate := ui.deferredKeyAction(action)
-	ui.themeToggle.SetEventHandler(func(event fltk.Event) bool {
-		if event != fltk.KEYDOWN {
-			return false
-		}
-		switch classifyKey(fltk.EventKey(), fltk.EventState()) {
-		case keyActivate:
-			activate()
-		case keyLeft:
-			ui.focusAfterKey(func() { ui.navigation[0].TakeFocus() })
-		case keyDown:
-			ui.focusAfterKey(ui.focusContent)
-		case keyUp:
-			if len(ui.homeFocusables()) > 0 && ui.scroll.Visible() {
-				ui.focusAfterKey(func() {
-					if list := ui.homeFocusables(); len(list) > 0 {
-						ui.focusTarget(list[len(list)-1])
-					}
-				})
-			} else if ui.scroll.Visible() {
-				ui.focusAfterKey(ui.focusContent)
-			} else {
-				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
-			}
-		case keyPrevious:
-			if ui.scroll.Visible() && ui.retryButton != nil && ui.retryButton.Visible() {
-				ui.focusAfterKey(func() { ui.focusTarget(ui.retryButton) })
-			} else if len(ui.homeFocusables()) > 0 && ui.scroll.Visible() {
-				ui.focusAfterKey(func() {
-					if list := ui.homeFocusables(); len(list) > 0 {
-						ui.focusTarget(list[len(list)-1])
-					}
-				})
-			} else {
-				ui.focusAfterKey(func() { ui.navigation[len(ui.navigation)-1].TakeFocus() })
-			}
-		default:
-			return false
-		}
-		return true
-	})
-}
-
 func (ui *view) cancel() {
 	ui.closeOnce.Do(func() {
+		if !ui.restarting {
+			ui.commitProxyAddress() // before closing is set, so the save is queued ahead of the writer's close
+		}
 		ui.closing = true
 		ui.homeLoadGeneration++
 		ui.homeLoading = false
@@ -1039,17 +1001,16 @@ func (ui *view) cancel() {
 		ui.searchModel.close()
 		ui.stopDetailLoad()
 		ui.mainGroup.Deactivate()
-		ui.themeToggle.Deactivate()
 		go func() {
 			// Refresh work is stopped and waited for before the backend closes.
 			ui.refresh.Close()
 			var err error
-			if ui.appearance != nil {
-				err = ui.appearance.close()
+			if ui.settingsWriter != nil {
+				err = ui.settingsWriter.close()
 			}
 			fltk.Awake(func() {
-				if err != nil {
-					fltk.MessageBox("設定未儲存", "無法儲存主題設定，下次開啟可能恢復先前的主題。")
+				if err != nil && !(ui.restarting && errors.Is(err, backend.ErrRestartRequired)) {
+					showDialog(ui.window, "設定未儲存", "無法儲存設定，下次開啟可能恢復先前的設定。", ui.dark, dialogOKLabel)
 				}
 				ui.cancelContext()
 				if ui.onClose != nil {

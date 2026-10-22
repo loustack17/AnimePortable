@@ -38,6 +38,8 @@ type PlayRequest struct {
 	EpisodeID EpisodeID
 	Source    PlaybackSource
 	StartAt   time.Duration
+	// Paused loads the episode waiting at StartAt instead of playing.
+	Paused bool
 }
 
 type Player interface {

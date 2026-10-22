@@ -25,6 +25,7 @@ import (
 )
 
 type searchViewTestService struct {
+	noSettingsActions
 	libraryCalls atomic.Int32
 	searchCalls  atomic.Int32
 	libraryErr   error
@@ -105,7 +106,6 @@ func newSearchViewTestFixture(t *testing.T, service Service) *view {
 	ui.scroll.End()
 	ui.loadingText = fltk.NewBox(fltk.NO_BOX, 0, 0, 1, 1, "")
 	ui.retryButton = fltk.NewButton(0, 0, 1, 1, "")
-	ui.themeToggle = fltk.NewButton(0, 0, 1, 1, "")
 	ui.buildSearchView()
 	ui.searchPage.SetLabel("search-page")
 	ui.searchScroll.SetLabel("search-results-scroll")

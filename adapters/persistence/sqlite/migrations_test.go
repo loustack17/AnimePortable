@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"animeportable/core"
 )
 
 func TestOpenConcurrentlyAppliesMigrationsOnce(t *testing.T) {
@@ -202,7 +204,7 @@ func TestMigrationDropsLegacySettingsMPVPathPreservingSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	want := []string{"id", "appearance", "autoplay_next", "resume_playback", "language"}
+	want := []string{"id", "appearance", "autoplay_next", "resume_playback", "language", "auto_play", "playback_speed", "hardware_decoding", "proxy_mode", "proxy_address"}
 	if got := settingsColumns(t, store.db); !slices.Equal(got, want) {
 		t.Fatalf("settings columns = %v, want %v", got, want)
 	}
@@ -222,10 +224,128 @@ func TestMigrationDropsLegacySettingsMPVPathPreservingSettings(t *testing.T) {
 	}
 }
 
+func TestMigrationAddsAutoPlayKeepingSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	var previous []migration
+	for version, name := range []string{"0001_initial.sql", "0002_episode_mappings.sql", "0003_drop_settings_mpv_path.sql", "0004_episode_number.sql", "0005_recent_updates.sql", "0006_schedule.sql"} {
+		contents, err := migrationFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous = append(previous, migration{version: version + 1, name: name, sql: string(contents)})
+	}
+	legacy, err := open(context.Background(), path, migrationSource{migrations: previous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.db.Exec(`INSERT INTO settings(id, appearance, autoplay_next, resume_playback, language)
+		VALUES (1, 3, 1, 2, 2)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store := openLibraryStore(t, path)
+	defer store.Close()
+	want := core.Settings{Appearance: core.AppearanceDark, AutoplayNext: core.ToggleDisabled, ResumePlayback: core.ToggleEnabled, Language: core.LanguageEnglish}
+	if got, err := store.Settings(context.Background()); err != nil || got != want {
+		t.Fatalf("settings after migration = %#v, %v, want %#v", got, err, want)
+	}
+	if _, err := store.db.Exec("UPDATE settings SET auto_play = 3"); err == nil {
+		t.Fatal("auto_play accepted a value outside 0-2")
+	}
+}
+
+func TestMigrationAddsPlaybackAndProxyKeepingSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	var previous []migration
+	for version, name := range []string{"0001_initial.sql", "0002_episode_mappings.sql", "0003_drop_settings_mpv_path.sql", "0004_episode_number.sql", "0005_recent_updates.sql", "0006_schedule.sql", "0007_settings_auto_play.sql"} {
+		contents, err := migrationFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous = append(previous, migration{version: version + 1, name: name, sql: string(contents)})
+	}
+	legacy, err := open(context.Background(), path, migrationSource{migrations: previous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.db.Exec(`INSERT INTO settings(id, appearance, autoplay_next, auto_play, resume_playback, language)
+		VALUES (1, 3, 1, 1, 2, 2)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store := openLibraryStore(t, path)
+	defer store.Close()
+	want := core.Settings{
+		Appearance: core.AppearanceDark, AutoplayNext: core.ToggleDisabled, AutoPlay: core.ToggleDisabled,
+		ResumePlayback: core.ToggleEnabled, Language: core.LanguageEnglish,
+	}
+	if got, err := store.Settings(context.Background()); err != nil || got != want {
+		t.Fatalf("settings after migration = %#v, %v, want %#v", got, err, want)
+	}
+	for name, statement := range map[string]string{
+		"playback_speed":    "UPDATE settings SET playback_speed = 110",
+		"hardware_decoding": "UPDATE settings SET hardware_decoding = 3",
+		"proxy_mode":        "UPDATE settings SET proxy_mode = 4",
+		"proxy_address":     "UPDATE settings SET proxy_address = '" + strings.Repeat("a", 256) + "'",
+	} {
+		if _, err := store.db.Exec(statement); err == nil {
+			t.Errorf("%s accepted an out-of-range value", name)
+		}
+	}
+}
+
+func TestMigrationDropsSkipIntroKeepingSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	var previous []migration
+	for version, name := range []string{"0001_initial.sql", "0002_episode_mappings.sql", "0003_drop_settings_mpv_path.sql", "0004_episode_number.sql", "0005_recent_updates.sql", "0006_schedule.sql", "0007_settings_auto_play.sql", "0008_settings_playback_proxy.sql"} {
+		contents, err := migrationFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous = append(previous, migration{version: version + 1, name: name, sql: string(contents)})
+	}
+	legacy, err := open(context.Background(), path, migrationSource{migrations: previous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.db.Exec(`INSERT INTO settings(id, appearance, autoplay_next, auto_play, resume_playback, language,
+		playback_speed, skip_intro_seconds, hardware_decoding, proxy_mode, proxy_address)
+		VALUES (1, 3, 1, 1, 2, 2, 150, 90, 1, 3, 'proxy.example:8080')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store := openLibraryStore(t, path)
+	defer store.Close()
+	if slices.Contains(settingsColumns(t, store.db), "skip_intro_seconds") {
+		t.Fatal("skip_intro_seconds is still in the settings table")
+	}
+	want := core.Settings{
+		Appearance: core.AppearanceDark, AutoplayNext: core.ToggleDisabled, AutoPlay: core.ToggleDisabled,
+		ResumePlayback: core.ToggleEnabled, Language: core.LanguageEnglish,
+		PlaybackSpeed: 150, HardwareDecoding: core.ToggleDisabled,
+		ProxyMode: core.ProxyModeManual, ProxyAddress: "proxy.example:8080",
+	}
+	if got, err := store.Settings(context.Background()); err != nil || got != want {
+		t.Fatalf("settings after migration = %#v, %v, want %#v", got, err, want)
+	}
+	if _, err := store.db.Exec("UPDATE settings SET playback_speed = 110"); err == nil {
+		t.Fatal("the other settings constraints were lost")
+	}
+}
+
 func TestFreshSchemaHasNoSettingsMPVPath(t *testing.T) {
 	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
 	defer store.Close()
-	want := []string{"id", "appearance", "autoplay_next", "resume_playback", "language"}
+	want := []string{"id", "appearance", "autoplay_next", "resume_playback", "language", "auto_play", "playback_speed", "hardware_decoding", "proxy_mode", "proxy_address"}
 	if got := settingsColumns(t, store.db); !slices.Equal(got, want) {
 		t.Fatalf("settings columns = %v, want %v", got, want)
 	}

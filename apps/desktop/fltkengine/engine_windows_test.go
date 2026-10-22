@@ -240,3 +240,24 @@ func TestEndsNormallyOnlyForEOFOfTheCurrentFile(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadCommandSetsPauseAndSpeedPerFile(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		startAt time.Duration
+		paused  bool
+		speed   int
+		want    string
+	}{
+		{"defaults", 0, false, 0, "pause=no"},
+		{"paused with start", 90 * time.Second, true, 0, "pause=yes,start=90.000"},
+		{"quarter steps", 0, false, 125, "pause=no,speed=1.25"},
+		{"slow", 0, false, 75, "pause=no,speed=0.75"},
+		{"normal", 0, false, 100, "pause=no,speed=1"},
+	} {
+		got := loadCommand("https://example.invalid/v.mp4", test.startAt, test.paused, test.speed)
+		if len(got) != 5 || got[4] != test.want {
+			t.Errorf("%s: command %v, want options %q", test.name, got, test.want)
+		}
+	}
+}

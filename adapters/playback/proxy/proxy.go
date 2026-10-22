@@ -53,6 +53,9 @@ type Config struct {
 	// the request goroutine, so it must return quickly and must not retain anything
 	// but the number.
 	OnUpstreamFailure func(status int)
+	// Proxy, when set, names the forward proxy (host:port, or "" for direct) that upstream
+	// requests use; it is asked for every request.
+	Proxy func() string
 }
 
 type remoteClient interface {
@@ -145,7 +148,7 @@ func newServer(config Config, deps serverDeps) (*Server, error) {
 	}
 	if deps.remoteFactory == nil {
 		deps.remoteFactory = func(origin string) (remoteClient, error) {
-			return securehttp.New(securehttp.Config{AllowedOrigins: []string{origin}})
+			return securehttp.New(securehttp.Config{AllowedOrigins: []string{origin}, Proxy: config.Proxy})
 		}
 	}
 	listener, err := deps.listen("tcp", "127.0.0.1:0")

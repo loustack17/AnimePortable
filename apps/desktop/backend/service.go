@@ -13,14 +13,17 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"animeportable/adapters/metadata/anilist"
 	"animeportable/adapters/metadata/bangumi"
 	"animeportable/adapters/metadata/cover"
+	"animeportable/adapters/network/forwardproxy"
 	"animeportable/adapters/network/securehttp"
 	"animeportable/adapters/persistence/sqlite"
 	"animeportable/adapters/source/anime1"
+	"animeportable/adapters/update/github"
 	"animeportable/core"
 	metadata "animeportable/internal/metadata"
 )
@@ -40,14 +43,21 @@ type dependencies struct {
 	cover     *cover.Loader
 	metadata  []core.MetadataProvider
 	schedule  core.ScheduleProvider
+	updates   releaseSource
 	newPlayer func() (core.Player, error)
 	close     func() error
 }
 
 type Service struct {
-	mu              sync.Mutex
-	identity        sync.Mutex
-	playMu          sync.Mutex
+	mu sync.Mutex
+	// settingsMu makes reading and then saving the settings row one step.
+	settingsMu sync.Mutex
+	identity   sync.Mutex
+	playMu     sync.Mutex
+	locationMu sync.Mutex
+	// dataMoved is set when the data folder was moved: the open database is then the old
+	// copy and store writes are refused until the app restarts (see writeGuard).
+	dataMoved       atomic.Bool
 	startupMu       sync.Mutex
 	closed          bool
 	operationsWG    sync.WaitGroup
@@ -63,13 +73,18 @@ type Service struct {
 	cover           *cover.Loader
 	metadata        []core.MetadataProvider
 	schedule        core.ScheduleProvider
+	updates         releaseSource
+	proxy           *forwardproxy.Source
+	probeProxy      proxyProbe
 	closeDeps       func() error
 	newPlayer       func() (core.Player, error)
 	databasePath    string
-	app             *core.App
-	player          core.Player
-	session         core.PlaybackSession
-	failures        *FailureLog
+	// plan is the portable layout the app started with; moving the data folder updates it.
+	plan     PortablePlan
+	app      *core.App
+	player   core.Player
+	session  core.PlaybackSession
+	failures *FailureLog
 }
 
 func New() *Service {
@@ -78,14 +93,18 @@ func New() *Service {
 
 func NewAt(databasePath string) *Service {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	return &Service{operationSlots: make(chan struct{}, 16), shutdownDone: make(chan struct{}), lifecycleCtx: lifecycleCtx, lifecycleCancel: lifecycleCancel, newPlayer: func() (core.Player, error) { return nil, ErrUnavailable }, databasePath: databasePath}
+	return &Service{operationSlots: make(chan struct{}, 16), shutdownDone: make(chan struct{}), lifecycleCtx: lifecycleCtx, lifecycleCancel: lifecycleCancel, newPlayer: func() (core.Player, error) { return nil, ErrUnavailable }, databasePath: databasePath, proxy: forwardproxy.New()}
 }
 
 // NewAtWithPlayback builds a Service with a player factory and a playback failure log.
 // The caller keeps using the log to report player-side failures; a nil log disables
-// failure logging.
-func NewAtWithPlayback(databasePath string, failures *FailureLog, factory func() (core.Player, error)) *Service {
+// failure logging. proxy is the forward-proxy source the Service keeps in step with the
+// saved settings; the caller gives the same source to every other client that needs it.
+func NewAtWithPlayback(databasePath string, proxy *forwardproxy.Source, failures *FailureLog, factory func() (core.Player, error)) *Service {
 	service := NewAt(databasePath)
+	if proxy != nil {
+		service.proxy = proxy
+	}
 	if factory != nil {
 		service.newPlayer = factory
 	}
@@ -93,19 +112,37 @@ func NewAtWithPlayback(databasePath string, failures *FailureLog, factory func()
 	return service
 }
 
+// NewAtWithPlan is NewAtWithPlayback for a portable plan, which also lets the Service move
+// the data folder.
+func NewAtWithPlan(plan PortablePlan, proxy *forwardproxy.Source, failures *FailureLog, factory func() (core.Player, error)) *Service {
+	service := NewAtWithPlayback(plan.DatabasePath, proxy, failures, factory)
+	service.plan = plan
+	return service
+}
+
 func newWithDependencies(deps dependencies) *Service {
 	service := New()
-	service.store = deps.store
+	service.store = service.guardedStore(deps.store)
 	service.source = stageSource{deps.source}
 	service.cover = deps.cover
 	service.metadata = deps.metadata
 	service.schedule = deps.schedule
+	service.updates = deps.updates
 	service.closeDeps = deps.close
 	if deps.newPlayer != nil {
 		service.newPlayer = deps.newPlayer
 	}
 	service.app = core.NewApp(service.source, nil, service.store)
 	return service
+}
+
+// guardedStore wraps a store so it refuses writes once the data folder has moved. A nil store
+// stays nil, which the Service reads as "not open yet".
+func (service *Service) guardedStore(store core.Store) core.Store {
+	if store == nil {
+		return nil
+	}
+	return writeGuard{Store: store, refuse: &service.dataMoved}
 }
 
 func (service *Service) Start(ctx context.Context) error {
@@ -136,7 +173,7 @@ func (service *Service) Start(ctx context.Context) error {
 	startupCtx, startupCancel := context.WithCancel(ctx)
 	stopLifecycle := context.AfterFunc(service.lifecycleCtx, startupCancel)
 	service.mu.Unlock()
-	deps, err := openProduction(startupCtx, service.databasePath)
+	deps, err := openProduction(startupCtx, service.databasePath, service.proxy)
 	stopLifecycle()
 	startupCancel()
 	if err != nil {
@@ -154,11 +191,12 @@ func (service *Service) Start(ctx context.Context) error {
 		}
 		return ErrClosed
 	}
-	service.store = deps.store
+	service.store = service.guardedStore(deps.store)
 	service.source = stageSource{deps.source}
 	service.cover = deps.cover
 	service.metadata = deps.metadata
 	service.schedule = deps.schedule
+	service.updates = deps.updates
 	service.closeDeps = deps.close
 	service.app = core.NewApp(service.source, nil, service.store)
 	service.mu.Unlock()
@@ -287,17 +325,20 @@ func safeError(err error) error {
 	if errors.Is(err, ErrClosed) {
 		return ErrClosed
 	}
+	if errors.Is(err, ErrRestartRequired) {
+		return ErrRestartRequired
+	}
 	if errors.Is(err, ErrInvalidInput) {
 		return ErrInvalidInput
 	}
 	var secure *securehttp.Error
-	if errors.As(err, &secure) && (secure.Kind == securehttp.KindNetwork || secure.Kind == securehttp.KindTimeout) {
+	if errors.As(err, &secure) && (secure.Kind == securehttp.KindNetwork || secure.Kind == securehttp.KindTimeout || secure.Kind == securehttp.KindProxy) {
 		return ErrOffline
 	}
 	return ErrUnavailable
 }
 
-func openProduction(ctx context.Context, databasePath string) (dependencies, error) {
+func openProduction(ctx context.Context, databasePath string, proxySource *forwardproxy.Source) (dependencies, error) {
 	if databasePath == "" {
 		executable, err := os.Executable()
 		if err != nil {
@@ -313,21 +354,35 @@ func openProduction(ctx context.Context, databasePath string) (dependencies, err
 	if err != nil {
 		return dependencies{}, err
 	}
-	client, err := securehttp.New(securehttp.Config{AllowedOrigins: anime1.AllowedOrigins()})
+	// Before any client exists, so the first request already uses the stored proxy. Unreadable
+	// settings leave the proxy off.
+	stored, _ := store.Settings(ctx)
+	stored = stored.Resolved()
+	proxySource.Set(stored.ProxyMode, stored.ProxyAddress)
+	proxy := proxySource.Address
+	client, err := securehttp.New(securehttp.Config{AllowedOrigins: anime1.AllowedOrigins(), Proxy: proxy})
 	if err != nil {
 		_ = store.Close()
 		return dependencies{}, err
 	}
-	metadataClient, err := securehttp.New(securehttp.Config{AllowedOrigins: append(anilist.AllowedOrigins(), bangumi.AllowedOrigins()...)})
+	metadataClient, err := securehttp.New(securehttp.Config{AllowedOrigins: append(anilist.AllowedOrigins(), bangumi.AllowedOrigins()...), Proxy: proxy})
 	if err != nil {
 		client.CloseIdleConnections()
 		_ = store.Close()
 		return dependencies{}, err
 	}
-	loader, err := cover.New()
+	updateClient, err := securehttp.New(securehttp.Config{AllowedOrigins: github.AllowedOrigins(), MaxResponseBytes: github.MaxResponseBytes, Proxy: proxy})
 	if err != nil {
 		client.CloseIdleConnections()
 		metadataClient.CloseIdleConnections()
+		_ = store.Close()
+		return dependencies{}, err
+	}
+	loader, err := cover.New(proxy)
+	if err != nil {
+		client.CloseIdleConnections()
+		metadataClient.CloseIdleConnections()
+		updateClient.CloseIdleConnections()
 		_ = store.Close()
 		return dependencies{}, err
 	}
@@ -338,9 +393,11 @@ func openProduction(ctx context.Context, databasePath string) (dependencies, err
 		cover:    loader,
 		metadata: []core.MetadataProvider{anilist.New(metadataClient), bangumiClient},
 		schedule: bangumiClient,
+		updates:  github.New(updateClient),
 		close: func() error {
 			client.CloseIdleConnections()
 			metadataClient.CloseIdleConnections()
+			updateClient.CloseIdleConnections()
 			return nil
 		},
 	}, nil
@@ -434,8 +491,48 @@ func validMillis(value int64) bool {
 	return value >= 0 && value <= math.MaxInt64/int64(time.Millisecond)
 }
 
+// DefaultSettings is what a user who never chose anything gets; the UI holds it when the stored
+// settings cannot be read, so the defaults stay in core.
+func DefaultSettings() Settings {
+	return settingValues(core.Settings{}.Resolved())
+}
+
 func settingValues(settings core.Settings) Settings {
-	return Settings{Appearance: appearanceName(settings.Appearance), AutoplayNext: toggleName(settings.AutoplayNext), ResumePlayback: toggleName(settings.ResumePlayback), Language: languageName(settings.Language)}
+	return Settings{Appearance: appearanceName(settings.Appearance), AutoplayNext: toggleName(settings.AutoplayNext), AutoPlay: toggleName(settings.AutoPlay), ResumePlayback: toggleName(settings.ResumePlayback), Language: languageName(settings.Language),
+		PlaybackSpeed:    int(settings.PlaybackSpeed),
+		HardwareDecoding: toggleName(settings.HardwareDecoding), ProxyMode: proxyModeName(settings.ProxyMode), ProxyAddress: settings.ProxyAddress}
+}
+
+// settingsFromInput validates every field; zero values stay unspecified so the core resolves them.
+func settingsFromInput(input Settings) (core.Settings, error) {
+	var settings core.Settings
+	var err error
+	if settings.Appearance, err = parseAppearance(input.Appearance); err != nil {
+		return core.Settings{}, err
+	}
+	if settings.AutoplayNext, err = parseToggle(input.AutoplayNext); err != nil {
+		return core.Settings{}, err
+	}
+	if settings.AutoPlay, err = parseToggle(input.AutoPlay); err != nil {
+		return core.Settings{}, err
+	}
+	if settings.ResumePlayback, err = parseToggle(input.ResumePlayback); err != nil {
+		return core.Settings{}, err
+	}
+	if settings.Language, err = parseLanguage(input.Language); err != nil {
+		return core.Settings{}, err
+	}
+	if settings.HardwareDecoding, err = parseToggle(input.HardwareDecoding); err != nil {
+		return core.Settings{}, err
+	}
+	if settings.ProxyMode, err = parseProxyMode(input.ProxyMode); err != nil {
+		return core.Settings{}, err
+	}
+	settings.ProxyAddress = strings.TrimSpace(input.ProxyAddress)
+	if !core.ValidProxyAddress(settings.ProxyAddress) {
+		return core.Settings{}, ErrInvalidInput
+	}
+	return settings, nil
 }
 
 func appearanceName(value core.Appearance) string {
@@ -458,6 +555,18 @@ func toggleName(value core.Toggle) string {
 		return "disabled"
 	}
 	return "unspecified"
+}
+func proxyModeName(value core.ProxyMode) string {
+	switch value {
+	case core.ProxyModeNone:
+		return "none"
+	case core.ProxyModeSystem:
+		return "system"
+	case core.ProxyModeManual:
+		return "manual"
+	default:
+		return "unspecified"
+	}
 }
 func languageName(value core.Language) string {
 	if value == core.LanguageTraditionalChinese {
@@ -491,6 +600,20 @@ func parseToggle(value string) (core.Toggle, error) {
 		return core.ToggleEnabled, nil
 	case "disabled":
 		return core.ToggleDisabled, nil
+	default:
+		return 0, ErrInvalidInput
+	}
+}
+func parseProxyMode(value string) (core.ProxyMode, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "unspecified":
+		return core.ProxyModeUnspecified, nil
+	case "none":
+		return core.ProxyModeNone, nil
+	case "system":
+		return core.ProxyModeSystem, nil
+	case "manual":
+		return core.ProxyModeManual, nil
 	default:
 		return 0, ErrInvalidInput
 	}

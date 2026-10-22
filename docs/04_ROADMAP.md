@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-36 are complete. Loops 37-38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-37 are complete. Loops 37b, 37c and 38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux, then macOS (see "After the MVP").
 
@@ -50,23 +50,34 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 | 34 | Keyboard navigation everywhere: one key policy, Esc back, `/` and Ctrl+K search, arrows with visible focus on every screen and in the player. |
 | 35 | Cache-first startup and refresh: Home shows stored data with no network call, one bounded refresh policy in core, calm offline line on Home. |
 | 36 | Autoplay next episode: a normal end starts the next episode in the same player, the last one stops cleanly; Home shows a finished newest episode as 已看完; the player's episode list opens on the playing episode. |
+| 37 | Settings: a 設定 page (theme 跟隨系統/暗色/明亮, 自動下一集, 自動播放, resume, hardware decoding, proxy with 測試連線, 檢查更新 and GitHub link, data folder location with restart), a remembered speed button in the player, app-styled dialogs. |
 
 ## Remaining loops
 
-Two loops remain, run in this order. The owner changed the plan on 2026-10-14:
+Three loops remain, run in this order. The owner changed the plan on 2026-10-14:
 
 - Following and History now come before Schedule, because they build on the finished detail and playback work.
 - The former Loops 38 to 42 (security, resources, cross-platform, release, final acceptance) are now one Windows loop, Loop 38.
 
+On 2026-10-22 the owner split autoplay into two settings (自動下一集, 自動播放) and moved language to its own Loop 37b, adding Japanese. After owner check 1 of Loop 37 (same day) the owner added the data folder location and player and system settings (chosen from settings that Animeko, Kazumi and mpv.net offer) to Loop 37, reopening the earlier "no player options" decision, and approved an HTTP forward proxy ([03_SECURITY.md](03_SECURITY.md)).
+
 Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.md) true.
 
-### Loop 37 - Settings
+### Loop 37b - Language
 
-- Goal: The user can change a few basic settings and they are kept.
-- In scope: Appearance (System, Light, Dark), autoplay next episode, resume playback, language (Traditional Chinese, English).
-- Out of scope: Player options and a player-path setting (the DLL override stays a documented environment variable).
-- Done when: Each setting changes behavior and survives a restart, stored in the portable data folder, with no account or telemetry.
-- Owner check: Change each setting, restart, and see each one kept.
+- Goal: The user can choose the UI language.
+- In scope: A language setting on the 設定 page with Traditional Chinese (default), English and Japanese; every UI string comes from one string table. Anime titles, synopses and other remote content are not translated.
+- Out of scope: Simplified Chinese; translating remote content.
+- Done when: Every screen shows the chosen language with no Simplified Chinese and no clipped labels, and the choice survives a restart.
+- Owner check: Switch to each language, look at every screen, restart, and see the language kept.
+
+### Loop 37c - Skip the opening
+
+- Goal: Like Netflix, a 跳過片頭 button appears only while the opening plays and jumps to its end.
+- In scope: Opening times from AniSkip (`api.aniskip.com`, community timestamps looked up by MyAnimeList id, episode number and episode length); the MyAnimeList id from AniList metadata; the button (and S key) shown only inside the opening, gone after it; no button when there is no data. A security section for the new origin (what is sent: only those three numbers).
+- Out of scope: Detecting openings from audio, skipping endings, user-submitted timestamps.
+- Done when: For an episode with AniSkip data the button appears during the opening and jumps past it; for one without data nothing appears; no request is made unless an episode plays.
+- Owner check: Play an episode of a popular series, see 跳過片頭 during the opening only, press it, and see playback continue after the song.
 
 ### Loop 38 - Hardening and release (Windows MVP)
 

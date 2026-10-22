@@ -83,13 +83,28 @@ Certificate, hostname and expiry verification are mandatory. `InsecureSkipVerify
 
 Before connecting, resolve the destination and validate the actual IP used for the connection (this defends against DNS rebinding). Reject loopback, private IPv4, IPv4 link-local, IPv6 loopback, private and local IPv6, IPv6 link-local, multicast, unspecified, and known metadata-service addresses. Never trust only the hostname string.
 
+## Forward proxy (owner-approved 2026-10-22, Loop 37)
+
+The user may route outbound requests through one HTTP forward proxy: none (default), the Windows system proxy (WinINet `ProxyEnable` / `ProxyServer` under HKCU, read only), or a manual `host:port`.
+
+- HTTPS only through `CONNECT`; the request inside the tunnel keeps full TLS verification against the original hostname. Plain-HTTP proxying of requests is not allowed.
+- The client sends `CONNECT <hostname>:443` and the proxy resolves the name (owner decision 2026-10-22: where Anime1 is blocked, local DNS is often blocked too, and rule-based proxy tools route by name). Only while a proxy is in use, the SSRF IP check above is replaced by the proxy's resolution; the hostname must still pass the origin allowlist or the resolver's playback-origin policy, HTTPS and full TLS verification. A destination written as an IP literal is still checked against the SSRF rules. Without a proxy the SSRF rules apply unchanged.
+- The proxy address itself is exempt from the SSRF block list, because local proxy tools listen on loopback or LAN. Only that one configured address and port is exempt, and it is used only as the proxy hop.
+- Origin allowlists and redirect rules are unchanged.
+- No proxy credentials, PAC files or SOCKS. A manual address must be a host name or IP plus a port; anything with a scheme, user information, path or spaces is rejected. The proxy address is never logged in diagnostics or failure logs.
+- The Windows system proxy is read as `host:port`, `http://host:port` (no path) or a `http=...;https=...` list; a host without a port means port 80, as in WinINet. If the Windows system proxy is unusable (SOCKS, PAC, unreadable), the app connects directly; 測試連線 shows this. When both a PAC script and a static proxy are set, the app uses the static proxy; it does not run PAC scripts.
+
+## Update check (Loop 37)
+
+`檢查更新` is the only update check. It runs only when the user presses it and asks `https://api.github.com` for the releases of `loustack17/AnimePortable` through the secure client (allowlisted origin, bounded body). It never downloads or runs anything; it shows the version and can open the release page in the default browser.
+
 ## Redirect policy
 
 Do not auto-follow blindly. For each redirect: parse the destination, apply protocol policy, apply host policy, resolve, apply the SSRF policy, then continue. A legal source redirecting to localhost or a private IP is blocked. Do not forward sensitive headers to unrelated origins.
 
 ## Domain policy
 
-Use explicit origin allowlists for the Anime1 site and API, the AniList API and the Bangumi API. Playback CDN origins may be dynamic but must satisfy HTTPS, valid TLS, public IP, acceptable redirects and an expected media response. Unknown playback origins fail closed unless resolver policy approves them.
+Use explicit origin allowlists for the Anime1 site and API, the AniList API, the Bangumi API and, for the update check only, the GitHub API. Playback CDN origins may be dynamic but must satisfy HTTPS, valid TLS, public IP, acceptable redirects and an expected media response. Unknown playback origins fail closed unless resolver policy approves them.
 
 ## Remote HTML
 

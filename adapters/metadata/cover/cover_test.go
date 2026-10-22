@@ -302,7 +302,7 @@ func TestCloseIdleConnectionsAndNewLifecycle(t *testing.T) {
 	if client.closes != 1 {
 		t.Fatal(client.closes)
 	}
-	created, err := New()
+	created, err := New(nil)
 	if err != nil || created == nil {
 		t.Fatal(created, err)
 	}

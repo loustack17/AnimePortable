@@ -35,6 +35,11 @@ type endFixture struct {
 
 func newEndFixture(t *testing.T) *endFixture {
 	t.Helper()
+	return newEndFixtureWith(t, fltkengine.Options{HardwareDecoding: true})
+}
+
+func newEndFixtureWith(t *testing.T, options fltkengine.Options) *endFixture {
+	t.Helper()
 	runtime.LockOSThread()
 	if !fltk.Lock() {
 		runtime.UnlockOSThread()
@@ -62,7 +67,7 @@ func newEndFixture(t *testing.T) *endFixture {
 	newContext, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	engine, err := pumpFLTKResult(t, 15*time.Second, func() (*fltkengine.Engine, error) {
-		return fltkengine.New(newContext, view.Video())
+		return fltkengine.New(newContext, view.Video(), options)
 	})
 	if err != nil {
 		t.Fatalf("create engine: %v", err)
@@ -80,10 +85,15 @@ func newEndFixture(t *testing.T) *endFixture {
 
 func (fixture *endFixture) load(path string, startAt time.Duration, generation uint64) {
 	fixture.t.Helper()
+	fixture.loadWithPause(path, startAt, false, generation)
+}
+
+func (fixture *endFixture) loadWithPause(path string, startAt time.Duration, paused bool, generation uint64) {
+	fixture.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	if err := pumpFLTKError(fixture.t, 10*time.Second, func() error {
-		return fixture.engine.Load(ctx, path, startAt, generation)
+		return fixture.engine.Load(ctx, path, startAt, paused, generation)
 	}); err != nil {
 		fixture.t.Fatalf("load generation %d: %v", generation, err)
 	}
@@ -145,6 +155,31 @@ func TestEngineDoesNotReportEndOfReplacedOrFailedLoads(t *testing.T) {
 	fltkWaitFor(2 * time.Second)
 	if !slices.Equal(fixture.ends, []uint64{2}) {
 		t.Fatalf("end handler calls = %v after a failed load, want [2]", fixture.ends)
+	}
+}
+
+func TestEnginePausedLoadWaitsAtItsStartAndTheNextLoadPlays(t *testing.T) {
+	fixture := newEndFixture(t)
+	const start = 10 * time.Second
+	var position, duration time.Duration
+	fixture.engine.SetStateHandler(func(p, d time.Duration, _ bool, _ int) { position, duration = p, d })
+
+	fixture.loadWithPause(fixture.media, start, true, 1)
+	if !pumpUntil(t, endWait, func() bool { return duration > 0 }) {
+		t.Fatal("paused load never reported a duration")
+	}
+	fltkWaitFor(2 * time.Second)
+	snapshot := fixture.snapshot()
+	if !snapshot.Paused || position != start || snapshot.Position != start {
+		t.Fatalf("paused load: paused=%t state position=%s snapshot position=%s, want paused at %s", snapshot.Paused, position, snapshot.Position, start)
+	}
+
+	fixture.load(fixture.media, start, 2)
+	if !pumpUntil(t, endWait, func() bool { return position > start+time.Second }) {
+		t.Fatalf("a normal load after a paused one stayed at %s", position)
+	}
+	if snapshot := fixture.snapshot(); snapshot.Paused {
+		t.Fatal("a normal load after a paused one reports paused")
 	}
 }
 

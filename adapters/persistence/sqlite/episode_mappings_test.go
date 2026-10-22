@@ -126,8 +126,8 @@ func TestEpisodeMappingsUpgradeFromInitialSchema(t *testing.T) {
 	if err := store.db.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&migrations); err != nil {
 		t.Fatal(err)
 	}
-	if migrations != 6 {
-		t.Fatalf("upgraded migration count = %d, want 6", migrations)
+	if migrations != 9 {
+		t.Fatalf("upgraded migration count = %d, want 9", migrations)
 	}
 	if _, err := store.db.Exec("SELECT 1 FROM episode_mappings LIMIT 1"); err != nil {
 		t.Fatalf("upgraded mapping table unavailable: %v", err)

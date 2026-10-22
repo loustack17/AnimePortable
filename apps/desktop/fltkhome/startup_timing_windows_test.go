@@ -56,12 +56,12 @@ func TestNativeOfflineStartupTiming(t *testing.T) {
 	began := time.Now()
 	window := fltk.NewWindow(1000, 618, "Startup timing")
 	ui := &view{window: window, service: offlineService{service}, plan: backend.PortablePlan{DatabasePath: databasePath, TargetExists: true}, ctx: ctx, cancelContext: cancel}
-	ui.appearance = newAppearancePersistence(ui.service, nil)
+	ui.settingsWriter = newSettingsWriter(ui.service, nil, nil)
 	ui.build()
 	window.Show()
 	t.Cleanup(func() {
 		ui.searchModel.close()
-		_ = ui.appearance.close()
+		_ = ui.settingsWriter.close()
 		cancel()
 		_ = service.Close()
 		window.Hide()

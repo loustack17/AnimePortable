@@ -260,7 +260,10 @@ func (ui *view) searchInputKey(command keyCommand, ctrl bool) bool {
 }
 
 // scrollIntoView scrolls scroll vertically so button, one of its children, is fully visible.
-func scrollIntoView(scroll *fltk.Scroll, button *fltk.Button) {
+func scrollIntoView(scroll *fltk.Scroll, button interface {
+	Y() int
+	H() int
+}) {
 	top, bottom := scroll.Y(), scroll.Y()+scroll.H()
 	if button.Y() < top {
 		scroll.ScrollTo(scroll.XPosition(), max(0, scroll.YPosition()+button.Y()-top))

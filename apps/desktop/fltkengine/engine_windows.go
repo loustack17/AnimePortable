@@ -51,6 +51,7 @@ type Engine struct {
 	failed           bool
 	seekPending      bool
 	seekStarted      bool
+	speedPercent     int
 	diagnostics      *playbackDiagnostics
 	diagnosticsTicks uint8
 	onState          func(time.Duration, time.Duration, bool, int)
@@ -60,7 +61,42 @@ type Engine struct {
 	closeOnce        sync.Once
 }
 
-func New(ctx context.Context, video *fltk.GlWindow) (*Engine, error) {
+// Options are the settings an engine is built with. They are fixed for its lifetime: mpv
+// reads hwdec once at initialization, which is why the setting applies the next time the
+// player opens.
+type Options struct {
+	HardwareDecoding bool
+}
+
+// environmentProxyAllowed lifts the direct-connection option so a test can show what the
+// option prevents. Nothing outside tests sets it.
+var environmentProxyAllowed bool
+
+// InitOptions lists the mpv options set before initialization.
+//
+// mpv fetches the stream from the local playback proxy at 127.0.0.1, and that URL carries the
+// session token. FFmpeg, inside libmpv, sends HTTP requests through the proxy named by the
+// http_proxy environment variable, which would hand the URL and its token to whatever proxy the
+// user's environment names. An explicit empty http_proxy option takes precedence over the
+// variable, so every stream connects directly. The app's own forward proxy setting is separate
+// and applies to the local proxy's upstream requests only. Changing the variable from Go at run
+// time is not a reliable alternative: the C runtime inside libmpv takes its own snapshot of the
+// environment.
+func InitOptions(options Options) [][2]string {
+	hwdec := "no"
+	if options.HardwareDecoding {
+		hwdec = "auto"
+	}
+	result := [][2]string{{"config", "no"}, {"vo", "libmpv"}, {"hwdec", hwdec}, {"demuxer-max-bytes", "16MiB"}, {"cache-secs", "5"}}
+	// HLS segment requests go through the demuxer, which stream-lavf-o does not reach; if .m3u8 is
+	// ever accepted (the resolver rejects it today), demuxer-lavf-o needs the same empty http_proxy.
+	if !environmentProxyAllowed {
+		result = append(result, [2]string{"stream-lavf-o", "http_proxy="})
+	}
+	return result
+}
+
+func New(ctx context.Context, video *fltk.GlWindow, options Options) (*Engine, error) {
 	if video == nil {
 		return nil, libmpv.ErrPlayerFailed
 	}
@@ -82,8 +118,7 @@ func New(ctx context.Context, video *fltk.GlWindow) (*Engine, error) {
 		if err != nil {
 			return libmpv.ErrPlayerFailed
 		}
-		options := [][2]string{{"config", "no"}, {"vo", "libmpv"}, {"hwdec", "auto"}, {"demuxer-max-bytes", "16MiB"}, {"cache-secs", "5"}}
-		for _, option := range options {
+		for _, option := range InitOptions(options) {
 			if err := core.SetOptionString(option[0], option[1]); err != nil {
 				core.TerminateDestroy()
 				return libmpv.ErrPlayerFailed
@@ -220,7 +255,31 @@ func (engine *Engine) isClosed() bool {
 	return engine.closed
 }
 
-func (engine *Engine) Load(ctx context.Context, url string, startAt time.Duration, generation uint64) error {
+// SetPlaybackSpeed sets the speed, in percent, every following load starts at. Zero leaves
+// mpv's own speed untouched.
+func (engine *Engine) SetPlaybackSpeed(percent int) {
+	engine.mu.Lock()
+	engine.speedPercent = percent
+	engine.mu.Unlock()
+}
+
+// loadCommand builds the loadfile command. pause and speed are set per file, so a load never
+// inherits the state of the file it replaces; speedPercent zero sets no speed.
+func loadCommand(url string, startAt time.Duration, paused bool, speedPercent int) []string {
+	options := "pause=no"
+	if paused {
+		options = "pause=yes"
+	}
+	if speedPercent > 0 {
+		options += ",speed=" + strconv.FormatFloat(float64(speedPercent)/100, 'f', -1, 64)
+	}
+	if startAt > 0 {
+		options += ",start=" + strconv.FormatFloat(startAt.Seconds(), 'f', 3, 64)
+	}
+	return []string{"loadfile", url, "replace", "-1", options}
+}
+
+func (engine *Engine) Load(ctx context.Context, url string, startAt time.Duration, paused bool, generation uint64) error {
 	return dispatch(ctx, func() error {
 		if engine.isClosed() {
 			return ErrClosed
@@ -235,17 +294,17 @@ func (engine *Engine) Load(ctx context.Context, url string, startAt time.Duratio
 			engine.applyProperty(event)
 			engine.mu.Unlock()
 		}
-		command := []string{"loadfile", url, "replace"}
-		if startAt > 0 {
-			command = append(command, "-1", "start="+strconv.FormatFloat(startAt.Seconds(), 'f', 3, 64))
-		}
-		if err := engine.core.Command(command); err != nil {
+		engine.mu.Lock()
+		speedPercent := engine.speedPercent
+		engine.mu.Unlock()
+		if err := engine.core.Command(loadCommand(url, startAt, paused, speedPercent)); err != nil {
 			return libmpv.ErrPlayerFailed
 		}
 		engine.mu.Lock()
 		engine.generation = generation
 		engine.position = startAt
 		engine.duration = 0
+		engine.paused = paused
 		engine.pending = true
 		engine.pendingStarted = false
 		engine.ended = false
@@ -693,6 +752,16 @@ func (engine *Engine) Control(ctx context.Context, command string, value int) er
 			return engine.seek(0, "absolute")
 		case "volume":
 			return engine.core.SetProperty("volume", mpv.FormatDouble, float64(value))
+		case "speed":
+			// Percent. Kept for later loads too, so the next episode starts at this speed.
+			if value <= 0 {
+				return libmpv.ErrPlayerFailed
+			}
+			if err := engine.core.SetProperty("speed", mpv.FormatDouble, float64(value)/100); err != nil {
+				return err
+			}
+			engine.SetPlaybackSpeed(value)
+			return nil
 		default:
 			return libmpv.ErrPlayerFailed
 		}

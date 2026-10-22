@@ -106,9 +106,9 @@ func isScroll(group *fltk.Group, scroll *fltk.Scroll) bool {
 // checkLayout checks every shown child of the window's groups.
 func checkLayout(t *testing.T, ui *view) {
 	t.Helper()
-	scrolls := []*fltk.Scroll{ui.scroll, ui.searchScroll, ui.previewEpisodes, ui.followingScroll, ui.historyScroll, ui.scheduleScroll}
+	scrolls := []*fltk.Scroll{ui.scroll, ui.searchScroll, ui.previewEpisodes, ui.followingScroll, ui.historyScroll, ui.scheduleScroll, ui.settingsScroll}
 	groups := []*fltk.Group{&ui.window.Group, ui.mainGroup, ui.startupGroup, ui.navigation[0].Parent(), ui.searchPage, ui.previewGroup,
-		ui.followingPage, ui.historyPage, ui.schedulePage}
+		ui.followingPage, ui.historyPage, ui.schedulePage, ui.settingsPage}
 	for _, scroll := range scrolls {
 		groups = append(groups, &scroll.Group)
 	}
@@ -150,9 +150,6 @@ func TestNativeWindowLayoutFollowsResizeAndAcceptsClicks(t *testing.T) {
 		}
 		if ui.sectionTitle.X() != 252 || ui.sectionTitle.Y() != 35 || ui.sectionTitle.W() != min(580, width-272) || ui.message.X() != 280 || ui.message.X()+ui.message.W() != width-30 {
 			t.Errorf("window %dx%d: title at %d,%d w=%d, message %d..%d", width, height, ui.sectionTitle.X(), ui.sectionTitle.Y(), ui.sectionTitle.W(), ui.message.X(), ui.message.X()+ui.message.W())
-		}
-		if ui.themeToggle.Y() != 18 || ui.themeToggle.X()+ui.themeToggle.W() != width-30 {
-			t.Errorf("window %dx%d: theme toggle ends at x=%d, want %d", width, height, ui.themeToggle.X()+ui.themeToggle.W(), width-30)
 		}
 
 		ui.showSection(0)
@@ -197,7 +194,23 @@ func TestNativeWindowLayoutFollowsResizeAndAcceptsClicks(t *testing.T) {
 		checkLayout(t, ui)
 		checkPressReaches(t, ui, "重新整理", ui.scheduleRefresh)
 
-		ui.showSection(5)
+		ui.showSection(settingsSection)
 		checkLayout(t, ui)
+		for _, control := range []struct {
+			name   string
+			widget *fltk.Button
+		}{
+			{"設定 主題 明亮", ui.themeControl.buttons[2]},
+			{"設定 從上次位置繼續播放", ui.settingsToggles[2].button},
+			{"設定 代理伺服器 手動", ui.proxyControl.buttons[2]},
+			{"設定 測試連線", ui.proxyTest.button},
+			{"設定 變更位置", ui.dataChange.button},
+			{"設定 檢查更新", ui.updateCheck.button},
+			{"設定 GitHub 專案頁", ui.projectOpen.button},
+		} {
+			// A row below the fold is scrolled into view first, as keyboard focus does.
+			scrollIntoView(ui.settingsScroll, control.widget)
+			checkPressReaches(t, ui, control.name, control.widget)
+		}
 	}
 }

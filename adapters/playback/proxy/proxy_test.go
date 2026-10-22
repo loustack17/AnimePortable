@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"animeportable/adapters/network/forwardproxy"
 	"animeportable/adapters/network/securehttp"
 	"animeportable/core"
 )
@@ -1283,5 +1284,36 @@ func TestUpstreamFailureObserverIgnoresCanceledRequests(t *testing.T) {
 	defer mu.Unlock()
 	if len(seen) != 1 || seen[0] != 0 {
 		t.Fatalf("network failure calls = %v", seen)
+	}
+}
+
+// A closed loopback port is a proxy nobody listens on: the default upstream client must try it
+// (and fail as a proxy failure) instead of resolving the destination itself.
+func TestDefaultUpstreamClientsUseTheConfiguredForwardProxy(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	listener.Close()
+	source := forwardproxy.New()
+	source.Set(core.ProxyModeManual, address)
+	server, err := newServer(Config{Proxy: source.Address}, serverDeps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	remote, err := server.deps.remoteFactory("https://media.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodGet, "https://media.example/video.mp4", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = remote.Open(request)
+	var secure *securehttp.Error
+	if !errors.As(err, &secure) || secure.Kind != securehttp.KindProxy {
+		t.Fatalf("Open error = %v, want a proxy failure", err)
 	}
 }

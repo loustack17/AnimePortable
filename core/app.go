@@ -34,11 +34,14 @@ func (app *App) Search(ctx context.Context, query string) ([]SourceAnime, error)
 	return app.source.Search(ctx, query)
 }
 
-func (app *App) PlayEpisode(ctx context.Context, animeID AnimeID, episodeID EpisodeID, ref EpisodeRef, startAt time.Duration) (PlaybackSession, error) {
+// PlayEpisode starts a player for the episode. paused makes it wait at its start position
+// instead of playing.
+func (app *App) PlayEpisode(ctx context.Context, animeID AnimeID, episodeID EpisodeID, ref EpisodeRef, startAt time.Duration, paused bool) (PlaybackSession, error) {
 	request, err := app.preparePlayRequest(ctx, animeID, episodeID, ref, startAt)
 	if err != nil {
 		return nil, err
 	}
+	request.Paused = paused
 	raw, err := app.player.Start(ctx, request)
 	if err != nil {
 		return nil, err
@@ -54,13 +57,17 @@ func (app *App) PlayEpisode(ctx context.Context, animeID AnimeID, episodeID Epis
 	return tracked, nil
 }
 
-func (app *App) SwitchEpisode(ctx context.Context, session PlaybackSession, animeID AnimeID, episodeID EpisodeID, ref EpisodeRef, startAt time.Duration) error {
+// SwitchEpisode loads another episode into session. paused makes it wait at its start
+// position instead of playing; only the autoplay switch asks for that.
+func (app *App) SwitchEpisode(ctx context.Context, session PlaybackSession, animeID AnimeID, episodeID EpisodeID, ref EpisodeRef, startAt time.Duration, paused bool) error {
 	tracked, ok := session.(*trackedPlaybackSession)
 	if !ok || tracked == nil {
 		return ErrPlaybackTracking
 	}
 	return tracked.switchEpisode(ctx, func(operationCtx context.Context) (PlayRequest, error) {
-		return app.preparePlayRequest(operationCtx, animeID, episodeID, ref, startAt)
+		request, err := app.preparePlayRequest(operationCtx, animeID, episodeID, ref, startAt)
+		request.Paused = paused
+		return request, err
 	})
 }
 
@@ -136,7 +143,7 @@ func playbackResumePosition(ctx context.Context, store Store, animeID AnimeID, e
 	if err != nil {
 		return 0, err
 	}
-	if settings.ResumePlayback != ToggleEnabled {
+	if settings.Resolved().ResumePlayback != ToggleEnabled {
 		return 0, nil
 	}
 	progress, err := store.Progress(ctx, animeID, episodeID)

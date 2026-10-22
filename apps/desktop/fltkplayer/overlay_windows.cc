@@ -56,7 +56,7 @@ static void focus(int current, int target, float x, float y, float w, float h) {
     line(x + w, y + h, x, y + h); line(x, y + h, x, y);
 }
 
-extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int thumb_top, int thumb_height, int resolution, int loading, int progress_hover, int scrubbing, int follow_known, int following, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels) {
+extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int thumb_top, int thumb_height, int resolution, int loading, int progress_hover, int scrubbing, int follow_known, int following, int speed_open, int speed_index, int speed_cursor, int speed_count, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels, const char* speed_labels) {
     if (!visible && !menu && !episodes) return;
     GLint oldMatrix = GL_MODELVIEW;
     glGetIntegerv(GL_MATRIX_MODE, &oldMatrix);
@@ -128,6 +128,15 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
         std::snprintf(positionLabel, sizeof(positionLabel), "%02d:%02d / %02d:%02d", now / 60, now % 60, total / 60, total % 60);
         ink(0.8f, 0.84f, 0.94f); label(positionLabel, volume_open ? 410 : 286, static_cast<int>(mid + 5), 12);
     }
+    // Mirrors speedButtonLeftInset/speedButtonRightInset in speed_list_windows.go: 64 px wide, 12 px left of fullscreen.
+    {
+        std::string speedText = itemAt(speed_labels, speed_index);
+        ink(0.15f, 0.19f, 0.29f, 0.92f); box(width - 127, mid - 18, 64, 36);
+        ink(1, 1, 1);
+        // The multiplication sign is two bytes in UTF-8, so the visible characters are one fewer.
+        label(speedText.c_str(), width - 95 - (static_cast<int>(speedText.size()) - 1) * 4, static_cast<int>(mid + 5), 14);
+        focus(selected, 10, width - 127, mid - 18, 64, 36);
+    }
     ink(1, 1, 1);
     icon(fullscreen ? u8"\uE73F" : u8"\uE740", width - 47, static_cast<int>(mid + 9), 24);
     focus(selected, 8, width - 51, mid - 18, 36, 36);
@@ -141,6 +150,22 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
             if (selected == 0 && menu_cursor == i) { ink(0.22f, 0.27f, 0.44f); box(8, 72 + i * 46, 164, 39); ink(1, 1, 1); }
             std::string item = itemAt(menu_labels, i);
             label(item.c_str(), 26, 97 + i * 46, 15);
+        }
+    }
+    if (speed_open) {
+        // Geometry mirrors speed_list_windows.go: 84 px wide, right edge aligned with the button, 92 px above the window bottom.
+        const int count = speed_count, rowHeight = 34, listWidth = 84, left = width - 63 - listWidth;
+        const int top = height - 92 - (count * rowHeight + 8);
+        ink(0.04f, 0.06f, 0.11f, 0.95f); box(left, top, listWidth, count * rowHeight + 8);
+        for (int i = 0; i < count; ++i) {
+            if (i == speed_cursor) { ink(0.22f, 0.27f, 0.44f); box(left + 5, top + 4 + rowHeight * i, listWidth - 10, rowHeight - 2); }
+            if (i == speed_index) {
+                ink(0.59f, 0.67f, 1); box(left + 5, top + 4 + rowHeight * i, 3, rowHeight - 2);
+            } else {
+                ink(1, 1, 1);
+            }
+            std::string item = itemAt(speed_labels, i);
+            label(item.c_str(), left + 15, top + 26 + rowHeight * i, 14);
         }
     }
     if (episodes) {

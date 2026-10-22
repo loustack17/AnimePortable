@@ -27,6 +27,7 @@ type autoplayTestPlayer struct {
 	view           uint64 // bumped by every user action and autoplay switch
 	playingID      string
 	advanced       []int
+	advancedPaused []bool
 	finished       int
 	failures       int
 	failedCallback func()
@@ -37,7 +38,7 @@ type autoplayTestPlayer struct {
 // updates are queued; run drains both, and a test can run them one by one to replay a race.
 func newAutoplayTest() (*playerAutoplay, *autoplayTestPlayer, func()) {
 	player := &autoplayTestPlayer{
-		settings:   &autoplayTestSettings{value: backend.Settings{AutoplayNext: "enabled"}},
+		settings:   &autoplayTestSettings{value: backend.Settings{AutoplayNext: "enabled", AutoPlay: "enabled"}},
 		generation: 7,
 		view:       1,
 		playingID:  "b",
@@ -53,8 +54,9 @@ func newAutoplayTest() (*playerAutoplay, *autoplayTestPlayer, func()) {
 			return []backend.Episode{{ID: "a"}, {ID: "b"}, {ID: "c"}}
 		},
 		playing: func() string { return player.playingID },
-		advance: func(index int, failed func()) {
+		advance: func(index int, paused bool, failed func()) {
 			player.advanced = append(player.advanced, index)
+			player.advancedPaused = append(player.advancedPaused, paused)
 			player.failedCallback = failed
 		},
 		finish: func() { player.finished++ },
@@ -95,6 +97,30 @@ func TestPlayerAutoplayAdvancesToTheNextOrderedEpisode(t *testing.T) {
 	}
 }
 
+func TestPlayerAutoplayLoadsThePlayingOrPausedByAutoPlay(t *testing.T) {
+	for name, test := range map[string]struct {
+		autoPlay   string
+		wantPaused bool
+	}{
+		"auto play on":  {autoPlay: "enabled"},
+		"auto play off": {autoPlay: "disabled", wantPaused: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			autoplay, player, run := newAutoplayTest()
+			player.settings.value = backend.Settings{AutoplayNext: "enabled", AutoPlay: test.autoPlay}
+			autoplay.ended(7)
+			run()
+			requireAutoplayCounts(t, player, 1, 0, 0)
+			if len(player.advancedPaused) != 1 || player.advancedPaused[0] != test.wantPaused {
+				t.Fatalf("advanced paused = %v, want [%t]", player.advancedPaused, test.wantPaused)
+			}
+			if player.settings.reads != 1 {
+				t.Fatalf("settings reads = %d, want 1", player.settings.reads)
+			}
+		})
+	}
+}
+
 func TestPlayerAutoplayFinishesAtTheLastEpisode(t *testing.T) {
 	autoplay, player, run := newAutoplayTest()
 	player.playingID = "c"
@@ -108,8 +134,9 @@ func TestPlayerAutoplayFinishesAtTheLastEpisode(t *testing.T) {
 
 func TestPlayerAutoplayFinishesWhenDisabledOrSettingsUnreadable(t *testing.T) {
 	for name, settings := range map[string]autoplayTestSettings{
-		"disabled":   {value: backend.Settings{AutoplayNext: "disabled"}},
-		"unreadable": {value: backend.Settings{AutoplayNext: "enabled"}, err: errors.New("database locked")},
+		"disabled":                    {value: backend.Settings{AutoplayNext: "disabled", AutoPlay: "enabled"}},
+		"disabled with auto play off": {value: backend.Settings{AutoplayNext: "disabled", AutoPlay: "disabled"}},
+		"unreadable":                  {value: backend.Settings{AutoplayNext: "enabled", AutoPlay: "enabled"}, err: errors.New("database locked")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			autoplay, player, run := newAutoplayTest()

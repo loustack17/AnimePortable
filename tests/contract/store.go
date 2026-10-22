@@ -204,9 +204,13 @@ func RunStore(t *testing.T, suite StoreSuite) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		requireValid(t, equal(actual, core.DefaultSettings()))
-		settings := core.DefaultSettings()
-		settings.Language = core.LanguageTraditionalChinese
+		requireValid(t, equal(actual, core.Settings{}))
+		settings := core.Settings{
+			Appearance: core.AppearanceDark, AutoplayNext: core.ToggleDisabled, AutoPlay: core.ToggleEnabled,
+			ResumePlayback: core.ToggleDisabled, Language: core.LanguageTraditionalChinese,
+			PlaybackSpeed: 125, HardwareDecoding: core.ToggleDisabled,
+			ProxyMode: core.ProxyModeManual, ProxyAddress: "[::1]:3128",
+		}
 		if err := store.SaveSettings(ctx, settings); err != nil {
 			t.Fatal(err)
 		}

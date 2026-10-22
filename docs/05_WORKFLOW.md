@@ -81,7 +81,7 @@ Use TypeSafe for judgment steps it can answer: failure classification, CI log re
 
 Each release needs the owner's approval for the tag and the publication.
 
-1. Write the release notes in `docs/releases/<tag>.md` (Traditional Chinese, for users): what works, how to run it, known limits. Commit them before tagging.
+1. Write the release notes in `docs/releases/<tag>.md` (Traditional Chinese, for users): what works, how to run it, known limits. Set the app's version constant (`internal/release`, used by 檢查更新) to the tag without the `v`. Commit both before tagging.
 2. Push an annotated tag `v<version>` on a commit whose CI is green. The `release` job in `.github/workflows/ci.yml` runs only for `v*` tags and only after the Windows job passes. It reuses that job's executable, downloads the libmpv archive named in `LIBMPV_RUNTIME_NOTICE.txt` (archive SHA-256 pinned), packages `AnimePortable-<tag>-windows-amd64.zip` with `apps/desktop/build/windows/package.ps1` (DLL checked against `internal/runtimepin`), and creates a GitHub pre-release titled with the tag alone.
 3. Download the published ZIP, check its files and the DLL hash, unzip it to a new folder and start it. Then ask the owner to try it, and record the result in the loop file.
 

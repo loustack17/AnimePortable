@@ -11,6 +11,32 @@ type palette struct {
 	muted      fltk.Color
 	accent     fltk.Color
 	soft       fltk.Color
+	// onAccent is the text colour on an accent-filled button.
+	onAccent fltk.Color
+	// success and danger colour a result's text on surface; the words stay, so colour is never
+	// the only signal. Both reach 4.5:1 against surface.
+	success fltk.Color
+	danger  fltk.Color
+}
+
+// statusTone is how a status line reads: neutral progress or hint, a success, or a failure.
+type statusTone uint8
+
+const (
+	toneNeutral statusTone = iota
+	toneSuccess
+	toneFailure
+)
+
+// toneColor is the text colour of a status line of tone on a card.
+func toneColor(colors palette, tone statusTone) fltk.Color {
+	switch tone {
+	case toneSuccess:
+		return colors.success
+	case toneFailure:
+		return colors.danger
+	}
+	return colors.muted
 }
 
 type themedLabel struct {
@@ -36,6 +62,9 @@ var lightPalette = palette{
 	muted:      fltk.ColorFromRgb(105, 116, 136),
 	accent:     fltk.ColorFromRgb(80, 91, 224),
 	soft:       fltk.ColorFromRgb(235, 238, 255),
+	onAccent:   fltk.ColorFromRgb(255, 255, 255),
+	success:    fltk.ColorFromRgb(21, 128, 61),
+	danger:     fltk.ColorFromRgb(185, 28, 28),
 }
 
 var darkPalette = palette{
@@ -45,6 +74,9 @@ var darkPalette = palette{
 	muted:      fltk.ColorFromRgb(166, 176, 199),
 	accent:     fltk.ColorFromRgb(160, 170, 255),
 	soft:       fltk.ColorFromRgb(48, 57, 87),
+	onAccent:   fltk.ColorFromRgb(17, 22, 35),
+	success:    fltk.ColorFromRgb(74, 222, 128),
+	danger:     fltk.ColorFromRgb(252, 129, 129),
 }
 
 func roundedRect(x, y, width, height, radius int, color fltk.Color) {
@@ -90,11 +122,7 @@ func (ui *view) styleButton(button *fltk.Button, selected func() bool) {
 }
 
 func (ui *view) applyTheme() {
-	if ui.dark {
-		ui.themeToggle.SetTooltip("切換明亮")
-	} else {
-		ui.themeToggle.SetTooltip("切換暗色")
-	}
+	shownDark = ui.dark
 	colors := ui.colors()
 	if ui.dark {
 		fltk.SetBackgroundColor(17, 22, 35)
@@ -129,8 +157,17 @@ func (ui *view) applyTheme() {
 	for _, button := range ui.navigation {
 		button.Redraw()
 	}
-	ui.themeToggle.Redraw()
 	ui.retryButton.Redraw()
+	if ui.settingsScroll != nil {
+		ui.settingsScroll.SetColor(colors.background)
+		ui.settingsNotice.SetLabelColor(colors.muted)
+		for _, heading := range ui.settingsHeadings {
+			heading.SetLabelColor(colors.ink)
+		}
+		ui.proxyField.input.SetColor(colors.background)
+		ui.proxyField.input.SetLabelColor(colors.ink)
+		ui.settingsScroll.Redraw()
+	}
 	if ui.searchInput != nil {
 		ui.searchInput.SetColor(colors.surface)
 		ui.searchInput.SetLabelColor(colors.ink)

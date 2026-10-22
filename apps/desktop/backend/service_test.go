@@ -33,7 +33,7 @@ type fakeStore struct {
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{anime: map[core.AnimeID]core.Anime{}, refs: map[core.AnimeID][]core.SourceRef{}, mappings: map[core.AnimeID][]core.EpisodeMapping{}, following: map[core.AnimeID]bool{}, metadata: map[core.AnimeID]core.AnimeMetadata{}, settings: core.DefaultSettings()}
+	return &fakeStore{anime: map[core.AnimeID]core.Anime{}, refs: map[core.AnimeID][]core.SourceRef{}, mappings: map[core.AnimeID][]core.EpisodeMapping{}, following: map[core.AnimeID]bool{}, metadata: map[core.AnimeID]core.AnimeMetadata{}, settings: core.Settings{}}
 }
 func (s *fakeStore) wait(ctx context.Context) error {
 	if s.block {
@@ -420,13 +420,48 @@ func TestFollowFollowingHistorySettingsSchedule(t *testing.T) {
 		t.Error("following called source")
 	}
 	src.mu.Unlock()
-	settings := Settings{Appearance: "dark", AutoplayNext: "enabled", ResumePlayback: "disabled", Language: "zh-TW"}
+	unset, e := s.Settings(context.Background())
+	if want := (Settings{Appearance: "system", AutoplayNext: "enabled", AutoPlay: "enabled", ResumePlayback: "enabled", Language: "unspecified", PlaybackSpeed: 100, HardwareDecoding: "enabled", ProxyMode: "none"}); e != nil || unset != want {
+		t.Fatalf("unset settings %+v %v, want resolved defaults %+v", unset, e, want)
+	}
+	settings := Settings{Appearance: "dark", AutoplayNext: "enabled", AutoPlay: "disabled", ResumePlayback: "disabled", Language: "zh-TW", HardwareDecoding: "disabled", ProxyMode: "manual", ProxyAddress: "proxy.example:8080"}
 	if e = s.SaveSettings(context.Background(), settings); e != nil {
 		t.Fatal(e)
 	}
+	settings.PlaybackSpeed = 100 // resolved: the page never chose one
 	saved, e := s.Settings(context.Background())
 	if e != nil || saved != settings {
 		t.Fatalf("settings %+v %v", saved, e)
+	}
+	// The player owns the speed: it survives a page save, and the page cannot set it.
+	if e = s.SavePlaybackSpeed(context.Background(), 150); e != nil {
+		t.Fatal(e)
+	}
+	settings.AutoPlay, settings.PlaybackSpeed = "enabled", 125
+	if e = s.SaveSettings(context.Background(), settings); e != nil {
+		t.Fatal(e)
+	}
+	settings.PlaybackSpeed = 150
+	if saved, e = s.Settings(context.Background()); e != nil || saved != settings {
+		t.Fatalf("settings after speed %+v %v, want %+v", saved, e, settings)
+	}
+	for _, percent := range []int{0, 110, -100, 300} {
+		if e = s.SavePlaybackSpeed(context.Background(), percent); e != ErrInvalidInput {
+			t.Errorf("speed %d error = %v", percent, e)
+		}
+	}
+	if e = s.SaveSettings(context.Background(), Settings{AutoPlay: "sometimes"}); e != ErrInvalidInput {
+		t.Errorf("invalid autoPlay error = %v", e)
+	}
+	for name, invalid := range map[string]Settings{
+		"hardware":       {HardwareDecoding: "auto"},
+		"proxy mode":     {ProxyMode: "socks"},
+		"proxy address":  {ProxyMode: "manual", ProxyAddress: "http://proxy.example:8080"},
+		"proxy userinfo": {ProxyMode: "manual", ProxyAddress: "user@proxy.example:8080"},
+	} {
+		if e = s.SaveSettings(context.Background(), invalid); e != ErrInvalidInput {
+			t.Errorf("invalid %s error = %v", name, e)
+		}
 	}
 	now := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
 	h := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: "a", EpisodeID: "e", Position: 1500 * time.Millisecond, Duration: 3 * time.Second, Completed: true, UpdatedAt: now}, LastPlayedAt: now}
@@ -458,7 +493,7 @@ func TestPlayAndCoverValidation(t *testing.T) {
 	if e := s.Play(context.Background(), PlayRequest{AnimeID: "a", EpisodeID: "e"}); e != ErrUnavailable {
 		t.Errorf("play error %v", e)
 	}
-	s.cover, _ = cover.New()
+	s.cover, _ = cover.New(nil)
 	if _, e := s.GetCover(context.Background(), "a"); e != core.ErrNotFound {
 		t.Errorf("cover metadata error %v", e)
 	}
@@ -544,5 +579,14 @@ func TestOrderEpisodesSortsByNumberAndKeepsSpecialsAfter(t *testing.T) {
 	}
 	if strings.Join(got, ",") != "a,b,c,d,sp" {
 		t.Fatalf("order = %v", got)
+	}
+}
+
+// The player is built from DefaultSettings before the first settings read, so these are the
+// values it starts with: hardware decoding on.
+func TestDefaultSettingsAreWhatThePlayerStartsWith(t *testing.T) {
+	got := DefaultSettings()
+	if got.HardwareDecoding != "enabled" || got.PlaybackSpeed != 100 || got.ProxyMode != "none" {
+		t.Fatalf("DefaultSettings() = %+v", got)
 	}
 }

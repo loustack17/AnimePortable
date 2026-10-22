@@ -360,7 +360,7 @@ func TestAppPlayEpisodeResolvesBeforeStartingPlayer(t *testing.T) {
 	app := NewApp(source, player, store)
 	ctx := context.WithValue(context.Background(), contextKey{}, "play")
 
-	actual, err := app.PlayEpisode(ctx, AnimeID("local-anime"), EpisodeID("local-episode"), ref, 90*time.Second)
+	actual, err := app.PlayEpisode(ctx, AnimeID("local-anime"), EpisodeID("local-episode"), ref, 90*time.Second, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +400,7 @@ func TestAppPlayEpisodeDoesNotStartPlayerWhenResolveFails(t *testing.T) {
 	store := &fakeStore{}
 	app := NewApp(&fakeSource{resolveErr: expected}, player, store)
 
-	_, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{}, 0)
+	_, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{}, 0, false)
 	if !errors.Is(err, expected) {
 		t.Fatalf("error = %v", err)
 	}
@@ -419,7 +419,7 @@ func TestAppPlayEpisodeDoesNotStartPlayerWhenMappingFails(t *testing.T) {
 	app := NewApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/episode.m3u8", nil)}, player, store)
 
 	ref := EpisodeRef{Anime: SourceRef{Provider: "source", ID: "anime"}, ID: "provider-episode"}
-	_, err := app.PlayEpisode(context.Background(), "anime", "episode", ref, 0)
+	_, err := app.PlayEpisode(context.Background(), "anime", "episode", ref, 0, false)
 	if !errors.Is(err, expected) {
 		t.Fatalf("error = %v", err)
 	}
@@ -441,7 +441,7 @@ func TestAppPlayEpisodeDoesNotSaveMappingOrStartWhenSourceRefFails(t *testing.T)
 	app := NewApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/episode.m3u8", nil)}, player, store)
 	ref := EpisodeRef{Anime: SourceRef{Provider: "source", ID: "anime"}, ID: "provider-episode"}
 
-	_, err := app.PlayEpisode(context.Background(), "anime", "episode", ref, 0)
+	_, err := app.PlayEpisode(context.Background(), "anime", "episode", ref, 0, false)
 	if !errors.Is(err, expected) {
 		t.Fatalf("error = %v", err)
 	}
@@ -463,7 +463,7 @@ func TestAppSwitchEpisodeResolvesAndLoadsCanonicalRequest(t *testing.T) {
 	app := NewApp(source, &fakePlayer{}, store)
 	ctx := context.WithValue(context.Background(), contextKey{}, "switch")
 
-	err := app.SwitchEpisode(ctx, trackFakeSession(t, session, store), AnimeID("local-anime"), EpisodeID("local-episode"), ref, 90*time.Second)
+	err := app.SwitchEpisode(ctx, trackFakeSession(t, session, store), AnimeID("local-anime"), EpisodeID("local-episode"), ref, 90*time.Second, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,13 +487,28 @@ func TestAppSwitchEpisodeResolvesAndLoadsCanonicalRequest(t *testing.T) {
 	}
 }
 
+func TestAppSwitchEpisodeForwardsPausedToTheLoad(t *testing.T) {
+	ref := EpisodeRef{Anime: SourceRef{Provider: "source", ID: "anime"}, ID: "episode"}
+	for _, paused := range []bool{true, false} {
+		session := &fakeSession{events: make(chan PlaybackEvent)}
+		store := &fakeStore{}
+		app := NewApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, &fakePlayer{}, store)
+		if err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", ref, 0, paused); err != nil {
+			t.Fatal(err)
+		}
+		if session.request.Paused != paused {
+			t.Fatalf("load paused = %t, want %t", session.request.Paused, paused)
+		}
+	}
+}
+
 func TestAppSwitchEpisodeDoesNotLoadWhenResolveFails(t *testing.T) {
 	expected := errors.New("resolve failed")
 	session := &fakeSession{events: make(chan PlaybackEvent)}
 	store := &fakeStore{}
 	app := NewApp(&fakeSource{resolveErr: expected}, &fakePlayer{}, store)
 
-	err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{}, 0)
+	err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{}, 0, false)
 	if !errors.Is(err, expected) {
 		t.Fatalf("error = %v", err)
 	}
@@ -509,7 +524,7 @@ func TestAppSwitchEpisodeDoesNotLoadWhenMappingFails(t *testing.T) {
 	app := NewApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/episode.m3u8", nil)}, &fakePlayer{}, store)
 
 	ref := EpisodeRef{Anime: SourceRef{Provider: "source", ID: "anime"}, ID: "provider-episode"}
-	err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", ref, 0)
+	err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", ref, 0, false)
 	if !errors.Is(err, expected) {
 		t.Fatalf("error = %v", err)
 	}
@@ -528,7 +543,7 @@ func TestAppSwitchEpisodeReturnsLoadFailureWithoutSourceDetails(t *testing.T) {
 	store := &fakeStore{}
 	app := NewApp(source, &fakePlayer{}, store)
 
-	err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if !errors.Is(err, loadErr) {
 		t.Fatalf("error = %v", err)
 	}
@@ -545,7 +560,7 @@ func TestAppSwitchEpisodeCancellationDoesNotLoad(t *testing.T) {
 	store := &fakeStore{}
 	app := NewApp(source, &fakePlayer{}, store)
 
-	err := app.SwitchEpisode(ctx, trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	err := app.SwitchEpisode(ctx, trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}
@@ -568,7 +583,7 @@ func TestAppSwitchEpisodeCancellationAfterResolveDoesNotLoad(t *testing.T) {
 	store := &fakeStore{}
 	app := NewApp(source, &fakePlayer{}, store)
 
-	err := app.SwitchEpisode(ctx, trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	err := app.SwitchEpisode(ctx, trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}
@@ -740,17 +755,30 @@ func TestPlaybackSourceClonesAndRedactsSensitiveData(t *testing.T) {
 	}
 }
 
-func TestSettingsDefaults(t *testing.T) {
-	var zero Settings
-	if zero.Appearance != AppearanceUnspecified || zero.AutoplayNext != ToggleUnspecified || zero.ResumePlayback != ToggleUnspecified || zero.Language != LanguageUnspecified {
-		t.Fatalf("zero settings = %#v", zero)
+func TestSettingsResolvedFillsEveryUnchosenField(t *testing.T) {
+	want := Settings{
+		Appearance: AppearanceSystem, AutoplayNext: ToggleEnabled, AutoPlay: ToggleEnabled, ResumePlayback: ToggleEnabled,
+		PlaybackSpeed: 100, HardwareDecoding: ToggleEnabled, ProxyMode: ProxyModeNone,
 	}
-	defaults := DefaultSettings()
-	if defaults.AutoplayNext != ToggleEnabled {
-		t.Fatalf("autoplay default = %d", defaults.AutoplayNext)
+	if got := (Settings{}).Resolved(); got != want {
+		t.Fatalf("resolved zero settings = %#v, want %#v", got, want)
 	}
-	if defaults.ResumePlayback != ToggleUnspecified {
-		t.Fatalf("undocumented resume default = %d", defaults.ResumePlayback)
+}
+
+func TestSettingsResolvedKeepsChosenValues(t *testing.T) {
+	chosen := Settings{
+		Appearance: AppearanceDark, AutoplayNext: ToggleDisabled, AutoPlay: ToggleDisabled, ResumePlayback: ToggleDisabled, Language: LanguageEnglish,
+		PlaybackSpeed: 75, HardwareDecoding: ToggleDisabled, ProxyMode: ProxyModeManual, ProxyAddress: "proxy.example:8080",
+	}
+	if got := chosen.Resolved(); got != chosen {
+		t.Fatalf("resolved chosen settings = %#v, want %#v", got, chosen)
+	}
+	light := Settings{
+		Appearance: AppearanceLight, AutoplayNext: ToggleEnabled, AutoPlay: ToggleEnabled, ResumePlayback: ToggleEnabled,
+		PlaybackSpeed: 200, HardwareDecoding: ToggleEnabled, ProxyMode: ProxyModeSystem,
+	}
+	if got := light.Resolved(); got != light {
+		t.Fatalf("resolved light settings = %#v, want %#v", got, light)
 	}
 }
 

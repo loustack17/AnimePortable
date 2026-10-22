@@ -20,6 +20,7 @@ import (
 )
 
 type homeRefreshTestService struct {
+	noSettingsActions
 	mu          sync.Mutex
 	history     []backend.History
 	historyErr  error
@@ -140,13 +141,13 @@ func newHomeRefreshFixture(t *testing.T, service Service) *view {
 	window := fltk.NewWindow(1000, 618, "Home refresh test")
 	ctx, cancel := context.WithCancel(context.Background())
 	ui := &view{window: window, service: service, ctx: ctx, cancelContext: cancel}
-	ui.appearance = newAppearancePersistence(service, nil)
+	ui.settingsWriter = newSettingsWriter(service, ui.settingsSaveFailed, ui.settingsSaved)
 	ui.build()
 	ui.mainGroup.Show()
 	window.Show()
 	t.Cleanup(func() {
 		ui.searchModel.close()
-		_ = ui.appearance.close()
+		_ = ui.settingsWriter.close()
 		cancel()
 		window.Hide()
 		window.Destroy()

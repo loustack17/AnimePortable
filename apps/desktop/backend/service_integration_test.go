@@ -258,6 +258,42 @@ func TestPlayReusesTrackedSessionAfterCallerCancellation(t *testing.T) {
 	}
 }
 
+func TestPlayPausedAppliesOnlyToTheSwitchThatAsksForIt(t *testing.T) {
+	store := newFakeStore()
+	store.anime["anime"] = core.Anime{ID: "anime", Title: "Anime"}
+	ref1 := core.EpisodeRef{Anime: core.SourceRef{Provider: "anime1", ID: "show"}, ID: "one"}
+	ref2 := core.EpisodeRef{Anime: core.SourceRef{Provider: "anime1", ID: "show"}, ID: "two"}
+	store.mappings["anime"] = []core.EpisodeMapping{
+		{AnimeID: "anime", EpisodeID: "episode-1", Ref: ref1},
+		{AnimeID: "anime", EpisodeID: "episode-2", Ref: ref2},
+	}
+	player := &playbackTestPlayer{}
+	service := newWithDependencies(dependencies{
+		store:     store,
+		source:    &persistentSource{item: core.SourceAnime{Ref: ref1.Anime, Title: "Anime"}},
+		newPlayer: func() (core.Player, error) { return player, nil },
+	})
+	t.Cleanup(func() { _ = service.Close() })
+	ctx := context.Background()
+	for _, request := range []PlayRequest{
+		{AnimeID: "anime", EpisodeID: "episode-1"},
+		{AnimeID: "anime", EpisodeID: "episode-2", Paused: true},
+		{AnimeID: "anime", EpisodeID: "episode-1"},
+	} {
+		if err := service.Play(ctx, request); err != nil {
+			t.Fatal(err)
+		}
+	}
+	player.mu.Lock()
+	session := player.session
+	player.mu.Unlock()
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if len(session.loads) != 2 || !session.loads[0].Paused || session.loads[1].Paused {
+		t.Fatalf("switch loads = %#v, want a paused switch then a playing one", session.loads)
+	}
+}
+
 func TestStopPlaybackClosesTrackedSessionAndAllowsReplay(t *testing.T) {
 	store := newFakeStore()
 	store.anime["anime"] = core.Anime{ID: "anime", Title: "Anime"}
@@ -455,6 +491,46 @@ func TestTerminalPlaybackEventAllowsNextPlayOnTrackedSession(t *testing.T) {
 			player.mu.Unlock()
 			if recovered == nil || recovered == session || recovered.isClosed() {
 				t.Fatal("recovery did not create a live replacement session")
+			}
+		})
+	}
+}
+
+func TestPlayFallbackStartKeepsThePausedRequest(t *testing.T) {
+	for _, paused := range []bool{true, false} {
+		t.Run(fmt.Sprintf("paused=%t", paused), func(t *testing.T) {
+			store := newFakeStore()
+			store.anime["anime"] = core.Anime{ID: "anime"}
+			first := core.EpisodeRef{Anime: core.SourceRef{Provider: "anime1", ID: "show"}, ID: "episode-1"}
+			second := core.EpisodeRef{Anime: first.Anime, ID: "episode-2"}
+			store.mappings["anime"] = []core.EpisodeMapping{
+				{AnimeID: "anime", EpisodeID: "episode-1", Ref: first},
+				{AnimeID: "anime", EpisodeID: "episode-2", Ref: second},
+			}
+			player := &playbackTestPlayer{}
+			service := newWithDependencies(dependencies{
+				store:     store,
+				source:    &persistentSource{item: core.SourceAnime{Ref: first.Anime, Title: "Anime"}},
+				newPlayer: func() (core.Player, error) { return player, nil },
+			})
+			t.Cleanup(func() { _ = service.Close() })
+			if err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode-1"}); err != nil {
+				t.Fatal(err)
+			}
+			player.mu.Lock()
+			session := player.session
+			player.mu.Unlock()
+			session.setLoadError(libmpv.ErrPlayerFailed)
+			if err := service.Play(context.Background(), PlayRequest{AnimeID: "anime", EpisodeID: "episode-2", Paused: paused}); err != nil {
+				t.Fatal(err)
+			}
+			player.mu.Lock()
+			recovered := player.session
+			player.mu.Unlock()
+			recovered.mu.Lock()
+			defer recovered.mu.Unlock()
+			if recovered == session || recovered.request.Paused != paused {
+				t.Fatalf("fallback start paused = %t on a replacement = %t, want paused = %t", recovered.request.Paused, recovered != session, paused)
 			}
 		})
 	}

@@ -272,7 +272,7 @@ func TestScheduleMigrationAppliesToExistingDatabase(t *testing.T) {
 		t.Fatalf("schedule after upgrade = %#v, %v", got, err)
 	}
 	var version int
-	if err := store.db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != 6 {
-		t.Fatalf("schema version = %d, %v, want 6", version, err)
+	if err := store.db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != 9 {
+		t.Fatalf("schema version = %d, %v, want 9", version, err)
 	}
 }

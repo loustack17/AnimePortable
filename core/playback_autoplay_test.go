@@ -40,7 +40,7 @@ func TestSwitchAfterEndedSavesFinishedEpisodeCompleted(t *testing.T) {
 	store := newTrackingStore()
 	source := &fakeSource{resolved: NewPlaybackSource("https://media.example/two", nil)}
 	app := newTrackingTestApp(source, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestSwitchAfterEndedSavesFinishedEpisodeCompleted(t *testing.T) {
 		progress, ok := finishedProgress(store, "episode-1")
 		return ok && progress.Completed
 	})
-	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0); err != nil {
+	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0, false); err != nil {
 		t.Fatal(err)
 	}
 	requireFinishedEpisodeCompleted(t, store)
@@ -69,13 +69,13 @@ func TestSwitchBeforeEndedEventStillSavesFinishedEpisodeCompleted(t *testing.T) 
 	store := newTrackingStore()
 	source := &fakeSource{resolved: NewPlaybackSource("https://media.example/two", nil)}
 	app := newTrackingTestApp(source, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The engine reports position = duration after a normal end; no Ended event was seen.
 	raw.setSnapshot(PlaybackSnapshot{Position: autoplayEpisodeLength, Duration: autoplayEpisodeLength})
-	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0); err != nil {
+	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0, false); err != nil {
 		t.Fatal(err)
 	}
 	requireFinishedEpisodeCompleted(t, store)
@@ -95,7 +95,7 @@ func TestSwitchWithFailingResolveKeepsSessionUsable(t *testing.T) {
 	resolveErr := errors.New("source unavailable")
 	source := &fakeSource{resolved: NewPlaybackSource("https://media.example/two", nil)}
 	app := newTrackingTestApp(source, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestSwitchWithFailingResolveKeepsSessionUsable(t *testing.T) {
 		resolves.Add(1)
 		return PlaybackSource{}, resolveErr
 	}
-	err = app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0)
+	err = app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0, false)
 	if !errors.Is(err, resolveErr) {
 		t.Fatalf("switch error = %v, want the resolve error", err)
 	}
@@ -119,7 +119,7 @@ func TestSwitchWithFailingResolveKeepsSessionUsable(t *testing.T) {
 
 	// The same session still switches once the source works again.
 	source.resolve = nil
-	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0); err != nil {
+	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0, false); err != nil {
 		t.Fatalf("switch after failure = %v", err)
 	}
 	if got := raw.loadCount(); got != 1 {

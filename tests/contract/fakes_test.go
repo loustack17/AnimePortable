@@ -338,7 +338,7 @@ func (*memoryStore) Schedule(context.Context) ([]core.ScheduleEntry, error) {
 }
 func (store *memoryStore) Settings(context.Context) (core.Settings, error) {
 	if store.settings == nil {
-		return core.DefaultSettings(), nil
+		return core.Settings{}, nil
 	}
 	return *store.settings, nil
 }

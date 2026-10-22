@@ -108,7 +108,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 		var err error
 		newContext, cancelNew := context.WithTimeout(context.Background(), 12*time.Second)
 		engine, err = pumpFLTKResult(t, 15*time.Second, func() (*fltkengine.Engine, error) {
-			return fltkengine.New(newContext, view.Video())
+			return fltkengine.New(newContext, view.Video(), fltkengine.Options{HardwareDecoding: true})
 		})
 		cancelNew()
 		if err != nil {
@@ -145,7 +145,7 @@ func TestPlayerControlsRenderAfterEngineReentry(t *testing.T) {
 		view.SetFocus(fltkplayer.FocusProgress)
 		loadContext, cancelLoad := context.WithTimeout(context.Background(), 8*time.Second)
 		if err := pumpFLTKError(t, 10*time.Second, func() error {
-			return engine.Load(loadContext, media[pass], 0, uint64(pass+1))
+			return engine.Load(loadContext, media[pass], 0, false, uint64(pass+1))
 		}); err != nil {
 			cancelLoad()
 			t.Fatalf("pass%d: load synthetic video: %v; %s", pass+1, err, diagnostic())
@@ -282,7 +282,7 @@ func diagnoseEngineCreation(video *fltk.GlWindow) string {
 		return fmt.Sprintf("%s mpv create: %v", prefix, err)
 	}
 	defer player.TerminateDestroy()
-	for _, option := range [][2]string{{"config", "no"}, {"vo", "libmpv"}, {"hwdec", "auto"}, {"demuxer-max-bytes", "16MiB"}, {"cache-secs", "5"}} {
+	for _, option := range fltkengine.InitOptions(fltkengine.Options{HardwareDecoding: true}) {
 		if err := player.SetOptionString(option[0], option[1]); err != nil {
 			return fmt.Sprintf("%s option %s: %v", prefix, option[0], err)
 		}

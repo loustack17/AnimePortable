@@ -65,8 +65,15 @@ type History struct {
 type Settings struct {
 	Appearance     string `json:"appearance"`
 	AutoplayNext   string `json:"autoplayNext"`
+	AutoPlay       string `json:"autoPlay"`
 	ResumePlayback string `json:"resumePlayback"`
 	Language       string `json:"language"`
+	// PlaybackSpeed is a percent (100 is normal). It is read-only here: SaveSettings keeps the
+	// stored speed and only SavePlaybackSpeed changes it, because the player owns it.
+	PlaybackSpeed    int    `json:"playbackSpeed"`
+	HardwareDecoding string `json:"hardwareDecoding"`
+	ProxyMode        string `json:"proxyMode"`
+	ProxyAddress     string `json:"proxyAddress"`
 }
 
 // ScheduleItem is one show in the weekly airing schedule. AnimeID is the local anime it
@@ -83,6 +90,9 @@ type PlayRequest struct {
 	AnimeID   string `json:"animeId"`
 	EpisodeID string `json:"episodeId"`
 	StartAt   int64  `json:"startAt"`
+	// Paused asks to load the episode waiting at its start, whether the request switches an
+	// open player or starts a new one.
+	Paused bool `json:"paused"`
 }
 
 type Cover struct {
@@ -90,4 +100,20 @@ type Cover struct {
 	MediaType string `json:"mediaType"`
 	Width     int    `json:"width"`
 	Height    int    `json:"height"`
+}
+
+// ProxyTestResult is the outcome of one request to Anime1 through the proxy being tested.
+// Reason is a short Traditional Chinese category, empty when OK.
+type ProxyTestResult struct {
+	OK     bool   `json:"ok"`
+	Reason string `json:"reason"`
+}
+
+// UpdateInfo compares this build with the newest GitHub release. Versions have no "v" prefix.
+// Latest and URL are empty when no release was found; URL is a GitHub release page or empty.
+type UpdateInfo struct {
+	Current string `json:"current"`
+	Latest  string `json:"latest"`
+	Newer   bool   `json:"newer"`
+	URL     string `json:"url"`
 }

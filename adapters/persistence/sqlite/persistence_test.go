@@ -81,8 +81,10 @@ func TestPlaybackAndSettingsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("history = %#v, %v, want %#v", got, err, wantHistory)
 	}
 	settings := core.Settings{
-		Appearance: core.AppearanceDark, AutoplayNext: core.ToggleDisabled,
+		Appearance: core.AppearanceDark, AutoplayNext: core.ToggleDisabled, AutoPlay: core.ToggleEnabled,
 		ResumePlayback: core.ToggleEnabled, Language: core.LanguageEnglish,
+		PlaybackSpeed: 150, HardwareDecoding: core.ToggleDisabled,
+		ProxyMode: core.ProxyModeManual, ProxyAddress: "proxy.example:8080",
 	}
 	if err := store.SaveSettings(ctx, settings); err != nil {
 		t.Fatal(err)
@@ -124,8 +126,8 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	if got, err := store.History(ctx); err != nil || got == nil || len(got) != 0 {
 		t.Fatalf("empty history = %#v, %v", got, err)
 	}
-	if got, err := store.Settings(ctx); err != nil || got != core.DefaultSettings() {
-		t.Fatalf("default settings = %#v, %v", got, err)
+	if got, err := store.Settings(ctx); err != nil || got != (core.Settings{}) {
+		t.Fatalf("unset settings = %#v, %v", got, err)
 	}
 	unknownProgress := core.PlaybackProgress{AnimeID: "missing", EpisodeID: "episode"}
 	unknownHistory := core.HistoryEntry{Progress: unknownProgress}
@@ -177,8 +179,15 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	for name, settings := range map[string]core.Settings{
 		"appearance enum": {Appearance: core.AppearanceDark + 1},
 		"autoplay enum":   {AutoplayNext: core.ToggleEnabled + 1},
+		"auto play enum":  {AutoPlay: core.ToggleEnabled + 1},
 		"resume enum":     {ResumePlayback: core.ToggleEnabled + 1},
 		"language enum":   {Language: core.LanguageEnglish + 1},
+		"speed step":      {PlaybackSpeed: 110},
+		"speed negative":  {PlaybackSpeed: -100},
+		"hardware enum":   {HardwareDecoding: core.ToggleEnabled + 1},
+		"proxy mode enum": {ProxyMode: core.ProxyModeManual + 1},
+		"proxy scheme":    {ProxyMode: core.ProxyModeManual, ProxyAddress: "http://proxy.example:8080"},
+		"proxy no port":   {ProxyMode: core.ProxyModeManual, ProxyAddress: "proxy.example"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := store.SaveSettings(ctx, settings); !errors.Is(err, ErrInvalidInput) {
@@ -189,7 +198,7 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	for _, appearance := range []core.Appearance{core.AppearanceUnspecified, core.AppearanceSystem, core.AppearanceLight, core.AppearanceDark} {
 		for _, toggle := range []core.Toggle{core.ToggleUnspecified, core.ToggleDisabled, core.ToggleEnabled} {
 			for _, language := range []core.Language{core.LanguageUnspecified, core.LanguageTraditionalChinese, core.LanguageEnglish} {
-				settings := core.Settings{Appearance: appearance, AutoplayNext: toggle, ResumePlayback: toggle, Language: language}
+				settings := core.Settings{Appearance: appearance, AutoplayNext: toggle, AutoPlay: toggle, ResumePlayback: toggle, Language: language}
 				if err := store.SaveSettings(ctx, settings); err != nil {
 					t.Fatalf("settings %#v: %v", settings, err)
 				}
@@ -198,7 +207,7 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if err := store.SaveSettings(cancelled, core.DefaultSettings()); !errors.Is(err, context.Canceled) {
+	if err := store.SaveSettings(cancelled, core.Settings{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled settings error = %v", err)
 	}
 	if got, err := store.History(cancelled); err == nil || got == nil || !errors.Is(err, context.Canceled) {

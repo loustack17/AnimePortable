@@ -51,10 +51,12 @@ type Loader struct {
 	permits chan struct{}
 }
 
-func New() (*Loader, error) {
+// New returns a Loader. proxy (nil allowed) names the forward proxy for each request.
+func New(proxy func() string) (*Loader, error) {
 	client, err := securehttp.New(securehttp.Config{
 		AllowedOrigins:   []string{anilistOrigin, bangumiOrigin},
 		MaxResponseBytes: maxResponseBytes,
+		Proxy:            proxy,
 	})
 	if err != nil {
 		return nil, ErrUnavailable

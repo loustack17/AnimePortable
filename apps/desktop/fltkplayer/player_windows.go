@@ -23,6 +23,7 @@ const (
 	focusEpisodes
 	focusFullscreen
 	focusFollow
+	focusSpeed
 )
 
 const controlsIdleTimeout = 3 * time.Second
@@ -30,12 +31,14 @@ const controlsIdleTimeout = 3 * time.Second
 const FocusProgress = focusProgress
 
 type Callbacks struct {
-	PlayPause     func()
-	Seek          func(seconds int)
-	SeekTo        func(seconds int)
-	Stop          func()
-	Volume        func(percent int)
-	Fullscreen    func()
+	PlayPause  func()
+	Seek       func(seconds int)
+	SeekTo     func(seconds int)
+	Stop       func()
+	Volume     func(percent int)
+	Fullscreen func()
+	// SetSpeed applies and remembers a playback speed chosen from the speed list, in percent.
+	SetSpeed      func(percent int)
 	SelectEpisode func(index int)
 	Navigate      func(index int)
 	// Leave ends playback and returns to the app (Esc in a window).
@@ -75,6 +78,9 @@ type View struct {
 	menuHover     bool
 	episodesOpen  bool
 	volumeOpen    bool
+	speedOpen     bool
+	speedCursor   int
+	speedPercent  int
 	pressedKeys   map[int]bool
 	lastVolume    int
 	dragging      bool
@@ -91,6 +97,7 @@ type View struct {
 	render        func(width, height int)
 	episodeText   unsafe.Pointer
 	menuText      unsafe.Pointer
+	speedText     unsafe.Pointer
 }
 
 func NewWindow(callbacks Callbacks) *View {
@@ -107,6 +114,8 @@ func NewWindow(callbacks Callbacks) *View {
 	fltk.SetFont(fltk.HELVETICA_BOLD, "Microsoft JhengHei UI Bold")
 	fltk.SetFont(fltk.COURIER, "Segoe MDL2 Assets")
 	view.window = fltk.NewWindow(1000, 618, "AnimePortable")
+	// Narrower, the speed button would meet the time label.
+	view.window.SetSizeRange(playerMinWidth, playerMinHeight, 0, 0, 0, 0, false)
 	view.window.Begin()
 	view.keyboardFocus = fltk.NewButton(0, 0, 1, 1, "")
 	view.keyboardFocus.SetBox(fltk.NO_BOX)
@@ -277,7 +286,7 @@ func (view *View) showAtSize(x, y, width, height int) {
 }
 
 func (view *View) shouldHideControls(now time.Time) bool {
-	return view.visible && view.state.Playing && !view.state.Paused && !view.state.Loading && !view.scrubbing && !view.dragging && !view.menuPinned && !view.episodesOpen && now.Sub(view.lastMove) >= controlsIdleTimeout
+	return view.visible && view.state.Playing && !view.state.Paused && !view.state.Loading && !view.scrubbing && !view.dragging && !view.menuPinned && !view.episodesOpen && !view.speedOpen && now.Sub(view.lastMove) >= controlsIdleTimeout
 }
 
 func (view *View) hideControls() {
@@ -319,6 +328,9 @@ func (view *View) actionAt(x, y int) int {
 	if x >= 232 && x <= 395 {
 		return focusVolume
 	}
+	if speedButtonAt(x, width) {
+		return focusSpeed
+	}
 	if x >= width-51 && x <= width-15 {
 		return focusFullscreen
 	}
@@ -341,6 +353,12 @@ func (view *View) activate(index int) {
 	case focusSeekForward:
 		if view.callbacks.Seek != nil {
 			view.callbacks.Seek(10)
+		}
+	case focusSpeed:
+		if view.speedOpen {
+			view.speedOpen = false
+		} else {
+			view.openSpeeds()
 		}
 	case focusStop:
 		if view.callbacks.Stop != nil {
@@ -463,6 +481,16 @@ func (view *View) handle(event fltk.Event) bool {
 			view.Redraw()
 			return true
 		}
+		if view.speedOpen {
+			if index, ok := speedRowAt(x, y, view.video.W(), view.video.H()); ok {
+				view.chooseSpeed(index)
+				view.Redraw()
+				return true
+			}
+			if view.actionAt(x, y) != focusSpeed {
+				view.speedOpen = false // the button toggles the list itself
+			}
+		}
 		if view.episodesOpen && episodeInBar(x, y, view.video.W(), len(view.episodes)) {
 			view.episodeStart = episodeStartAtTrack(y, len(view.episodes))
 			view.Redraw()
@@ -571,7 +599,9 @@ func (view *View) handleKey(key, modifiers int) bool {
 		return true
 	}
 	if key == 27 || key == 0xff1b {
-		if view.episodesOpen {
+		if view.speedOpen {
+			view.speedOpen = false
+		} else if view.episodesOpen {
 			view.episodesOpen = false
 		} else if view.menuVisible() {
 			view.menuPinned = false
@@ -590,7 +620,7 @@ func (view *View) handleKey(key, modifiers int) bool {
 		view.activate(focusPlayPause)
 		return true
 	}
-	if key == 'm' && !view.menuVisible() && !view.episodesOpen {
+	if key == 'm' && !view.menuVisible() && !view.episodesOpen && !view.speedOpen {
 		if view.state.Volume == 0 {
 			view.setVolume(view.lastVolume)
 		} else {
@@ -599,14 +629,14 @@ func (view *View) handleKey(key, modifiers int) bool {
 		}
 		return true
 	}
-	if key == 'f' && !view.menuVisible() && !view.episodesOpen {
+	if key == 'f' && !view.menuVisible() && !view.episodesOpen && !view.speedOpen {
 		if view.callbacks.Fullscreen != nil {
 			view.callbacks.Fullscreen()
 		}
 		view.showControls()
 		return true
 	}
-	if (key == 'j' || key == 'l') && !view.menuVisible() && !view.episodesOpen {
+	if (key == 'j' || key == 'l') && !view.menuVisible() && !view.episodesOpen && !view.speedOpen {
 		step := -10
 		if key == 'l' {
 			step = 10
@@ -618,6 +648,11 @@ func (view *View) handleKey(key, modifiers int) bool {
 		return true
 	}
 	if key == int(' ') {
+		if view.speedOpen {
+			view.chooseSpeed(view.speedCursor)
+			view.Redraw()
+			return true
+		}
 		if view.episodesOpen {
 			view.selectEpisode(view.episodeCursor)
 			view.episodesOpen = false
@@ -642,6 +677,11 @@ func (view *View) handleKey(key, modifiers int) bool {
 		return true
 	}
 	if key == fltk.ENTER_KEY || key == 13 || key == 0xff8d {
+		if view.speedOpen {
+			view.chooseSpeed(view.speedCursor)
+			view.Redraw()
+			return true
+		}
 		if view.episodesOpen {
 			view.selectEpisode(view.episodeCursor)
 			view.episodesOpen = false
@@ -664,6 +704,16 @@ func (view *View) handleKey(key, modifiers int) bool {
 		return true
 	}
 	if key == 0xff51 || key == 0xff53 || key == 0xff52 || key == 0xff54 {
+		if view.speedOpen {
+			if key == 0xff52 {
+				view.moveSpeedCursor(-1)
+			}
+			if key == 0xff54 {
+				view.moveSpeedCursor(1)
+			}
+			view.Redraw()
+			return true
+		}
 		if view.episodesOpen {
 			if key == 0xff52 && view.episodeCursor > 0 {
 				view.episodeCursor--
@@ -737,15 +787,16 @@ func (view *View) showControls() {
 	view.Redraw()
 }
 
-var tabFocusOrder = [...]int{focusMenu, focusFollow, focusEpisodes, focusProgress, focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusFullscreen}
+var tabFocusOrder = [...]int{focusMenu, focusFollow, focusEpisodes, focusProgress, focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusSpeed, focusFullscreen}
 
 // focusable reports whether a control exists and shows; the follow star shows only once
 // the follow state is known.
 func (state State) focusable(index int) bool {
-	return index >= focusMenu && index <= focusFollow && (index != focusFollow || state.FollowKnown)
+	return index >= focusMenu && index <= focusSpeed && (index != focusFollow || state.FollowKnown)
 }
 
 func (view *View) moveTabFocus(reverse bool) {
+	view.speedOpen = false
 	next := nextTabFocus(view.state.Focus, reverse)
 	if !view.state.focusable(next) {
 		// The star is never first or last in the ring, so its neighbour exists.

@@ -39,7 +39,7 @@ type Event struct {
 }
 
 type Bridge interface {
-	Load(ctx context.Context, capabilityURL string, startAt time.Duration, generation uint64) error
+	Load(ctx context.Context, capabilityURL string, startAt time.Duration, paused bool, generation uint64) error
 	Events() <-chan Event
 	Snapshot(ctx context.Context) (core.PlaybackSnapshot, error)
 	Close() error
@@ -59,8 +59,9 @@ type Player struct {
 
 // NewPlayer builds a Player. onUpstreamFailure (nil allowed) receives the upstream HTTP
 // status (0 when unknown) of every response the playback proxy rejects; it must return quickly.
-func NewPlayer(factory Factory, onUpstreamFailure func(status int)) *Player {
-	config := proxy.Config{OnUpstreamFailure: onUpstreamFailure}
+// forwardProxy (nil allowed) names the forward proxy for the player's upstream requests.
+func NewPlayer(factory Factory, onUpstreamFailure func(status int), forwardProxy func() string) *Player {
+	config := proxy.Config{OnUpstreamFailure: onUpstreamFailure, Proxy: forwardProxy}
 	return &Player{factory: factory, newProxy: func() (proxyService, error) {
 		server, err := proxy.New(config)
 		if err != nil {
@@ -203,7 +204,7 @@ func (session *playbackSession) load(ctx context.Context, request core.PlayReque
 		session.loading = false
 		session.mu.Unlock()
 	}()
-	err := session.bridge.Load(operationCtx, candidate.URL(), request.StartAt, generation)
+	err := session.bridge.Load(operationCtx, candidate.URL(), request.StartAt, request.Paused, generation)
 	if err != nil {
 		if !initial {
 			if closeErr := candidate.Close(); closeErr != nil {
@@ -227,7 +228,7 @@ func (session *playbackSession) load(ctx context.Context, request core.PlayReque
 	session.generation = generation
 	session.position = request.StartAt
 	session.duration = 0
-	session.paused = false
+	session.paused = request.Paused
 	session.mu.Unlock()
 	if !initial && old != nil {
 		if err := old.Close(); err != nil {

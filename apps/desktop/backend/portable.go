@@ -20,6 +20,13 @@ type PortablePlan struct {
 	LegacyPath   string
 	OfferImport  bool
 	TargetExists bool
+	// Location says whether data-location.txt is in use. CustomDir is the folder it names
+	// (empty when the file was unreadable); both are empty or default for the standard layout.
+	Location  LocationState
+	CustomDir string
+
+	executable string
+	configDir  string
 }
 
 func PlanPortable(executablePath, userConfigDir string) (PortablePlan, error) {
@@ -46,12 +53,25 @@ func planPortable(goos, executablePath, userConfigDir string) (PortablePlan, err
 		return PortablePlan{}, ErrUnavailable
 	}
 	root := filepath.Dir(executablePath)
-	dataDir := filepath.Join(root, "data")
-	databasePath := filepath.Join(dataDir, "animeportable.db")
+	plan := PortablePlan{Root: root, executable: executablePath, configDir: userConfigDir}
+	dataDir := defaultDataDir(root)
+	switch location := readDataLocation(root); location.state {
+	case LocationCustomMissing:
+		// No database path on purpose: nothing may open or create data until the user chooses.
+		plan.Location = LocationCustomMissing
+		plan.CustomDir = location.dir
+		return plan, nil
+	case LocationCustom:
+		plan.Location = LocationCustom
+		plan.CustomDir = location.dir
+		dataDir = location.dir
+	}
+	databasePath := filepath.Join(dataDir, DatabaseFileName)
 	if err := sqlite.ValidatePortablePath(databasePath); err != nil {
 		return PortablePlan{}, ErrUnavailable
 	}
-	plan := PortablePlan{Root: root, DataDir: dataDir, DatabasePath: databasePath}
+	plan.DataDir = dataDir
+	plan.DatabasePath = databasePath
 	targetInfo, targetErr := os.Lstat(databasePath)
 	if targetErr == nil {
 		if !targetInfo.Mode().IsRegular() {
@@ -85,7 +105,7 @@ func IsPortableImportConflict(err error) bool {
 }
 
 func (plan PortablePlan) CreateFresh() error {
-	if plan.TargetExists || plan.DataDir == "" || plan.DatabasePath != filepath.Join(plan.DataDir, "animeportable.db") {
+	if plan.TargetExists || plan.DataDir == "" || plan.DatabasePath != filepath.Join(plan.DataDir, DatabaseFileName) {
 		return ErrInvalidInput
 	}
 	if err := sqlite.ValidatePortablePath(plan.DatabasePath); err != nil {

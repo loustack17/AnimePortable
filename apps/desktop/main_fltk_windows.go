@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"animeportable/adapters/network/forwardproxy"
 	"animeportable/adapters/player/libmpv"
 	"animeportable/apps/desktop/backend"
 	"animeportable/apps/desktop/fltkengine"
@@ -34,10 +35,25 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	executable, executableErr := os.Executable()
+	// Registered before the service closes (deferred calls run last-in first), so the new
+	// process starts only after the database is closed.
+	var restartRequested atomic.Bool
+	defer func() {
+		if restartRequested.Load() {
+			restartAfterShutdown(executable, executableErr, startAgain, showRestartFailure)
+		}
+	}()
 	configDir, _ := os.UserConfigDir()
 	plan, planErr := backend.PlanPortable(executable, configDir)
 	if executableErr != nil {
 		planErr = executableErr
+	}
+	if planErr == nil && plan.Location == backend.LocationCustomMissing {
+		// Esc and closing the dialog answer 結束, so quitting never creates or moves data.
+		if !fltkhome.AskMissingDataFolder(plan.CustomDir) {
+			return
+		}
+		plan, planErr = plan.UseDefaultLocation()
 	}
 	var engineMu sync.Mutex
 	var active *fltkengine.Engine
@@ -93,7 +109,7 @@ func main() {
 			state.FollowKnown, state.Following = known, following
 			player.SetState(state)
 		},
-		fail: func(err error) { fltk.MessageBox("追蹤失敗", fltkhome.FollowErrorMessage(err)) },
+		fail: func(err error) { fltkhome.ShowNotice("追蹤失敗", fltkhome.FollowErrorMessage(err)) },
 	}
 	stop := func(destination int) {
 		generation := viewGeneration.Add(1)
@@ -117,7 +133,7 @@ func main() {
 					navigateHome(destination)
 				}
 				if stopErr != nil {
-					fltk.MessageBox("播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
+					fltkhome.ShowNotice("播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
 				}
 			})
 		})
@@ -168,7 +184,7 @@ func main() {
 				if generation == viewGeneration.Load() {
 					player.SetRenderHook(nil)
 					if stopErr != nil {
-						fltk.MessageBox("播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
+						fltkhome.ShowNotice("播放進度確認失敗", "無法確認播放進度已儲存，繼續播放時可能回到先前的位置。")
 					}
 				}
 			})
@@ -181,10 +197,37 @@ func main() {
 		}
 		endPlayback()
 	}
+	// Playback settings are read once per load, here, so a change on 設定 applies to the next
+	// load. A failed read keeps the last values, which start as the defaults.
+	var playbackSettingsMu sync.Mutex
+	playbackSettings := backend.DefaultSettings()
+	// speedUnsaved means the chosen speed could not be stored: the session keeps it over the
+	// stored value, and the user is told once.
+	speedUnsaved, speedNoticeShown := false, false
+	loadPlaybackSettings := func(loadCtx context.Context) {
+		settings, err := service.Settings(loadCtx)
+		if err != nil {
+			return
+		}
+		playbackSettingsMu.Lock()
+		if speedUnsaved {
+			settings.PlaybackSpeed = playbackSettings.PlaybackSpeed
+		}
+		playbackSettings = settings
+		playbackSettingsMu.Unlock()
+		fltk.Awake(func() { player.SetSpeed(settings.PlaybackSpeed) })
+		engineMu.Lock()
+		current := active
+		engineMu.Unlock()
+		if current != nil {
+			current.SetPlaybackSpeed(settings.PlaybackSpeed)
+		}
+	}
 	var autoplay *playerAutoplay
-	// selectEpisode switches the player to episodes[index]. failed, when set, replaces the
-	// message shown for a failed switch.
-	selectEpisode := func(index int, failed func()) {
+	// selectEpisode switches the player to episodes[index]; paused makes it wait at its start
+	// position (only autoplay asks for that). failed, when set, replaces the message shown
+	// for a failed switch.
+	selectEpisode := func(index int, paused bool, failed func()) {
 		if index < 0 || index >= len(episodes) {
 			return
 		}
@@ -202,12 +245,14 @@ func main() {
 		request := selection()
 		request.EpisodeID = episodes[index].ID
 		request.StartAt = 0
+		request.Paused = paused
 		playQueue.Enqueue(func() {
 			defer cancelOperation()
 			if generation != viewGeneration.Load() {
 				return
 			}
 			actionGeneration.Store(generation)
+			loadPlaybackSettings(operationCtx)
 			if err := service.Play(operationCtx, request); err != nil {
 				if generation == viewGeneration.Load() {
 					// A failed switch leaves the previous file playing; keep hearing its end and
@@ -233,13 +278,15 @@ func main() {
 							failed()
 							return
 						}
-						fltk.MessageBox("播放失敗", "無法播放此集，請重試。")
+						fltkhome.ShowNotice("播放失敗", "無法播放此集，請重試。")
 					}
 				})
 				return
 			}
 			if generation == viewGeneration.Load() {
-				// Before awaiting clears: autoplay must never read the previous episode.
+				// Before awaiting clears: autoplay must never read the previous episode. The
+				// selection names the episode, not how it was loaded, so a replay plays.
+				request.Paused = false
 				setSelection(request)
 				awaitingPlayback.Store(false)
 			}
@@ -276,7 +323,37 @@ func main() {
 			state.Fullscreen = fullscreen
 			player.SetState(state)
 		},
-		SelectEpisode: func(index int) { selectEpisode(index, nil) },
+		SetSpeed: func(percent int) {
+			playbackSettingsMu.Lock()
+			playbackSettings.PlaybackSpeed = percent
+			playbackSettingsMu.Unlock()
+			// Queued behind loads, so the engine and the stored value change in the order chosen.
+			// The engine is read here, not when the speed was chosen: a load queued earlier may
+			// have created it since, at the speed stored before this choice.
+			playQueue.Enqueue(func() {
+				engineMu.Lock()
+				current := active
+				engineMu.Unlock()
+				if current != nil {
+					_ = current.Control(ctx, "speed", percent)
+				}
+				err := service.SavePlaybackSpeed(ctx, percent)
+				playbackSettingsMu.Lock()
+				speedUnsaved = err != nil
+				// An earlier queued load may have replaced the chosen speed with the stored one.
+				playbackSettings.PlaybackSpeed = percent
+				fltk.Awake(func() { player.SetSpeed(percent) })
+				notify := err != nil && !speedNoticeShown
+				speedNoticeShown = speedNoticeShown || notify
+				playbackSettingsMu.Unlock()
+				if notify {
+					fltk.Awake(func() {
+						fltkhome.ShowNotice("播放速度", "無法儲存播放速度，下次開啟可能恢復先前的速度。")
+					})
+				}
+			})
+		},
+		SelectEpisode: func(index int) { selectEpisode(index, false, nil) },
 		Navigate:      stop,
 		Leave:         func() { stop(0) },
 		Search:        func() { stop(fltkhome.SearchSection) },
@@ -286,18 +363,27 @@ func main() {
 			}
 		},
 	})
+	player.SetSpeed(playbackSettings.PlaybackSpeed)
 	player.Window().SetCallback(func() { stop(0) })
 	// The failure log sits next to the database.
 	var failures *backend.FailureLog
 	if plan.DatabasePath != "" {
 		failures = backend.NewFailureLog(filepath.Dir(plan.DatabasePath))
 	}
-	service = backend.NewAtWithPlayback(plan.DatabasePath, failures, func() (core.Player, error) {
+	// One source for every client that needs the forward proxy; the service keeps it in step
+	// with the saved settings.
+	proxySource := forwardproxy.New()
+	service = backend.NewAtWithPlan(plan, proxySource, failures, func() (core.Player, error) {
 		return libmpv.NewPlayer(func(factoryCtx context.Context) (libmpv.Bridge, libmpv.Renderer, error) {
-			created, err := fltkengine.New(factoryCtx, player.Video())
+			playbackSettingsMu.Lock()
+			hardwareDecoding := playbackSettings.HardwareDecoding == "enabled"
+			speed := playbackSettings.PlaybackSpeed
+			playbackSettingsMu.Unlock()
+			created, err := fltkengine.New(factoryCtx, player.Video(), fltkengine.Options{HardwareDecoding: hardwareDecoding})
 			if err != nil {
 				return nil, nil, err
 			}
+			created.SetPlaybackSpeed(speed)
 			created.SetStateHandler(func(position, duration time.Duration, paused bool, resolution int) {
 				if awaitingPlayback.Load() {
 					return
@@ -331,7 +417,7 @@ func main() {
 				state.Loading = false
 				player.SetState(state)
 				go failures.PlayerFailed() // off the UI thread: the log writes to disk
-				fltk.MessageBox("播放失敗", "此集暫時無法播放。請重新選取該集或稍後再試。")
+				fltkhome.ShowNotice("播放失敗", "此集暫時無法播放。請重新選取該集或稍後再試。")
 			})
 			created.SetEndHandler(func(generation uint64) {
 				if ctx.Err() != nil {
@@ -350,7 +436,7 @@ func main() {
 			engineMu.Unlock()
 			fltk.Awake(func() { player.SetRenderHook(func(width, height int) { _ = created.Render(width, height) }) })
 			return created, created, nil
-		}, failures.UpstreamRejected), nil
+		}, failures.UpstreamRejected, proxySource.Address), nil
 	})
 	defer func() { _ = service.Close(); player.Close() }()
 	follow.service = service
@@ -367,7 +453,7 @@ func main() {
 		playing:  func() string { return selection().EpisodeID },
 		advance:  selectEpisode,
 		finish:   endPlayback,
-		fail:     func() { fltk.MessageBox("播放失敗", "無法播放下一集，請重試。") },
+		fail:     func() { fltkhome.ShowNotice("播放失敗", "無法播放下一集，請重試。") },
 	}
 	play = func(request backend.PlayRequest) {
 		generation := viewGeneration.Add(1)
@@ -389,6 +475,7 @@ func main() {
 			}
 			actionGeneration.Store(generation)
 			err := startPlayback(operationCtx, cancelOperation, func(playCtx context.Context) error {
+				loadPlaybackSettings(playCtx)
 				if err := service.Play(playCtx, request); err != nil {
 					return err
 				}
@@ -432,7 +519,7 @@ func main() {
 					player.Window().Hide()
 					home.Show()
 					// Shown after Home so a late Home reload cannot clear it.
-					fltk.MessageBox("播放失敗", "無法播放此集，請重試。")
+					fltkhome.ShowNotice("播放失敗", "無法播放此集，請重試。")
 				})
 			}
 		})
@@ -451,7 +538,7 @@ func main() {
 			}()
 		})
 	}
-	home, navigateHome = fltkhome.NewWindow(plan, planErr, service, ctx, cancel, play, closeApp)
+	home, navigateHome = fltkhome.NewWindow(plan, planErr, service, ctx, cancel, play, closeApp, func() { restartRequested.Store(true) })
 	home.Show()
 	fltk.Run()
 	cancel()

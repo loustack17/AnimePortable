@@ -124,6 +124,7 @@ func newTrackedPlaybackSession(raw PlaybackSession, store Store, request PlayReq
 			request: request,
 			snapshot: PlaybackSnapshot{
 				Position: request.StartAt,
+				Paused:   request.Paused,
 			},
 			owner:      1,
 			generation: 1,
@@ -257,7 +258,7 @@ func (session *trackedPlaybackSession) loadPending(ctx context.Context, request 
 func (session *trackedPlaybackSession) beginPending(request PlayRequest) {
 	session.stateMu.Lock()
 	session.state.pending = &trackedPendingPlayback{
-		request: request, snapshot: PlaybackSnapshot{Position: request.StartAt},
+		request: request, snapshot: PlaybackSnapshot{Position: request.StartAt, Paused: request.Paused},
 		owner: session.state.owner + 1,
 	}
 	session.stateMu.Unlock()

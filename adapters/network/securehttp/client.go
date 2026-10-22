@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,10 @@ const (
 	KindResponse     Kind = "response"
 	KindBodyTooLarge Kind = "body_too_large"
 	KindStatus       Kind = "status"
+	// KindProxy means the configured forward proxy could not be reached; KindProxyRefused
+	// means it answered the CONNECT request with a failure. Neither carries the address.
+	KindProxy        Kind = "proxy"
+	KindProxyRefused Kind = "proxy_refused"
 )
 
 const (
@@ -45,6 +50,8 @@ const (
 	InvalidResponse = KindResponse
 	BodyTooLarge    = KindBodyTooLarge
 	Status          = KindStatus
+	ProxyFailed     = KindProxy
+	ProxyRefused    = KindProxyRefused
 )
 
 type Error struct {
@@ -76,6 +83,10 @@ func (e *Error) Error() string {
 		return "securehttp: response body exceeds limit"
 	case KindStatus:
 		return "securehttp: unsuccessful response status"
+	case KindProxy:
+		return "securehttp: proxy unavailable"
+	case KindProxyRefused:
+		return "securehttp: proxy refused the connection"
 	default:
 		return "securehttp: network request failed"
 	}
@@ -94,6 +105,10 @@ type Config struct {
 	MaxResponseBytes       int64
 	MaxResponseHeaderBytes int64
 	ExtraSensitiveHeaders  []string
+	// Proxy, when set, is asked for every request and returns the forward proxy as host:port,
+	// or "" for a direct connection. It may change between requests. The proxy address is
+	// the only address exempt from the blocked-address policy and never appears in errors.
+	Proxy func() string
 }
 
 type Response struct {
@@ -127,6 +142,9 @@ type Client struct {
 	extraSensitiveHeaders []string
 	resolver              func(context.Context, string) ([]netip.Addr, error)
 	dialer                func(context.Context, string, string) (net.Conn, error)
+	proxy                 func() string
+	proxyMu               sync.Mutex
+	lastProxy             string
 }
 
 const (
@@ -172,6 +190,7 @@ func newClient(config Config, resolver func(context.Context, string) ([]netip.Ad
 		extraSensitiveHeaders: config.ExtraSensitiveHeaders,
 		resolver:              resolver,
 		dialer:                dialer,
+		proxy:                 config.Proxy,
 	}
 	transport := &http.Transport{
 		Proxy:                  nil,
@@ -182,6 +201,12 @@ func newClient(config Config, resolver func(context.Context, string) ([]netip.Ad
 		ResponseHeaderTimeout:  config.ResponseHeaderTimeout,
 		IdleConnTimeout:        config.IdleConnTimeout,
 		MaxResponseHeaderBytes: config.MaxResponseHeaderBytes,
+	}
+	if config.Proxy != nil {
+		// Only CONNECT tunnels: the transport pools connections per proxy, so a changed
+		// proxy never reuses a connection made through the old one.
+		transport.Proxy = c.proxyFor
+		transport.OnProxyConnectResponse = refuseFailedConnect
 	}
 	c.httpClient = &http.Client{
 		Transport:     transport,
@@ -335,7 +360,7 @@ func (c *Client) checkRedirect(request *http.Request, via []*http.Request) error
 	if err := c.validateURL(request.URL); err != nil {
 		return &Error{Kind: KindRedirect}
 	}
-	if _, err := c.resolveAndValidate(request.Context(), request.URL.Hostname()); err != nil {
+	if err := c.validateDestination(request.Context(), request.URL.Hostname()); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
@@ -352,11 +377,119 @@ func (c *Client) dialContext(ctx context.Context, network, address string) (net.
 	if err != nil || host == "" || !validPort(port) {
 		return nil, &Error{Kind: KindAddress}
 	}
+	if proxy := c.activeProxy(); proxy != "" && sameAddress(host, port, proxy) {
+		return c.dialProxy(ctx, network, host, port)
+	}
 	addresses, err := c.resolveAndValidate(ctx, host)
 	if err != nil {
 		return nil, err
 	}
 	return c.dialer(ctx, network, net.JoinHostPort(addresses[0].String(), port))
+}
+
+// activeProxy is the proxy the Proxy hook last returned. Dials and redirect checks use it
+// instead of reading the source again, so the one address exempt from the blocked-address
+// policy is never an address the hook did not choose for a request.
+func (c *Client) activeProxy() string {
+	c.proxyMu.Lock()
+	defer c.proxyMu.Unlock()
+	return c.lastProxy
+}
+
+// proxyFor is the transport's Proxy hook. Idle connections made under another proxy are
+// closed when the setting changes.
+func (c *Client) proxyFor(request *http.Request) (*url.URL, error) {
+	address := ""
+	if c.proxy != nil {
+		address = c.proxy()
+	}
+	c.proxyMu.Lock()
+	changed := address != c.lastProxy
+	c.lastProxy = address
+	c.proxyMu.Unlock()
+	if changed {
+		c.httpClient.CloseIdleConnections()
+	}
+	if address == "" {
+		return nil, nil
+	}
+	if literalBlocked(request.URL.Hostname()) {
+		return nil, &Error{Kind: KindAddress}
+	}
+	return &url.URL{Scheme: "http", Host: address}, nil
+}
+
+// validateDestination checks a redirect target. Through a proxy the proxy resolves names,
+// so only an IP literal can be judged here.
+func (c *Client) validateDestination(ctx context.Context, host string) error {
+	if c.activeProxy() != "" {
+		if literalBlocked(host) {
+			return &Error{Kind: KindAddress}
+		}
+		return nil
+	}
+	_, err := c.resolveAndValidate(ctx, host)
+	return err
+}
+
+func literalBlocked(host string) bool {
+	address, err := netip.ParseAddr(host)
+	return err == nil && blockedAddress(address)
+}
+
+func sameAddress(host, port, proxy string) bool {
+	proxyHost, proxyPort, err := net.SplitHostPort(proxy)
+	if err != nil || !strings.EqualFold(host, proxyHost) {
+		return false
+	}
+	left, leftErr := strconv.Atoi(port)
+	right, rightErr := strconv.Atoi(proxyPort)
+	return leftErr == nil && rightErr == nil && left == right
+}
+
+// dialProxy connects to the configured proxy, the one address exempt from the blocked-address
+// policy, trying each address its name resolves to in turn. Failures carry no address.
+func (c *Client) dialProxy(ctx context.Context, network, host, port string) (net.Conn, error) {
+	addresses := []netip.Addr{}
+	if address, err := netip.ParseAddr(host); err == nil {
+		addresses = append(addresses, address)
+	} else {
+		resolved, lookupErr := c.resolver(ctx, host)
+		if lookupErr != nil || len(resolved) == 0 {
+			return nil, proxyDialError(ctx, lookupErr)
+		}
+		addresses = resolved
+	}
+	var dialErr error
+	for _, address := range addresses {
+		connection, err := c.dialer(ctx, network, net.JoinHostPort(address.Unmap().String(), port))
+		if err == nil {
+			return connection, nil
+		}
+		if ctx != nil && ctx.Err() != nil {
+			return nil, proxyDialError(ctx, err)
+		}
+		dialErr = err
+	}
+	return nil, proxyDialError(ctx, dialErr)
+}
+
+func proxyDialError(ctx context.Context, err error) error {
+	if ctx != nil && ctx.Err() != nil {
+		return sanitizeError(ctx.Err())
+	}
+	var network net.Error
+	if errors.As(err, &network) && network.Timeout() {
+		return &Error{Kind: KindTimeout}
+	}
+	return &Error{Kind: KindProxy}
+}
+
+func refuseFailedConnect(_ context.Context, _ *url.URL, _ *http.Request, response *http.Response) error {
+	if response.StatusCode != http.StatusOK {
+		return &Error{Kind: KindProxyRefused}
+	}
+	return nil
 }
 
 func (c *Client) validateURL(value *url.URL) error {

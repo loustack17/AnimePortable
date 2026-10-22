@@ -11,12 +11,15 @@ status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 36 (Autoplay next episode) passed on 2026-10-21 (docs/loops/LOOP36.md; 7ae546e, CI 39658969901 green).
-  Loop 37 (Settings) is next and needs owner approval.
+  None. Loop 37 (Settings) passed on 2026-10-22 (docs/loops/LOOP37.md; check CI for the push commit).
+  Next loops: 37b (language: zh-TW default, English, Japanese) and 37c (skip the opening with AniSkip), then 38; each needs owner approval to start.
 active_acceptance: none
 next_actions:
-  - 1. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
-  - 2. Ask the owner before starting Loop 37. Autoplay is switched only by the stored AutoplayNext setting (autoplayEnabled in apps/desktop/player_autoplay.go); Loop 37 adds the control.
+  - 1. Confirm GitHub Windows CI for the Loop 37 push; classify any failure with the ci-log template.
+  - Migrations 0007-0009 are applied to the owner's test data; never edit them.
+  - Loop 37c: AniSkip origin api.aniskip.com needs a 03_SECURITY section and owner approval; a new FLTK window outside fltkhome newDialog must close leaked groups at the source (see LOOP37 final review).
+  - Ask before any GUI test run while the owner may be using the PC (owner request 2026-10-22).
+  - 2. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
   - Open owner choices: console window next to the app (exe built as a console program; -H windowsgui?); 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md); Home 今日播出 from the stored schedule.
   - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
   - When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
@@ -41,8 +44,9 @@ boundaries:
   - Keep .codex/, artifacts/ and portable data untouched.
   - Commit, push, workflow and release need owner approval.
 references:
+  - docs/loops/LOOP37.md
+  - artifacts/evidence/loop37/
   - docs/loops/LOOP36.md
-  - artifacts/evidence/loop36/
   - docs/loops/LOOP35.md
   - docs/loops/LOOP34B.md
   - docs/STATUS.md

@@ -192,8 +192,9 @@ func TestAppResumePolicyAndAnimePreflight(t *testing.T) {
 	}{
 		{name: "enabled resume", settings: Settings{ResumePlayback: ToggleEnabled}, progress: progress, wantStart: progress.Position, wantSource: true},
 		{name: "explicit override", startAt: time.Minute, settings: Settings{ResumePlayback: ToggleEnabled}, progress: progress, wantStart: time.Minute, wantSource: true},
+		{name: "explicit override with resume disabled", startAt: time.Minute, settings: Settings{ResumePlayback: ToggleDisabled}, progress: progress, wantStart: time.Minute, wantSource: true},
 		{name: "disabled", settings: Settings{ResumePlayback: ToggleDisabled}, progress: progress, wantSource: true},
-		{name: "unspecified", progress: progress, wantSource: true},
+		{name: "unspecified resumes", progress: progress, wantStart: progress.Position, wantSource: true},
 		{name: "completed", settings: Settings{ResumePlayback: ToggleEnabled}, progress: func() PlaybackProgress { value := progress; value.Completed = true; return value }(), wantSource: true},
 		{name: "threshold", settings: Settings{ResumePlayback: ToggleEnabled}, progress: func() PlaybackProgress { value := progress; value.Position = 22 * time.Minute; return value }(), wantSource: true},
 		{name: "negative", startAt: -time.Nanosecond, wantErr: ErrInvalidPlayback},
@@ -208,7 +209,7 @@ func TestAppResumePolicyAndAnimePreflight(t *testing.T) {
 			store.animeErr = test.animeErr
 			source := &fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}
 			app := newTrackingTestApp(source, raw, store, newManualPlaybackTicker())
-			session, err := app.PlayEpisode(context.Background(), "anime", "episode", ref, test.startAt)
+			session, err := app.PlayEpisode(context.Background(), "anime", "episode", ref, test.startAt, false)
 			if !errors.Is(err, test.wantErr) {
 				t.Fatalf("error = %v, want %v", err, test.wantErr)
 			}
@@ -235,7 +236,7 @@ func TestTrackedSessionThrottlesProgressAndPersistsPause(t *testing.T) {
 	store := newTrackingStore()
 	ticker := newManualPlaybackTicker()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, ticker)
-	session, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	session, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +281,7 @@ func TestAppSwitchUsesDoubleCheckpointBeforeLoad(t *testing.T) {
 	store.onSave = func(entry HistoryEntry) { appendCall("save:" + entry.Progress.Position.String()) }
 	source := &fakeSource{resolved: NewPlaybackSource("https://media.example/two", nil)}
 	app := newTrackingTestApp(source, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +290,7 @@ func TestAppSwitchUsesDoubleCheckpointBeforeLoad(t *testing.T) {
 		raw.setSnapshot(PlaybackSnapshot{Position: 20 * time.Second, Duration: 24 * time.Minute})
 		return source.resolved, nil
 	}
-	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0); err != nil {
+	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0, false); err != nil {
 		t.Fatal(err)
 	}
 	callsMu.Lock()
@@ -317,11 +318,11 @@ func TestSwitchPersistenceFailurePreventsResolveAndLoad(t *testing.T) {
 	store.err = expected
 	source := &fakeSource{resolved: NewPlaybackSource("https://media.example/two", nil)}
 	app := newTrackingTestApp(source, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0)
+	err = app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0, false)
 	if !errors.Is(err, expected) || source.resolveRef.ID == "two" || raw.loadCount() != 0 {
 		t.Fatalf("switch error = %v, resolved = %#v, loads = %d", err, source.resolveRef, raw.loadCount())
 	}
@@ -335,7 +336,7 @@ func TestTrackedTerminalSurvivesBackpressureAndCompletes(t *testing.T) {
 	raw := newTrackingRawSession()
 	store := newTrackingStore()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +374,7 @@ func TestTrackedCloseIsConcurrentIdempotentAndAlwaysCleansRaw(t *testing.T) {
 	store.err = expected
 	ticker := newManualPlaybackTicker()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, ticker)
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +421,7 @@ func TestTrackedStagesTargetTerminalEmittedInsideLoad(t *testing.T) {
 	store := newTrackingStore()
 	source := &fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}
 	app := newTrackingTestApp(source, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,7 +437,7 @@ func TestTrackedStagesTargetTerminalEmittedInsideLoad(t *testing.T) {
 			return tracked.state.pending != nil && tracked.state.pending.terminal
 		})
 	}
-	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0); err != nil {
+	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0, false); err != nil {
 		t.Fatal(err)
 	}
 	requireTrackingEventually(t, func() bool {
@@ -457,7 +458,7 @@ func TestTrackedStagesTerminalWhenReloadingSameEpisode(t *testing.T) {
 	raw := newTrackingRawSession()
 	store := newTrackingStore()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -496,7 +497,7 @@ func TestTrackedTerminalCheckpointRemainsFinalWhenPropertiesDisappear(t *testing
 	raw := newTrackingRawSession()
 	store := newTrackingStore()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +506,7 @@ func TestTrackedTerminalCheckpointRemainsFinalWhenPropertiesDisappear(t *testing
 	raw.mu.Lock()
 	raw.snapshotErr = errors.New("property unavailable")
 	raw.mu.Unlock()
-	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0); err != nil {
+	if err := app.SwitchEpisode(context.Background(), started, "anime", "episode-2", EpisodeRef{ID: "two"}, 0, false); err != nil {
 		t.Fatalf("switch after terminal = %v", err)
 	}
 	raw.mu.Lock()
@@ -530,7 +531,7 @@ func TestTrackedSnapshotInFlightPreservesConcurrentTerminalState(t *testing.T) {
 			raw := newTrackingRawSession()
 			store := newTrackingStore()
 			app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
-			started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+			started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -576,7 +577,7 @@ func TestTrackedIgnoresEventsAfterTerminalCheckpoint(t *testing.T) {
 	raw := newTrackingRawSession()
 	store := newTrackingStore()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -596,7 +597,7 @@ func TestTrackedLoadRejectsUnknownAnimeBeforeRawLoad(t *testing.T) {
 	raw := newTrackingRawSession()
 	store := newTrackingStore()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,7 +619,7 @@ func TestTrackedCloseCancelsInflightSnapshotBeforeCleanup(t *testing.T) {
 	store := newTrackingStore()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
 	app.checkpointTimeout = 50 * time.Millisecond
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -678,7 +679,7 @@ func TestTrackedCloseWaitsForOwnedRunAfterCheckpointTimeout(t *testing.T) {
 	}
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
 	app.checkpointTimeout = 10 * time.Millisecond
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -731,7 +732,7 @@ func TestTrackedFailedLoadDiscardsStagedEvents(t *testing.T) {
 	raw := newTrackingRawSession()
 	store := newTrackingStore()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
-	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0)
+	started, err := app.PlayEpisode(context.Background(), "anime", "episode-1", EpisodeRef{ID: "one"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}

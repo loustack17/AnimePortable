@@ -66,19 +66,21 @@ func (server *fakeProxy) caps() []*fakeCapability {
 }
 
 type fakeBridge struct {
-	events chan Event
-	mu     sync.Mutex
-	loads  []string
-	loadFn func(context.Context, string, time.Duration, uint64) error
-	snap   core.PlaybackSnapshot
-	closed int
+	events      chan Event
+	mu          sync.Mutex
+	loads       []string
+	pausedLoads []bool
+	loadFn      func(context.Context, string, time.Duration, uint64) error
+	snap        core.PlaybackSnapshot
+	closed      int
 }
 
 func newFakeBridge() *fakeBridge { return &fakeBridge{events: make(chan Event, 8)} }
 
-func (bridge *fakeBridge) Load(ctx context.Context, mediaURL string, startAt time.Duration, generation uint64) error {
+func (bridge *fakeBridge) Load(ctx context.Context, mediaURL string, startAt time.Duration, paused bool, generation uint64) error {
 	bridge.mu.Lock()
 	bridge.loads = append(bridge.loads, mediaURL)
+	bridge.pausedLoads = append(bridge.pausedLoads, paused)
 	loadFn := bridge.loadFn
 	bridge.mu.Unlock()
 	if loadFn != nil {
@@ -168,6 +170,25 @@ func TestStartLoadsOnlyProxyCapabilityAndRedactsEvents(t *testing.T) {
 	}
 	if caps := proxy.caps(); len(caps) != 1 || caps[0].closed() != 1 {
 		t.Fatalf("active capability was not closed: %#v", caps)
+	}
+}
+
+func TestPausedRequestReachesTheBridgeForThatLoadOnly(t *testing.T) {
+	bridge := newFakeBridge()
+	paused := testRequest("ep1")
+	paused.Paused = true
+	session, err := testPlayer(&fakeProxy{}, bridge, &fakeRenderer{}).Start(context.Background(), paused)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if err := session.Load(context.Background(), testRequest("ep2")); err != nil {
+		t.Fatal(err)
+	}
+	bridge.mu.Lock()
+	defer bridge.mu.Unlock()
+	if len(bridge.pausedLoads) != 2 || !bridge.pausedLoads[0] || bridge.pausedLoads[1] {
+		t.Fatalf("paused flags per load = %v, want [true false]", bridge.pausedLoads)
 	}
 }
 

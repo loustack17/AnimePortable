@@ -76,6 +76,7 @@ func episodeStartAtTrack(y, count int) int {
 
 // openEpisodes shows the list on the playing episode, including after autoplay moved on.
 func (view *View) openEpisodes() {
+	view.speedOpen = false
 	view.episodesOpen = true
 	view.episodeCursor = view.state.Episode
 	view.episodeStart = episodeStartFor(view.state.Episode, len(view.episodes))

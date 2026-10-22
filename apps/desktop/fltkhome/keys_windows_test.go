@@ -51,6 +51,7 @@ var sendMessage = syscall.NewLazyDLL("user32.dll").NewProc("SendMessageW")
 
 // Windows virtual-key codes for the keys the tests press.
 const (
+	vkTab    = 0x09
 	vkReturn = 0x0D
 	vkEscape = 0x1B
 	vkSpace  = 0x20
