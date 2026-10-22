@@ -55,34 +55,6 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CC=$gcc"
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "CXX=$gxx"
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "ANIMEPORTABLE_OBJDUMP=$(Join-Path $bin 'objdump.exe')"
-          $goVerifierTemp = Join-Path $env:RUNNER_TEMP 'go-native-verifier'
-          New-Item -ItemType Directory -Force -Path $goVerifierTemp | Out-Null
-          Add-Content -LiteralPath $env:GITHUB_ENV -Value "GOTMPDIR=$goVerifierTemp"
-      - name: Restore pinned Mesa
-        id: mesa-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ${{ runner.temp }}/mesa
-          key: mesa-dist-win-26.2.4-release-mingw-x64
-      - name: Download pinned Mesa
-        if: steps.mesa-cache.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          # Software OpenGL (llvmpipe) for native tests on GPU-less runners; test-only, never shipped.
-          $archive = Join-Path $env:RUNNER_TEMP 'mesa3d-26.2.4-release-mingw.7z'
-          & curl.exe --fail --location --proto '=https' --proto-redir '=https' --retry 3 --max-time 300 --max-filesize 67108864 --output $archive 'https://github.com/pal1000/mesa-dist-win/releases/download/26.2.4/mesa3d-26.2.4-release-mingw.7z'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne '36A30A04D8CAB6E2BEA2D3C747C326D15024D9711DD80F45EF97AC6F2C3C5086') { throw 'Mesa archive hash mismatch' }
-          & 7z x $archive "-o$(Join-Path $env:RUNNER_TEMP 'mesa')" 'x64\*' -y | Out-Null
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Select pinned Mesa
-        shell: pwsh
-        run: |
-          $mesaBin = Join-Path $env:RUNNER_TEMP 'mesa\x64'
-          foreach ($name in @('opengl32.dll', 'libgallium_wgl.dll')) {
-            if (-not (Test-Path -LiteralPath (Join-Path $mesaBin $name) -PathType Leaf)) { throw "Mesa test dependency missing: $name" }
-          }
-          Add-Content -LiteralPath $env:GITHUB_ENV -Value "ANIMEPORTABLE_TEST_MESA_BIN=$mesaBin"
       - name: Verify Go formatting
         shell: pwsh
         run: |
@@ -91,15 +63,13 @@ jobs:
           if ($unformatted.Count -ne 0) { throw "Unformatted Go files: $($unformatted -join ', ')" }
       - name: Verify Go module
         run: go mod verify
-      - name: Repeat desktop lifecycle and player checks
-        run: go test -count=20 ./apps/desktop ./apps/desktop/backend ./apps/desktop/fltkhome ./adapters/player/libmpv
-      - name: Test Anime1 adapter acceptance
-        run: go test ./adapters/source/anime1 -run '^TestAnime1AdapterAcceptance'
-      - name: Test Go with race detector
+      - name: Test Go
         shell: pwsh
         run: |
-          $launcher = 'pwsh -NoProfile -File "' + (Join-Path $env:GITHUB_WORKSPACE 'tools\windows-mesa-test-exec.ps1') + '"'
-          go test -exec $launcher -race -count=1 ./...
+          # The window (FLTK) and real-libmpv packages run in the local native suite before a push
+          # (AGENTS.md); CI runs everything that needs neither, once.
+          $packages = @(go list ./... | Where-Object { $_ -notmatch '/apps/desktop/(fltkhome|fltkplayer|fltkengine)' })
+          go test -count=1 $packages
           exit $LASTEXITCODE
       - name: Vet Go
         run: go vet ./...

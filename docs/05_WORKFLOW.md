@@ -48,7 +48,7 @@ CGO_ENABLED=1 go test -count=1 ./...
 CGO_ENABLED=1 go test -race -count=1 ./...
 ```
 
-Use an msvcrt MinGW gcc (MSYS2 MINGW64 or nuwen MinGW) on PATH; go-fltk's prebuilt libraries cannot link with a UCRT MinGW. The git-ignored `artifacts/` folder has its own `go.mod` so `./...` skips it. GitHub Windows CI is the authoritative check for the pushed commit. A CI run on another OS cannot stand in for native Windows behavior, real playback or the owner's judgment.
+Use an msvcrt MinGW gcc (MSYS2 MINGW64 or nuwen MinGW) on PATH; go-fltk's prebuilt libraries cannot link with a UCRT MinGW. The git-ignored `artifacts/` folder has its own `go.mod` so `./...` skips it. The local native suite is the only run of the window (FLTK) and real-libmpv tests. GitHub Windows CI (owner decision 2026-10-22: a small project, so CI stays small) checks formatting, the module, vet, known vulnerabilities, the build and a portable startup smoke test, and runs every other package's tests once; documentation-only changes start no CI. A CI run on another OS cannot stand in for native Windows behavior, real playback or the owner's judgment.
 
 ## 6. Approvals and boundaries
 
