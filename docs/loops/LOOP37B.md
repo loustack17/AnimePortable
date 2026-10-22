@@ -2,7 +2,7 @@
 
 # Loop 37b: Language
 
-Status: BUILD. Scope approved 2026-10-22; the owner then chose a live switch over a restart (same day).
+Status: PASS (owner accepted 2026-10-22, owner check 1). Commit 17d13be; GitHub Windows CI 39845099717 green. Scope approved 2026-10-22; the owner then chose a live switch over a restart (same day).
 
 ## Goal
 

@@ -11,12 +11,14 @@ status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 37 (Settings) passed on 2026-10-22 (docs/loops/LOOP37.md; f582da8 + fixes 1966449, f2c4f51; CI 39734539484 green).
+  None. Loop 37b (Language) passed on 2026-10-22 (docs/loops/LOOP37B.md; 17d13be; CI 39845099717 green): live switch, uitext table, migration 0010.
+  Loop 37 (Settings) passed on 2026-10-22 (docs/loops/LOOP37.md; f582da8 + fixes 1966449, f2c4f51; CI 39734539484 green).
   Pre-release v0.3.0-alpha published 2026-10-22 (tag on b005d3a; release job 39738301609 reused the CI-tested exe; DLL hash matches the pin).
-  Next loops: 37b (language: zh-TW default, English, Japanese) and 37c (skip the opening with AniSkip), then 38; each needs owner approval to start.
+  Next loops: 37c (skip the opening with AniSkip), then 38; each needs owner approval to start. After 37c the stage becomes beta.
 active_acceptance: none
 next_actions:
-  - Migrations 0007-0009 are applied to the owner's test data; never edit them.
+  - Migrations 0007-0010 are applied to the owner's test data; never edit them.
+  - New UI text goes into apps/desktop/uitext (all three languages); a fixed label uses labelled, a status a localText, so a live language switch reaches it.
   - Loop 37c: AniSkip origin api.aniskip.com needs a 03_SECURITY section and owner approval; a new FLTK window outside fltkhome newDialog must close leaked groups at the source (see LOOP37 final review).
   - Ask before any GUI test run while the owner may be using the PC (owner request 2026-10-22).
   - 2. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
@@ -25,6 +27,7 @@ next_actions:
   - When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
   - If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
+  - Do not slice a uitext array into storage that is later appended to; it writes into the shared table (Loop 37b review). Copy with slices.Clone.
   - Do not destroy an FLTK group or window whose children have draw handlers: go-fltk's deletion handler unregisters the draw id from the callback map and a later callback crashes at address 0 (Loop 37 CI). Destroy children one by one first (dialogs), or hide (test teardown).
   - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt.
   - Do not research libmpv licensing again; settled in ADR-023.
@@ -45,6 +48,7 @@ boundaries:
   - Keep .codex/, artifacts/ and portable data untouched.
   - Commit, push, workflow and release need owner approval.
 references:
+  - docs/loops/LOOP37B.md
   - docs/loops/LOOP37.md
   - artifacts/evidence/loop37/
   - docs/loops/LOOP36.md

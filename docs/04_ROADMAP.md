@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-37 are complete. Loops 37b, 37c and 38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-37 and 37b are complete. Loops 37c and 38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux, then macOS (see "After the MVP").
 
@@ -51,10 +51,11 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 | 35 | Cache-first startup and refresh: Home shows stored data with no network call, one bounded refresh policy in core, calm offline line on Home. |
 | 36 | Autoplay next episode: a normal end starts the next episode in the same player, the last one stops cleanly; Home shows a finished newest episode as 已看完; the player's episode list opens on the playing episode. |
 | 37 | Settings: a 設定 page (theme 跟隨系統/暗色/明亮, 自動下一集, 自動播放, resume, hardware decoding, proxy with 測試連線, 檢查更新 and GitHub link, data folder location with restart), a remembered speed button in the player, app-styled dialogs. |
+| 37b | Language: 語言 繁體中文 / English / 日本語 switches every screen at once and is saved; one string table for all UI text. |
 
 ## Remaining loops
 
-Three loops remain, run in this order. The owner changed the plan on 2026-10-14:
+Two loops remain, run in this order. The owner changed the plan on 2026-10-14:
 
 - Following and History now come before Schedule, because they build on the finished detail and playback work.
 - The former Loops 38 to 42 (security, resources, cross-platform, release, final acceptance) are now one Windows loop, Loop 38.
@@ -62,14 +63,6 @@ Three loops remain, run in this order. The owner changed the plan on 2026-10-14:
 On 2026-10-22 the owner split autoplay into two settings (自動下一集, 自動播放) and moved language to its own Loop 37b, adding Japanese. After owner check 1 of Loop 37 (same day) the owner added the data folder location and player and system settings (chosen from settings that Animeko, Kazumi and mpv.net offer) to Loop 37, reopening the earlier "no player options" decision, and approved an HTTP forward proxy ([03_SECURITY.md](03_SECURITY.md)).
 
 Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.md) true.
-
-### Loop 37b - Language
-
-- Goal: The user can choose the UI language.
-- In scope: A language setting on the 設定 page with Traditional Chinese (default), English and Japanese; every UI string comes from one string table. Anime titles, synopses and other remote content are not translated.
-- Out of scope: Simplified Chinese; translating remote content.
-- Done when: Every screen shows the chosen language with no Simplified Chinese and no clipped labels, and the choice survives a restart.
-- Owner check: Switch to each language, look at every screen, restart, and see the language kept.
 
 ### Loop 37c - Skip the opening
 
