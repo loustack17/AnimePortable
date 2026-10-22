@@ -6,8 +6,15 @@ permissions:
   contents: read
 
 on:
+  # Documentation alone needs no build or test. Path filters do not apply to tag pushes.
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   push:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
 
 concurrency:
@@ -16,6 +23,8 @@ concurrency:
 
 jobs:
   windows:
+    # A release tag reuses the executable tested when its commit reached main (release job).
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -147,22 +156,29 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   release:
-    # Publishes a pre-release ZIP for v* tags, only after every Windows check above passes.
+    # Publishes a pre-release ZIP for v* tags from the executable built and tested when the tagged
+    # commit was pushed to main, so nothing is built or tested twice and only a tested build ships.
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: windows
     runs-on: windows-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: 1.27.3
       - name: Download tested executable
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: windows-desktop-${{ github.sha }}
-          path: ${{ runner.temp }}/release-bin
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The successful CI run of this commit on main; without one there is no tested build to ship.
+          $runs = @(gh run list --workflow CI --branch main --event push --commit $env:GITHUB_SHA --status success --limit 1 --json databaseId | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($runs.Count -eq 0) { throw "No successful CI run on main for $env:GITHUB_SHA; push the commit to main and wait for CI before tagging." }
+          gh run download $runs[0].databaseId --name "windows-desktop-$env:GITHUB_SHA" --dir (Join-Path $env:RUNNER_TEMP 'release-bin')
+          if ($LASTEXITCODE -ne 0) { throw "The tested executable of CI run $($runs[0].databaseId) is missing (kept 7 days); push a new commit to main and tag that." }
       - name: Download pinned libmpv
         shell: pwsh
         run: |
