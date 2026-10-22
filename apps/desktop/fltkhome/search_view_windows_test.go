@@ -123,9 +123,12 @@ func newSearchViewTestFixture(t *testing.T, service Service) *view {
 	return ui
 }
 
+// pumpSearchEvents runs FLTK events until ready holds. The limit only bounds a failure: with the
+// race detector, every package runs at once and the libmpv tests take all cores, so a 2 s limit
+// failed while the event was merely late (Loop 37 CI).
 func pumpSearchEvents(t *testing.T, ready func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for !ready() && time.Now().Before(deadline) {
 		fltk.Wait(0.01)
 	}
