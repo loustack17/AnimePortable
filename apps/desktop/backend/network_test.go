@@ -36,8 +36,8 @@ func TestCheckForUpdateComparesWithThisBuild(t *testing.T) {
 		want  UpdateInfo
 		wantE error
 	}{
-		{"newer minor", fakeReleases{release: github.Release{Tag: "v0.3.0-alpha", URL: page + "v0.3.0-alpha"}, found: true}, UpdateInfo{Current: release.Version, Latest: "0.3.0-alpha", Newer: true, URL: page + "v0.3.0-alpha"}, nil},
-		{"newer patch", fakeReleases{release: github.Release{Tag: "v0.2.1-alpha"}, found: true}, UpdateInfo{Current: release.Version, Latest: "0.2.1-alpha", Newer: true}, nil},
+		{"newer minor", fakeReleases{release: github.Release{Tag: "v0.4.0-alpha", URL: page + "v0.4.0-alpha"}, found: true}, UpdateInfo{Current: release.Version, Latest: "0.4.0-alpha", Newer: true, URL: page + "v0.4.0-alpha"}, nil},
+		{"newer patch", fakeReleases{release: github.Release{Tag: "v0.3.1-alpha"}, found: true}, UpdateInfo{Current: release.Version, Latest: "0.3.1-alpha", Newer: true}, nil},
 		{"same", fakeReleases{release: github.Release{Tag: "v" + release.Version, URL: page + "v" + release.Version}, found: true}, UpdateInfo{Current: release.Version, Latest: release.Version, URL: page + "v" + release.Version}, nil},
 		{"older", fakeReleases{release: github.Release{Tag: "v0.1.0-alpha.2"}, found: true}, UpdateInfo{Current: release.Version, Latest: "0.1.0-alpha.2"}, nil},
 		{"none published", fakeReleases{}, UpdateInfo{Current: release.Version}, nil},
