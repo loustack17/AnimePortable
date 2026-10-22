@@ -14,7 +14,7 @@ func validSettings(settings core.Settings) bool {
 		settings.AutoplayNext <= core.ToggleEnabled &&
 		settings.AutoPlay <= core.ToggleEnabled &&
 		settings.ResumePlayback <= core.ToggleEnabled &&
-		settings.Language <= core.LanguageEnglish &&
+		settings.Language <= core.LanguageJapanese &&
 		settings.PlaybackSpeed.Valid() &&
 		settings.HardwareDecoding <= core.ToggleEnabled &&
 		settings.ProxyMode <= core.ProxyModeManual &&
@@ -68,7 +68,7 @@ func (store *Store) Settings(ctx context.Context) (core.Settings, error) {
 			autoplayNext < int(core.ToggleUnspecified) || autoplayNext > int(core.ToggleEnabled) ||
 			autoPlay < int(core.ToggleUnspecified) || autoPlay > int(core.ToggleEnabled) ||
 			resumePlayback < int(core.ToggleUnspecified) || resumePlayback > int(core.ToggleEnabled) ||
-			language < int(core.LanguageUnspecified) || language > int(core.LanguageEnglish) ||
+			language < int(core.LanguageUnspecified) || language > int(core.LanguageJapanese) ||
 			hardwareDecoding < int(core.ToggleUnspecified) || hardwareDecoding > int(core.ToggleEnabled) ||
 			proxyMode < int(core.ProxyModeUnspecified) || proxyMode > int(core.ProxyModeManual) {
 			return ErrStorage

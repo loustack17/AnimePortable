@@ -8,15 +8,11 @@ import (
 	"slices"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
 const settingsSection = 5
-
-const (
-	settingsSaveFailedMessage = "無法儲存設定，請重試。"
-	settingsLoadFailedNotice  = "無法載入設定，重新開啟程式後再試。"
-)
 
 const (
 	settingsRowHeight     = 56
@@ -33,9 +29,26 @@ const (
 )
 
 // themeSegments are the choices of 主題; value is the stored appearance.
-var themeSegments = [...]segmentOption{{"跟隨系統", "system"}, {"暗色", "dark"}, {"明亮", "light"}}
+var themeSegments = []segmentOption{
+	{func(text *uitext.Strings) string { return text.ThemeSystem }, "system"},
+	{func(text *uitext.Strings) string { return text.ThemeDark }, "dark"},
+	{func(text *uitext.Strings) string { return text.ThemeLight }, "light"},
+}
 
-var proxySegments = [...]segmentOption{{"不使用", "none"}, {"系統", "system"}, {"手動", "manual"}}
+var proxySegments = []segmentOption{
+	{func(text *uitext.Strings) string { return text.ProxyNone }, "none"},
+	{func(text *uitext.Strings) string { return text.ProxySystem }, "system"},
+	{func(text *uitext.Strings) string { return text.ProxyManual }, "manual"},
+}
+
+// languageSegments are the choices of 語言, each named in its own language.
+func languageSegments() []segmentOption {
+	options := make([]segmentOption, len(uitext.LanguageCodes))
+	for index, code := range uitext.LanguageCodes {
+		options[index] = segmentOption{fixedText(uitext.LanguageNames[index]), code}
+	}
+	return options
+}
 
 // focusTarget is a widget keyboard focus can land on.
 type focusTarget interface {
@@ -78,9 +91,9 @@ func setShown(widget interface {
 // shows disabledHint, which says what to change first; its switch still shows its value.
 type settingsToggle struct {
 	button       *fltk.Button
-	title        string
-	hint         string
-	disabledHint string
+	title        localText
+	hint         localText
+	disabledHint localText
 	on           func() bool
 	enabled      func() bool
 	change       func()
@@ -110,21 +123,21 @@ func (ui *view) buildSettingsView() {
 
 	ui.settingsToggles = []settingsToggle{
 		{
-			title: "自動下一集", hint: "播完一集後，自動載入下一集。",
+			title: func(text *uitext.Strings) string { return text.AutoplayNext }, hint: func(text *uitext.Strings) string { return text.AutoplayNextHint },
 			on: func() bool { return settingOn(ui.settings.AutoplayNext) }, change: ui.toggleAutoplayNext,
 		},
 		{
-			title: "自動播放", hint: "自動載入的下一集會立即開始播放。", disabledHint: "請先開啟「自動下一集」。",
+			title: func(text *uitext.Strings) string { return text.AutoPlay }, hint: func(text *uitext.Strings) string { return text.AutoPlayHint }, disabledHint: func(text *uitext.Strings) string { return text.AutoPlayDisabled },
 			on:      func() bool { return settingOn(ui.settings.AutoPlay) },
 			enabled: func() bool { return settingOn(ui.settings.AutoplayNext) },
 			change:  ui.toggleAutoPlay,
 		},
 		{
-			title: "從上次位置繼續播放", hint: "按「播放」或在播放器選集時，從上次看到的位置開始。",
+			title: func(text *uitext.Strings) string { return text.Resume }, hint: func(text *uitext.Strings) string { return text.ResumeHint },
 			on: func() bool { return settingOn(ui.settings.ResumePlayback) }, change: ui.toggleResumePlayback,
 		},
 		{
-			title: "硬體解碼", hint: "畫面黑屏或閃退時可關閉，下次開啟播放器時生效。",
+			title: func(text *uitext.Strings) string { return text.HardwareDecoding }, hint: func(text *uitext.Strings) string { return text.HardwareDecodingHint },
 			on: func() bool { return settingOn(ui.settings.HardwareDecoding) }, change: ui.toggleHardwareDecoding,
 		},
 	}
@@ -135,30 +148,36 @@ func (ui *view) buildSettingsView() {
 		hardwareToggle
 	)
 
-	ui.addHeading("外觀")
+	ui.addHeading(func(text *uitext.Strings) string { return text.HeadingAppearance })
 	ui.themeControl = &segmentedControl{
-		title: "主題", hint: "選擇應用程式外觀。", options: themeSegments[:], segmentW: 92,
+		title: func(text *uitext.Strings) string { return text.Theme }, hint: func(text *uitext.Strings) string { return text.ThemeHint }, options: themeSegments, minSegmentW: 92,
 		selected: ui.selectedThemeSegment, choose: ui.chooseTheme,
 	}
 	ui.addSegmentedRow(ui.themeControl)
+	ui.languageControl = &segmentedControl{
+		title: func(text *uitext.Strings) string { return text.Language }, hint: func(text *uitext.Strings) string { return text.LanguageHint }, options: languageSegments(), minSegmentW: 92,
+		selected: func() int { return max(0, indexOfOption(ui.languageControl.options, ui.settings.Language)) },
+		choose:   ui.chooseLanguage,
+	}
+	ui.addSegmentedRow(ui.languageControl)
 
-	ui.addHeading("播放")
+	ui.addHeading(func(text *uitext.Strings) string { return text.HeadingPlayback })
 	ui.addToggleRow(&ui.settingsToggles[autoplayNextToggle])
 	ui.addToggleRow(&ui.settingsToggles[autoPlayToggle])
 	ui.addToggleRow(&ui.settingsToggles[resumeToggle])
 	ui.addToggleRow(&ui.settingsToggles[hardwareToggle])
 
-	ui.addHeading("網路")
+	ui.addHeading(func(text *uitext.Strings) string { return text.HeadingNetwork })
 	ui.proxyControl = &segmentedControl{
-		title: "代理伺服器", hint: "選擇連線方式。", options: proxySegments[:], segmentW: 84,
-		selected: func() int { return indexOfOption(proxySegments[:], ui.settings.ProxyMode) },
+		title: func(text *uitext.Strings) string { return text.Proxy }, hint: func(text *uitext.Strings) string { return text.ProxyHint }, options: proxySegments, minSegmentW: 84,
+		selected: func() int { return indexOfOption(proxySegments, ui.settings.ProxyMode) },
 		choose:   ui.chooseProxyMode,
 	}
 	ui.addSegmentedRow(ui.proxyControl)
 	ui.addProxyAddressRow()
 	ui.proxyTest = &settingsAction{
-		title: "測試連線", face: func() string { return "測試連線" },
-		status:  func() string { return ui.tasks.proxyStatus },
+		title: func(text *uitext.Strings) string { return text.TestConnection }, face: func(text *uitext.Strings) string { return text.TestConnection },
+		status:  func() string { return ui.tasks.proxyStatus.String() },
 		tone:    func() statusTone { return ui.tasks.proxyTone },
 		enabled: func() bool { return !ui.settingsLoadFailed },
 		busy:    func() bool { return ui.tasks.proxyTesting },
@@ -166,43 +185,43 @@ func (ui *view) buildSettingsView() {
 	}
 	ui.addActionRow(ui.proxyTest)
 
-	ui.addHeading("資料")
-	ui.addInfoRow(&settingsInfo{title: "資料夾位置", detail: ui.dataFolderText})
+	ui.addHeading(func(text *uitext.Strings) string { return text.HeadingData })
+	ui.addInfoRow(&settingsInfo{title: func(text *uitext.Strings) string { return text.DataFolder }, detail: ui.dataFolderText})
 	ui.dataChange = &settingsAction{
-		title: "變更位置", face: func() string { return "變更位置…" },
-		status: func() string { return ui.tasks.dataStatus },
+		title: func(text *uitext.Strings) string { return text.ChangeLocation }, face: func(text *uitext.Strings) string { return text.ChangeLocationButton },
+		status: func() string { return ui.tasks.dataStatus.String() },
 		busy:   func() bool { return ui.tasks.dataMoving },
 		run:    func() { ui.changeDataLocation(false) },
 	}
 	ui.addActionRow(ui.dataChange)
 	ui.dataRestore = &settingsAction{
-		title: "恢復預設位置", face: func() string { return "恢復預設位置" },
-		status:  func() string { return "改回程式旁的 data 資料夾。" },
+		title: func(text *uitext.Strings) string { return text.RestoreDefault }, face: func(text *uitext.Strings) string { return text.RestoreDefault },
+		status:  func() string { return uitext.T().RestoreDefaultHint },
 		enabled: func() bool { return ui.tasks.dataKnown && ui.tasks.data.Custom },
 		busy:    func() bool { return ui.tasks.dataMoving },
 		run:     func() { ui.changeDataLocation(true) },
 	}
 	ui.addActionRow(ui.dataRestore)
 
-	ui.addHeading("關於")
-	ui.addInfoRow(&settingsInfo{title: "目前版本", detail: ui.versionText})
+	ui.addHeading(func(text *uitext.Strings) string { return text.HeadingAbout })
+	ui.addInfoRow(&settingsInfo{title: func(text *uitext.Strings) string { return text.CurrentVersion }, detail: ui.versionText})
 	ui.updateCheck = &settingsAction{
-		title: "檢查更新", face: func() string { return "檢查更新" },
-		status: func() string { return ui.tasks.updateStatus },
+		title: func(text *uitext.Strings) string { return text.CheckUpdate }, face: func(text *uitext.Strings) string { return text.CheckUpdate },
+		status: func() string { return ui.tasks.updateStatus.String() },
 		busy:   func() bool { return ui.tasks.updateChecking },
 		run:    ui.checkForUpdate,
 	}
 	ui.addActionRow(ui.updateCheck)
 	ui.updateOpen = &settingsAction{
-		title: "下載新版本", face: func() string { return "開啟下載頁" },
-		status:  func() string { return "在預設瀏覽器開啟 GitHub 的下載頁。" },
+		title: func(text *uitext.Strings) string { return text.DownloadNew }, face: func(text *uitext.Strings) string { return text.OpenDownloadPage },
+		status:  func() string { return uitext.T().DownloadPageHint },
 		visible: func() bool { return ui.tasks.update != nil && ui.tasks.update.Newer && ui.tasks.update.URL != "" },
 		run:     ui.openUpdatePage,
 	}
 	ui.addActionRow(ui.updateOpen)
 	ui.projectOpen = &settingsAction{
-		title: "GitHub 專案頁", face: func() string { return "開啟專案頁" },
-		status: func() string { return ui.tasks.projectStatus },
+		title: func(text *uitext.Strings) string { return text.ProjectPage }, face: func(text *uitext.Strings) string { return text.OpenProjectPage },
+		status: func() string { return ui.tasks.projectStatus.String() },
 		run:    ui.openProjectPage,
 	}
 	ui.addActionRow(ui.projectOpen)
@@ -222,8 +241,9 @@ func (ui *view) buildSettingsView() {
 }
 
 // addHeading adds a section heading above the rows it names.
-func (ui *view) addHeading(title string) {
-	heading := fltk.NewBox(fltk.NO_BOX, 0, 0, 1, 1, title)
+func (ui *view) addHeading(title localText) {
+	heading := fltk.NewBox(fltk.NO_BOX, 0, 0, 1, 1, "")
+	ui.labelled(heading, title)
 	heading.SetLabelFont(fltk.HELVETICA_BOLD)
 	heading.SetLabelSize(16)
 	heading.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
@@ -281,7 +301,7 @@ func (ui *view) changeSettings(change func(*backend.Settings)) {
 func (ui *view) settingsSaveFailed(error) {
 	fltk.Awake(func() {
 		if ui.ctx.Err() == nil && !ui.closing {
-			ui.message.SetLabel(settingsSaveFailedMessage)
+			ui.setMessage(func() string { return uitext.T().SettingsSaveFailed })
 			ui.window.Redraw()
 		}
 	})
@@ -290,8 +310,8 @@ func (ui *view) settingsSaveFailed(error) {
 // settingsSaved clears the save-failure message once a later save worked, and no other message.
 func (ui *view) settingsSaved() {
 	fltk.Awake(func() {
-		if ui.ctx.Err() == nil && !ui.closing && ui.message.Label() == settingsSaveFailedMessage {
-			ui.message.SetLabel("")
+		if ui.ctx.Err() == nil && !ui.closing && ui.message.Label() == uitext.T().SettingsSaveFailed {
+			ui.setMessage(nil)
 			ui.window.Redraw()
 		}
 	})
@@ -300,10 +320,10 @@ func (ui *view) settingsSaved() {
 // selectedThemeSegment is the segment of the stored appearance; an unknown value shows as the
 // light theme, which is what resolveDark makes of it.
 func (ui *view) selectedThemeSegment() int {
-	if index := indexOfOption(themeSegments[:], ui.settings.Appearance); index >= 0 {
+	if index := indexOfOption(themeSegments, ui.settings.Appearance); index >= 0 {
 		return index
 	}
-	return indexOfOption(themeSegments[:], "light")
+	return indexOfOption(themeSegments, "light")
 }
 
 // chooseTheme saves and applies one segment of 主題. 跟隨系統 reads the Windows theme now.
@@ -313,6 +333,12 @@ func (ui *view) chooseTheme(value string) {
 		ui.dark = resolveDark(value)
 	})
 	ui.applyTheme()
+}
+
+// chooseLanguage saves the UI language and switches every screen to it at once.
+func (ui *view) chooseLanguage(value string) {
+	ui.changeSettings(func(settings *backend.Settings) { settings.Language = value })
+	ui.useLanguage(ui.settings.Language)
 }
 
 func (ui *view) chooseProxyMode(value string) {
@@ -347,7 +373,7 @@ func (ui *view) toggleHardwareDecoding() {
 func (ui *view) syncSettings() {
 	notice := ""
 	if ui.settingsLoadFailed {
-		notice = settingsLoadFailedNotice
+		notice = uitext.T().SettingsLoadFailed
 	}
 	ui.settingsNotice.SetLabel(notice)
 	for _, row := range ui.settingsRows {
@@ -499,7 +525,8 @@ func (ui *view) settingsKeys(row *settingsRow, activate func(), horizontal func(
 // addToggleRow builds a title and hint with a switch at its end.
 func (ui *view) addToggleRow(toggle *settingsToggle) {
 	row := &settingsRow{}
-	toggle.button = fltk.NewButton(0, 0, 1, 1, toggle.title)
+	toggle.button = fltk.NewButton(0, 0, 1, 1, "")
+	ui.labelled(toggle.button, toggle.title)
 	ui.styleSettingsToggle(toggle)
 	toggle.button.SetCallback(toggle.change)
 	toggle.button.SetEventHandler(ui.settingsKeys(row, toggle.change, nil))
@@ -527,7 +554,7 @@ func (ui *view) styleSettingsToggle(toggle *settingsToggle) {
 		if !active {
 			title, hint = colors.muted, toggle.disabledHint
 		}
-		drawRowText(x, y, width, height, width-36-settingsSwitchW-12, toggle.title, hint, title, colors.muted, false)
+		drawRowText(x, y, width, height, width-36-settingsSwitchW-12, toggle.title.String(), hint.String(), title, colors.muted, false)
 
 		track, knob := colors.muted, colors.surface
 		switch {

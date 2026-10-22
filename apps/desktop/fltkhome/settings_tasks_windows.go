@@ -6,9 +6,11 @@ package fltkhome
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	"animeportable/internal/release"
 	fltk "github.com/pwiecz/go-fltk"
 	"golang.org/x/sys/windows"
@@ -18,47 +20,24 @@ import (
 // update link it needs no check before it is opened.
 const projectURL = "https://github.com/loustack17/AnimePortable"
 
-const (
-	proxyIdleStatus         = "用目前的設定向 Anime1 連線一次。"
-	proxyTestingStatus      = "連線中…"
-	proxyTestOKStatus       = "連線成功"
-	proxyTestFailedStatus   = "連線失敗"
-	updateIdleStatus        = "向 GitHub 查詢，不會自動下載。"
-	updateCheckingStatus    = "檢查中…"
-	updateFailedStatus      = "無法檢查更新，請稍後再試。"
-	updateOpenFailedStatus  = "無法開啟下載頁。"
-	projectIdleStatus       = "在預設瀏覽器開啟 GitHub 的專案頁。"
-	projectOpenFailedStatus = "無法開啟專案頁。"
-	dataIdleStatus          = "資料會複製到新資料夾，原資料夾不變。"
-	dataMovingStatus        = "處理中…"
-	dataMovedStatus         = "重新開啟中…"
-	dataInUseStatus         = "這是目前使用中的資料夾，請改選其他資料夾。"
-	dataInvalidStatus       = "無法使用這個資料夾，請改選其他資料夾。"
-	dataFailedStatus        = "無法變更資料位置，請重試。"
-	dataCopiedNotice        = "資料已複製到新位置，程式將重新開啟。"
-	dataSwitchedNotice      = "將改用該資料夾的資料，程式將重新開啟。"
-	dataLoadingText         = "讀取中…"
-	dataUnreadableText      = "無法讀取資料位置。"
-)
-
 // settingsTasks is the state of the rows that act instead of saving a setting (proxy test,
 // update check, data folder), and the system calls they make, which tests replace.
 type settingsTasks struct {
 	proxyTesting bool
-	proxyStatus  string
+	proxyStatus  localText
 	proxyTone    statusTone
 
 	updateChecking bool
 	update         *backend.UpdateInfo
-	updateStatus   string
+	updateStatus   localText
 
-	projectStatus string
+	projectStatus localText
 
 	dataMoving     bool
 	dataKnown      bool
 	dataFailed     bool
 	data           backend.DataLocation
-	dataStatus     string
+	dataStatus     localText
 	dataGeneration int
 
 	openURL      func(url string) error
@@ -74,13 +53,15 @@ type settingsTasks struct {
 
 func (ui *view) useSettingsTaskDefaults() {
 	ui.tasks = settingsTasks{
-		proxyStatus: proxyIdleStatus, updateStatus: updateIdleStatus, dataStatus: dataIdleStatus,
-		projectStatus: projectIdleStatus,
-		openURL:       openInBrowser, chooseFolder: chooseFolderDialog,
+		proxyStatus: func(text *uitext.Strings) string { return text.ProxyIdle }, updateStatus: func(text *uitext.Strings) string { return text.UpdateIdle },
+		dataStatus: func(text *uitext.Strings) string { return text.DataIdle }, projectStatus: func(text *uitext.Strings) string { return text.ProjectIdle },
+		openURL: openInBrowser, chooseFolder: chooseFolderDialog,
 		choice: func(message string, options ...string) int {
-			return showDialog(ui.window, dataDialogTitle, message, ui.dark, options...)
+			return showDialog(ui.window, uitext.T().DataDialogTitle, message, ui.dark, options...)
 		},
-		notice:  func(message string) { showDialog(ui.window, dataDialogTitle, message, ui.dark, dialogOKLabel) },
+		notice: func(message string) {
+			showDialog(ui.window, uitext.T().DataDialogTitle, message, ui.dark, uitext.T().OK)
+		},
 		restart: ui.restartApp,
 	}
 }
@@ -114,9 +95,9 @@ func (ui *view) dataFolderText() string {
 	case ui.tasks.dataKnown:
 		return ui.tasks.data.Dir
 	case ui.tasks.dataFailed:
-		return dataUnreadableText
+		return uitext.T().DataUnreadable
 	}
-	return dataLoadingText
+	return uitext.T().DataLoading
 }
 
 // testProxy asks the backend to reach Anime1 through the proxy as it is on the page now, saved
@@ -129,7 +110,7 @@ func (ui *view) testProxy() {
 	if input.ProxyMode == "manual" {
 		input.ProxyAddress = strings.TrimSpace(ui.proxyField.input.Value())
 	}
-	ui.tasks.proxyTesting, ui.tasks.proxyStatus, ui.tasks.proxyTone = true, proxyTestingStatus, toneNeutral
+	ui.tasks.proxyTesting, ui.tasks.proxyStatus, ui.tasks.proxyTone = true, func(text *uitext.Strings) string { return text.ProxyTesting }, toneNeutral
 	ui.syncSettings()
 	var result backend.ProxyTestResult
 	var err error
@@ -137,14 +118,36 @@ func (ui *view) testProxy() {
 		ui.tasks.proxyTesting = false
 		switch {
 		case err == nil && result.OK:
-			ui.tasks.proxyStatus, ui.tasks.proxyTone = proxyTestOKStatus, toneSuccess
+			ui.tasks.proxyStatus, ui.tasks.proxyTone = func(text *uitext.Strings) string { return text.ProxyOK }, toneSuccess
 		case err == nil && result.Reason != "":
-			ui.tasks.proxyStatus, ui.tasks.proxyTone = result.Reason, toneFailure
+			ui.tasks.proxyStatus, ui.tasks.proxyTone = proxyReasonText(result.Reason), toneFailure
 		default:
-			ui.tasks.proxyStatus, ui.tasks.proxyTone = proxyTestFailedStatus, toneFailure
+			ui.tasks.proxyStatus, ui.tasks.proxyTone = func(text *uitext.Strings) string { return text.ProxyFailed }, toneFailure
 		}
 		ui.syncSettings()
 	})
+}
+
+// proxyReasonText words a failed proxy test's reason code; an unknown code is a plain failure.
+func proxyReasonText(reason string) localText {
+	return func(text *uitext.Strings) string {
+		switch reason {
+		case backend.ReasonProxyUnreachable:
+			return text.ProxyUnreachable
+		case backend.ReasonProxyRefused:
+			return text.ProxyRefused
+		case backend.ReasonTimeout:
+			return text.ProxyTimeout
+		case backend.ReasonBadAddress:
+			return text.ProxyBadAddress
+		case backend.ReasonNoAddress:
+			return text.ProxyNoAddress
+		case backend.ReasonSystemUnusable:
+			return text.ProxySystemUnusable
+		default: // ReasonFailed and any reason this build does not know
+			return text.ProxyFailed
+		}
+	}
 }
 
 // checkForUpdate asks GitHub for the newest release. It runs only when the button is used.
@@ -152,7 +155,7 @@ func (ui *view) checkForUpdate() {
 	if ui.tasks.updateChecking || ui.closing {
 		return
 	}
-	ui.tasks.updateChecking, ui.tasks.updateStatus, ui.tasks.update = true, updateCheckingStatus, nil
+	ui.tasks.updateChecking, ui.tasks.updateStatus, ui.tasks.update = true, func(text *uitext.Strings) string { return text.UpdateChecking }, nil
 	ui.syncSettings()
 	var info backend.UpdateInfo
 	var err error
@@ -160,12 +163,12 @@ func (ui *view) checkForUpdate() {
 		ui.tasks.updateChecking = false
 		switch {
 		case err != nil:
-			ui.tasks.updateStatus = updateFailedStatus
+			ui.tasks.updateStatus = func(text *uitext.Strings) string { return text.UpdateFailed }
 		case info.Newer && info.Latest != "":
 			ui.tasks.update = &info
-			ui.tasks.updateStatus = "有新版本 v" + info.Latest
+			ui.tasks.updateStatus = func(text *uitext.Strings) string { return fmt.Sprintf(text.UpdateAvailable, info.Latest) }
 		default:
-			ui.tasks.updateStatus = "已是最新版本（v" + info.Current + "）"
+			ui.tasks.updateStatus = func(text *uitext.Strings) string { return fmt.Sprintf(text.UpToDate, info.Current) }
 		}
 		ui.syncSettings()
 	})
@@ -180,7 +183,7 @@ func (ui *view) openUpdatePage() {
 	}
 	page, ok := release.PageURL(info.URL)
 	if !ok || ui.tasks.openURL(page) != nil {
-		ui.tasks.updateStatus = updateOpenFailedStatus
+		ui.tasks.updateStatus = func(text *uitext.Strings) string { return text.UpdateOpenFailed }
 		ui.syncSettings()
 	}
 }
@@ -189,9 +192,9 @@ func (ui *view) openUpdatePage() {
 // update page.
 func (ui *view) openProjectPage() {
 	if ui.tasks.openURL(projectURL) != nil {
-		ui.tasks.projectStatus = projectOpenFailedStatus
+		ui.tasks.projectStatus = func(text *uitext.Strings) string { return text.ProjectOpenFailed }
 	} else {
-		ui.tasks.projectStatus = projectIdleStatus
+		ui.tasks.projectStatus = func(text *uitext.Strings) string { return text.ProjectIdle }
 	}
 	ui.syncSettings()
 }
@@ -240,7 +243,7 @@ func (ui *view) changeDataLocation(restoreDefault bool) {
 }
 
 func (ui *view) moveDataLocation(request backend.MoveDataLocationRequest) {
-	ui.tasks.dataMoving, ui.tasks.dataStatus = true, dataMovingStatus
+	ui.tasks.dataMoving, ui.tasks.dataStatus = true, func(text *uitext.Strings) string { return text.DataMoving }
 	ui.tasks.dataGeneration++
 	ui.syncSettings()
 	var result backend.MoveDataLocationResult
@@ -250,11 +253,11 @@ func (ui *view) moveDataLocation(request backend.MoveDataLocationRequest) {
 		ui.tasks.dataGeneration++
 		switch {
 		case err != nil && errors.Is(err, backend.ErrDataFolderInUse):
-			ui.tasks.dataStatus = dataInUseStatus
+			ui.tasks.dataStatus = func(text *uitext.Strings) string { return text.DataInUse }
 		case err != nil && errors.Is(err, backend.ErrInvalidInput):
-			ui.tasks.dataStatus = dataInvalidStatus
+			ui.tasks.dataStatus = func(text *uitext.Strings) string { return text.DataInvalid }
 		case err != nil:
-			ui.tasks.dataStatus = dataFailedStatus
+			ui.tasks.dataStatus = func(text *uitext.Strings) string { return text.DataFailed }
 		case result.NeedsChoice:
 			existing := ui.askExistingData(result.Dir)
 			if existing != "" {
@@ -262,16 +265,16 @@ func (ui *view) moveDataLocation(request backend.MoveDataLocationRequest) {
 				ui.moveDataLocation(request)
 				return
 			}
-			ui.tasks.dataStatus = dataIdleStatus
+			ui.tasks.dataStatus = func(text *uitext.Strings) string { return text.DataIdle }
 		default:
 			ui.tasks.data, ui.tasks.dataKnown, ui.tasks.dataFailed = backend.DataLocation{Dir: result.Dir, Custom: !request.RestoreDefault}, true, false
-			ui.tasks.dataStatus = dataMovedStatus
+			ui.tasks.dataStatus = func(text *uitext.Strings) string { return text.DataMoved }
 			ui.syncSettings()
 			// The open database is now the old copy and the backend refuses writes, so the
 			// program restarts at once to open the new one.
-			notice := dataCopiedNotice
+			notice := uitext.T().DataCopiedNotice
 			if request.Existing == backend.ExistingUse {
-				notice = dataSwitchedNotice
+				notice = uitext.T().DataSwitchedNotice
 			}
 			ui.tasks.notice(notice)
 			ui.tasks.restart()
@@ -288,10 +291,10 @@ func (ui *view) moveDataLocation(request backend.MoveDataLocationRequest) {
 // the first one only moves on to the second, and closing the second one cancels. It returns the
 // answer for MoveDataLocation, or "" for no move.
 func (ui *view) askExistingData(dir string) string {
-	if ui.tasks.choice("此資料夾已有資料：\n"+dir+"\n\n要使用該資料夾的資料嗎？", "否", "使用該資料夾的資料") == 1 {
+	if ui.tasks.choice(fmt.Sprintf(uitext.T().ExistingData, dir), uitext.T().No, uitext.T().UseExistingData) == 1 {
 		return backend.ExistingUse
 	}
-	if ui.tasks.choice("要改以目前的資料覆蓋該資料夾的資料嗎？\n該資料夾原有的資料檔會先備份，不會刪除。", "取消", "以目前資料覆蓋") == 1 {
+	if ui.tasks.choice(uitext.T().OverwriteData, uitext.T().Cancel, uitext.T().OverwriteButton) == 1 {
 		return backend.ExistingOverwrite
 	}
 	return ""
@@ -302,7 +305,7 @@ func chooseFolderDialog(start string) (string, bool) {
 	chooser := fltk.NewNativeFileChooser()
 	defer chooser.Destroy()
 	chooser.SetType(fltk.NativeFileChooser_BROWSE_DIRECTORY)
-	chooser.SetTitle("選擇資料夾")
+	chooser.SetTitle(uitext.T().ChooseFolder)
 	chooser.SetOptions(fltk.NativeFileChooser_NEW_FOLDER)
 	if start != "" {
 		chooser.SetDirectory(start)

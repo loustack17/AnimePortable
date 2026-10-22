@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -16,8 +17,8 @@ import (
 // button is drawn disabled and ignores presses but keeps focus, so a keyboard user is not
 // thrown out when a task starts; enabled reports false for an action that does not apply now.
 type settingsAction struct {
-	title   string
-	face    func() string
+	title   localText
+	face    localText
 	status  func() string
 	tone    func() statusTone // nil: neutral
 	enabled func() bool       // nil: always
@@ -28,13 +29,19 @@ type settingsAction struct {
 	button *fltk.Button
 }
 
+// actionFaceW is the narrowest an action's button is; a longer label widens it.
 const actionFaceW = 132
+
+func (action *settingsAction) faceWidth() int {
+	return max(actionFaceW, boldTextWidth(14, action.face.String())+24)
+}
 
 func (action *settingsAction) isBusy() bool { return action.busy != nil && action.busy() }
 
 func (ui *view) addActionRow(action *settingsAction) {
 	row := &settingsRow{visible: action.visible}
-	action.button = fltk.NewButton(0, 0, 1, 1, action.title)
+	action.button = fltk.NewButton(0, 0, 1, 1, "")
+	ui.labelled(action.button, action.title)
 	ui.styleAction(action)
 	activate := func() {
 		if !action.isBusy() {
@@ -71,23 +78,24 @@ func (ui *view) styleAction(action *settingsAction) {
 			tone = action.tone()
 		}
 		// A result is bold as well as coloured, so it reads without the colour.
-		drawRowText(x, y, width, height, width-36-actionFaceW-12, action.title, action.status(), title, toneColor(colors, tone), tone != toneNeutral)
+		faceW := action.faceWidth()
+		drawRowText(x, y, width, height, width-36-faceW-12, action.title.String(), action.status(), title, toneColor(colors, tone), tone != toneNeutral)
 
 		fill, ink := colors.soft, colors.accent
 		if !active || action.isBusy() {
 			ink = colors.muted
 		}
-		faceX, faceY := x+width-18-actionFaceW, y+(height-settingsSegmentH)/2
-		roundedRect(faceX, faceY, actionFaceW, settingsSegmentH, 10, fill)
+		faceX, faceY := x+width-18-faceW, y+(height-settingsSegmentH)/2
+		roundedRect(faceX, faceY, faceW, settingsSegmentH, 10, fill)
 		fltk.SetDrawColor(ink)
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 14)
-		fltk.Draw(action.face(), faceX+4, faceY, actionFaceW-8, settingsSegmentH, fltk.ALIGN_CENTER|fltk.ALIGN_CLIP)
+		fltk.Draw(action.face.String(), faceX+4, faceY, faceW-8, settingsSegmentH, fltk.ALIGN_CENTER|fltk.ALIGN_CLIP)
 	})
 }
 
 // settingsInfo is a row that only shows a title and one line under it.
 type settingsInfo struct {
-	title  string
+	title  localText
 	detail func() string
 
 	card *fltk.Box
@@ -99,7 +107,7 @@ func (ui *view) addInfoRow(info *settingsInfo) {
 		colors := ui.colors()
 		x, y, width, height := info.card.X(), info.card.Y(), info.card.W(), info.card.H()
 		drawSettingsCard(colors, x, y, width, height, false)
-		drawRowText(x, y, width, height, width-36, info.title, info.detail(), colors.ink, colors.muted, false)
+		drawRowText(x, y, width, height, width-36, info.title.String(), info.detail(), colors.ink, colors.muted, false)
 	})
 	ui.settingsRows = append(ui.settingsRows, &settingsRow{
 		height: fixedHeight(settingsRowHeight + settingsRowGap),
@@ -109,12 +117,7 @@ func (ui *view) addInfoRow(info *settingsInfo) {
 	})
 }
 
-const (
-	proxyAddressHint    = "格式：主機名稱:連接埠。"
-	proxyAddressInvalid = "位址格式不正確，請輸入 主機名稱:連接埠。"
-	proxyPlaceholder    = "例如 127.0.0.1:7890"
-	proxyInputW         = 200
-)
+const proxyInputW = 200
 
 // proxyAddressField is the 手動 proxy's host:port row. The text is saved on Enter or when
 // focus leaves, and only when core accepts it; otherwise the row says so and the saved value
@@ -134,14 +137,14 @@ func (ui *view) addProxyAddressRow() {
 		colors := ui.colors()
 		x, y, width, height := field.card.X(), field.card.Y(), field.card.W(), field.card.H()
 		drawSettingsCard(colors, x, y, width, height, field.input.HasFocus())
-		title, hint, hintColor := colors.ink, proxyAddressHint, colors.muted
+		title, hint, hintColor := colors.ink, uitext.T().ProxyAddressHint, colors.muted
 		if ui.settingsLoadFailed {
 			title = colors.muted
 		}
 		if field.invalid {
-			hint, hintColor = proxyAddressInvalid, colors.ink
+			hint, hintColor = uitext.T().ProxyAddressInvalid, colors.ink
 		}
-		drawRowText(x, y, width, height, width-36-proxyInputW-12, "代理位址", hint, title, hintColor, field.invalid)
+		drawRowText(x, y, width, height, width-36-proxyInputW-12, uitext.T().ProxyAddress, hint, title, hintColor, field.invalid)
 		// The field is flat; its outline is drawn here, one pixel outside it.
 		fltk.SetDrawColor(colors.muted)
 		fltk.DrawRect(field.input.X()-1, field.input.Y()-1, field.input.W()+2, field.input.H()+2)
@@ -162,7 +165,7 @@ func (ui *view) addProxyAddressRow() {
 			fltk.PushClip(field.input.X(), field.input.Y(), field.input.W(), field.input.H())
 			fltk.SetDrawColor(ui.colors().muted)
 			fltk.SetDrawFont(fltk.HELVETICA, 14)
-			fltk.Draw(proxyPlaceholder, field.input.X()+6, field.input.Y(), field.input.W()-12, field.input.H(), fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE|fltk.ALIGN_CLIP)
+			fltk.Draw(uitext.T().ProxyPlaceholder, field.input.X()+6, field.input.Y(), field.input.W()-12, field.input.H(), fltk.ALIGN_LEFT|fltk.ALIGN_INSIDE|fltk.ALIGN_CLIP)
 			fltk.PopClip()
 		}
 	})

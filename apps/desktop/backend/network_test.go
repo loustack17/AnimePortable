@@ -75,11 +75,11 @@ func TestTestProxyReportsReasonsAndUsesGivenSettings(t *testing.T) {
 	}{
 		{"ok", Settings{ProxyMode: "manual", ProxyAddress: " 127.0.0.1:7890 "}, probeWith(nil), ProxyTestResult{OK: true}, "127.0.0.1:7890"},
 		{"none is direct", Settings{ProxyMode: "none", ProxyAddress: "127.0.0.1:7890"}, probeWith(nil), ProxyTestResult{OK: true}, ""},
-		{"unreachable", Settings{ProxyMode: "manual", ProxyAddress: "127.0.0.1:1"}, probeWith(&securehttp.Error{Kind: securehttp.KindProxy}), ProxyTestResult{Reason: "無法連線到代理伺服器"}, "127.0.0.1:1"},
-		{"refused", Settings{ProxyMode: "manual", ProxyAddress: "127.0.0.1:1"}, probeWith(&securehttp.Error{Kind: securehttp.KindProxyRefused}), ProxyTestResult{Reason: "代理伺服器拒絕連線"}, "127.0.0.1:1"},
-		{"timeout", Settings{ProxyMode: "manual", ProxyAddress: "127.0.0.1:1"}, probeWith(&securehttp.Error{Kind: securehttp.KindTimeout}), ProxyTestResult{Reason: "逾時"}, "127.0.0.1:1"},
-		{"other failure", Settings{ProxyMode: "manual", ProxyAddress: "127.0.0.1:1"}, probeWith(&securehttp.Error{Kind: securehttp.KindNetwork}), ProxyTestResult{Reason: "連線失敗"}, "127.0.0.1:1"},
-		{"bad address", Settings{ProxyMode: "manual", ProxyAddress: "http://127.0.0.1:1"}, probeWith(nil), ProxyTestResult{Reason: "位址格式不正確"}, "unchanged"},
+		{"unreachable", Settings{ProxyMode: "manual", ProxyAddress: "127.0.0.1:1"}, probeWith(&securehttp.Error{Kind: securehttp.KindProxy}), ProxyTestResult{Reason: ReasonProxyUnreachable}, "127.0.0.1:1"},
+		{"refused", Settings{ProxyMode: "manual", ProxyAddress: "127.0.0.1:1"}, probeWith(&securehttp.Error{Kind: securehttp.KindProxyRefused}), ProxyTestResult{Reason: ReasonProxyRefused}, "127.0.0.1:1"},
+		{"timeout", Settings{ProxyMode: "manual", ProxyAddress: "127.0.0.1:1"}, probeWith(&securehttp.Error{Kind: securehttp.KindTimeout}), ProxyTestResult{Reason: ReasonTimeout}, "127.0.0.1:1"},
+		{"other failure", Settings{ProxyMode: "manual", ProxyAddress: "127.0.0.1:1"}, probeWith(&securehttp.Error{Kind: securehttp.KindNetwork}), ProxyTestResult{Reason: ReasonFailed}, "127.0.0.1:1"},
+		{"bad address", Settings{ProxyMode: "manual", ProxyAddress: "http://127.0.0.1:1"}, probeWith(nil), ProxyTestResult{Reason: ReasonBadAddress}, "unchanged"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestTestProxyDoesNotClaimSuccessForSettingsThatDoNothing(t *testing.T) {
 		}
 		return result
 	}
-	if got := run(Settings{ProxyMode: "manual", ProxyAddress: "  "}); got != (ProxyTestResult{Reason: "未設定代理位址"}) || probed {
+	if got := run(Settings{ProxyMode: "manual", ProxyAddress: "  "}); got != (ProxyTestResult{Reason: ReasonNoAddress}) || probed {
 		t.Fatalf("manual without an address: %+v, probed %v", got, probed)
 	}
 	// Direct is a real test of the connection to Anime1.
@@ -132,15 +132,15 @@ func TestTestProxyDoesNotClaimSuccessForSettingsThatDoNothing(t *testing.T) {
 		t.Fatalf("none: %+v, probed %v", got, probed)
 	}
 	system = forwardproxy.SystemProxy{Enabled: true, Server: "socks=127.0.0.1:1080"}
-	if got := run(Settings{ProxyMode: "system"}); got != (ProxyTestResult{Reason: "系統代理無法使用，將直接連線"}) || probed {
+	if got := run(Settings{ProxyMode: "system"}); got != (ProxyTestResult{Reason: ReasonSystemUnusable}) || probed {
 		t.Fatalf("SOCKS-only system proxy: %+v, probed %v", got, probed)
 	}
 	system = forwardproxy.SystemProxy{AutoConfig: true}
-	if got := run(Settings{ProxyMode: "system"}); got.Reason != "系統代理無法使用，將直接連線" {
+	if got := run(Settings{ProxyMode: "system"}); got.Reason != ReasonSystemUnusable {
 		t.Fatalf("PAC system proxy: %+v", got)
 	}
 	system, systemErr = forwardproxy.SystemProxy{}, errors.New("registry")
-	if got := run(Settings{ProxyMode: "system"}); got.Reason != "系統代理無法使用，將直接連線" {
+	if got := run(Settings{ProxyMode: "system"}); got.Reason != ReasonSystemUnusable {
 		t.Fatalf("unreadable system proxy: %+v", got)
 	}
 	// A usable system proxy is tested through that proxy; one that is off is tested directly.

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
@@ -37,10 +38,12 @@ func (ui *view) buildSearchView() {
 		})
 	})
 	ui.searchInput.SetEventHandler(ui.handleSearchInputKey)
-	ui.searchButton = fltk.NewButton(741, 118, 104, 42, "搜尋")
+	ui.searchButton = fltk.NewButton(741, 118, 104, 42, "")
+	ui.labelled(ui.searchButton, func(text *uitext.Strings) string { return text.SearchButton })
 	ui.styleButton(ui.searchButton, nil)
 	ui.bindSearchButton(ui.searchButton, ui.submitSearch)
-	ui.searchBack = fltk.NewButton(853, 118, 104, 42, "返回首頁")
+	ui.searchBack = fltk.NewButton(853, 118, 104, 42, "")
+	ui.labelled(ui.searchBack, func(text *uitext.Strings) string { return text.BackToHome })
 	ui.styleButton(ui.searchBack, nil)
 	ui.bindSearchButton(ui.searchBack, func() { ui.showSection(0) })
 	ui.searchStatus = fltk.NewBox(fltk.NO_BOX, 252, 169, 705, 29, "")
@@ -53,13 +56,15 @@ func (ui *view) buildSearchView() {
 	ui.searchPageText = fltk.NewBox(fltk.NO_BOX, 455, 565, 280, 28, "")
 	ui.searchPageText.SetLabelSize(12)
 	ui.searchPageText.SetAlign(fltk.ALIGN_CENTER | fltk.ALIGN_INSIDE)
-	ui.searchPrevious = fltk.NewButton(252, 561, 113, 36, "上一頁")
+	ui.searchPrevious = fltk.NewButton(252, 561, 113, 36, "")
+	ui.labelled(ui.searchPrevious, func(text *uitext.Strings) string { return text.PreviousPage })
 	ui.styleButton(ui.searchPrevious, nil)
 	ui.bindSearchButton(ui.searchPrevious, func() {
 		ui.searchModel.movePage(-1)
 		ui.renderSearch()
 	})
-	ui.searchNext = fltk.NewButton(844, 561, 113, 36, "下一頁")
+	ui.searchNext = fltk.NewButton(844, 561, 113, 36, "")
+	ui.labelled(ui.searchNext, func(text *uitext.Strings) string { return text.NextPage })
 	ui.styleButton(ui.searchNext, nil)
 	ui.bindSearchButton(ui.searchNext, func() {
 		ui.searchModel.movePage(1)
@@ -70,17 +75,19 @@ func (ui *view) buildSearchView() {
 
 	ui.previewGroup = fltk.NewGroup(236, 110, 741, 487)
 	ui.previewGroup.Begin()
-	ui.previewBack = fltk.NewButton(252, 118, 113, 38, "返回結果")
+	ui.previewBack = fltk.NewButton(252, 118, 113, 38, uitext.T().BackToResults)
 	ui.styleButton(ui.previewBack, nil)
 	ui.bindSearchButton(ui.previewBack, ui.leaveDetail)
-	ui.previewContinue = fltk.NewButton(539, 118, 126, 38, "繼續觀看")
+	ui.previewContinue = fltk.NewButton(539, 118, 126, 38, "")
+	ui.labelled(ui.previewContinue, func(text *uitext.Strings) string { return text.ContinueWatching })
 	ui.styleButton(ui.previewContinue, nil)
 	ui.bindSearchButton(ui.previewContinue, ui.continueDetailEpisode)
-	ui.previewRetry = fltk.NewButton(677, 118, 96, 38, "重試載入")
+	ui.previewRetry = fltk.NewButton(677, 118, 96, 38, "")
+	ui.labelled(ui.previewRetry, func(text *uitext.Strings) string { return text.RetryLoad })
 	ui.styleButton(ui.previewRetry, nil)
 	ui.bindSearchButton(ui.previewRetry, ui.retryDetailLoad)
 	ui.previewRetry.Hide()
-	ui.previewFollow = fltk.NewButton(0, 118, followIconSize, 38, "追蹤")
+	ui.previewFollow = fltk.NewButton(0, 118, followIconSize, 38, uitext.T().Follow)
 	ui.styleFollowIcon(ui.previewFollow, func() bool { return ui.searchModel.preview != nil && ui.searchModel.preview.Following })
 	ui.bindSearchButton(ui.previewFollow, ui.toggleDetailFollow)
 	ui.previewFollow.Hide()
@@ -88,7 +95,7 @@ func (ui *view) buildSearchView() {
 	ui.previewTitle.SetLabelFont(fltk.HELVETICA_BOLD)
 	ui.previewTitle.SetLabelSize(20)
 	ui.previewTitle.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
-	ui.previewCover = fltk.NewBox(fltk.NO_BOX, 252, 215, 166, 248, "封面載入中…")
+	ui.previewCover = fltk.NewBox(fltk.NO_BOX, 252, 215, 166, 248, uitext.T().CoverLoading)
 	ui.previewCover.SetAlign(fltk.ALIGN_CENTER | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
 	ui.previewCover.SetDrawHandler(func(defaultDraw func()) {
 		if ui.previewCoverImage != nil {
@@ -122,10 +129,12 @@ func (ui *view) buildSearchView() {
 	ui.previewEpisodeText = fltk.NewBox(fltk.NO_BOX, 684, 519, 166, 25, "")
 	ui.previewEpisodeText.SetLabelSize(11)
 	ui.previewEpisodeText.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
-	ui.previewPrevious = fltk.NewButton(684, 547, 92, 34, "上一頁")
+	ui.previewPrevious = fltk.NewButton(684, 547, 92, 34, "")
+	ui.labelled(ui.previewPrevious, func(text *uitext.Strings) string { return text.PreviousPage })
 	ui.styleButton(ui.previewPrevious, nil)
 	ui.bindSearchButton(ui.previewPrevious, func() { ui.detailModel.movePage(-1); ui.renderDetailEpisodes() })
-	ui.previewNext = fltk.NewButton(865, 547, 92, 34, "下一頁")
+	ui.previewNext = fltk.NewButton(865, 547, 92, 34, "")
+	ui.labelled(ui.previewNext, func(text *uitext.Strings) string { return text.NextPage })
 	ui.styleButton(ui.previewNext, nil)
 	ui.bindSearchButton(ui.previewNext, func() { ui.detailModel.movePage(1); ui.renderDetailEpisodes() })
 	ui.previewGroup.End()
@@ -249,7 +258,7 @@ func (ui *view) openSearchResult(item backend.Anime) {
 	ui.detailEpisodesErr = false
 	ui.detailHistoryErr = false
 	ui.detailCoverErr = false
-	ui.previewCover.SetLabel("封面載入中…")
+	ui.previewCover.SetLabel(uitext.T().CoverLoading)
 	ui.pageGeneration++
 	detailGeneration := ui.detailGeneration
 	request, ctx, ok := ui.searchModel.beginDetail(item)
@@ -409,17 +418,17 @@ func (ui *view) renderPreview() {
 	status := ""
 	if ui.searchModel.phase == searchPhaseLoading {
 		if ui.searchModel.active.kind == searchRequestPlayback {
-			status = "正在取得集數，準備播放…"
+			status = uitext.T().PreparingPlayback
 		} else {
-			status = "正在載入作品資料…"
+			status = uitext.T().LoadingAnime
 		}
 	} else if ui.searchModel.requestActive {
-		status = "正在取消上一個要求，完成後會顯示預覽…\n\n"
+		status = uitext.T().CancellingForPreview + "\n\n"
 	} else if ui.searchModel.phase == searchPhaseFailed {
 		if ui.searchModel.playbackFailed {
-			status = "目前無法取得可播放的集數，請檢查網路後按播放重試。"
+			status = uitext.T().NoPlayableEpisodes
 		} else {
-			status = "無法載入作品資料，請返回搜尋結果後重試。"
+			status = uitext.T().AnimeLoadFailedBack
 		}
 	} else if detail := ui.searchModel.preview; detail != nil {
 		if strings.TrimSpace(detail.Anime.Title) != "" {
@@ -444,7 +453,7 @@ func (ui *view) renderPreview() {
 	}
 	ui.previewSynopsis.SetLabel(status + truncateSearchDescription(description))
 	if ui.previewCoverImage == nil && ui.previewCover.Label() == "" {
-		ui.previewCover.SetLabel("目前沒有封面")
+		ui.previewCover.SetLabel(uitext.T().CoverNone)
 	}
 	if _, ok := ui.detailModel.continueRequest(); ok && !ui.searchModel.requestActive && ui.onPlay != nil {
 		ui.previewContinue.Show()
@@ -477,10 +486,10 @@ func detailMetadataLabel(metadata *backend.Metadata) string {
 		values = append(values, season)
 	}
 	if metadata.Studio != "" {
-		values = append(values, "製作："+metadata.Studio)
+		values = append(values, fmt.Sprintf(uitext.T().Studio, metadata.Studio))
 	}
 	if metadata.EpisodeCount > 0 {
-		values = append(values, fmt.Sprintf("共 %d 集", metadata.EpisodeCount))
+		values = append(values, fmt.Sprintf(uitext.T().EpisodeCount, metadata.EpisodeCount))
 	}
 	return strings.Join(values, "\n")
 }
@@ -489,40 +498,40 @@ func (ui *view) searchStatusText() string {
 	switch ui.searchModel.phase {
 	case searchPhaseLoading:
 		if ui.searchModel.active.kind == searchRequestLibrary {
-			return "正在載入已儲存的作品…"
+			return uitext.T().LoadingStored
 		}
-		return "正在搜尋…"
+		return uitext.T().Searching
 	case searchPhaseFailed:
 		if ui.searchModel.libraryFailed {
-			return "無法載入已儲存作品；按搜尋可重試載入及更新線上結果。"
+			return uitext.T().StoredLoadFailed
 		}
-		return "無法完成搜尋或載入作品資料，請檢查網路後重試。"
+		return uitext.T().SearchFailed
 	}
 	if ui.searchModel.requestActive {
-		return "正在取消上一個要求，完成後會繼續這次操作…"
+		return uitext.T().CancellingPrevious
 	}
 	if strings.TrimSpace(ui.searchModel.query) == "" {
-		return "輸入作品名稱以篩選已儲存資料；輸入框按 Enter 更新線上搜尋。結果上按 Enter 開啟預覽。"
+		return uitext.T().SearchIdle
 	}
 	if len(ui.searchModel.results) == 0 {
 		if ui.searchModel.remoteQuery == ui.searchModel.query {
-			return "線上搜尋完成，沒有符合的作品。請修改關鍵字。"
+			return uitext.T().SearchNoOnline
 		}
-		return "沒有符合的已儲存作品；按 Enter 搜尋線上作品。"
+		return uitext.T().SearchNoStored
 	}
 	if ui.searchModel.remoteQuery == ui.searchModel.query {
-		return fmt.Sprintf("線上搜尋完成，共找到 %d 部作品。輸入框按 Enter 更新；結果上按 Enter 開啟預覽。", len(ui.searchModel.results))
+		return fmt.Sprintf(uitext.T().SearchOnlineFound, len(ui.searchModel.results))
 	}
-	return fmt.Sprintf("找到 %d 部已儲存作品。輸入框按 Enter 更新線上搜尋；結果上按 Enter 開啟預覽。", len(ui.searchModel.results))
+	return fmt.Sprintf(uitext.T().SearchStoredFound, len(ui.searchModel.results))
 }
 
 func searchPageLabel(page, count, total int) string {
 	if total == 0 {
-		return "沒有搜尋結果"
+		return uitext.T().NoResults
 	}
 	start := (page-1)*searchResultPageSize + 1
 	end := min(total, start+searchResultPageSize-1)
-	return fmt.Sprintf("第 %d–%d 部，共 %d 部（頁 %d/%d）", start, end, total, page, count)
+	return fmt.Sprintf(uitext.T().ResultRange, start, end, total, page, count)
 }
 
 func (ui *view) focusSearchInput() {

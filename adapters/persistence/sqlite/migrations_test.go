@@ -219,7 +219,7 @@ func TestMigrationDropsLegacySettingsMPVPathPreservingSettings(t *testing.T) {
 	if _, err := store.db.Exec("INSERT INTO settings(id, appearance, autoplay_next, resume_playback, language) VALUES (2, 0, 0, 0, 0)"); err == nil {
 		t.Fatal("rebuilt settings table lost its id = 1 constraint")
 	}
-	if _, err := store.db.Exec("UPDATE settings SET language = 3"); err == nil {
+	if _, err := store.db.Exec("UPDATE settings SET language = 4"); err == nil {
 		t.Fatal("rebuilt settings table lost its language constraint")
 	}
 }
@@ -342,6 +342,56 @@ func TestMigrationDropsSkipIntroKeepingSettings(t *testing.T) {
 	}
 }
 
+func TestMigrationAllowsJapaneseKeepingSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	var previous []migration
+	for version, name := range []string{"0001_initial.sql", "0002_episode_mappings.sql", "0003_drop_settings_mpv_path.sql", "0004_episode_number.sql", "0005_recent_updates.sql", "0006_schedule.sql", "0007_settings_auto_play.sql", "0008_settings_playback_proxy.sql", "0009_settings_drop_skip_intro.sql"} {
+		contents, err := migrationFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous = append(previous, migration{version: version + 1, name: name, sql: string(contents)})
+	}
+	legacy, err := open(context.Background(), path, migrationSource{migrations: previous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.db.Exec(`INSERT INTO settings(id, appearance, autoplay_next, auto_play, resume_playback, language,
+		playback_speed, hardware_decoding, proxy_mode, proxy_address)
+		VALUES (1, 3, 1, 1, 2, 2, 150, 1, 3, 'proxy.example:8080')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.db.Exec("UPDATE settings SET language = 3"); err == nil {
+		t.Fatal("schema before 0010 already allowed Japanese")
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store := openLibraryStore(t, path)
+	defer store.Close()
+	want := core.Settings{
+		Appearance: core.AppearanceDark, AutoplayNext: core.ToggleDisabled, AutoPlay: core.ToggleDisabled,
+		ResumePlayback: core.ToggleEnabled, Language: core.LanguageEnglish,
+		PlaybackSpeed: 150, HardwareDecoding: core.ToggleDisabled,
+		ProxyMode: core.ProxyModeManual, ProxyAddress: "proxy.example:8080",
+	}
+	if got, err := store.Settings(context.Background()); err != nil || got != want {
+		t.Fatalf("settings after migration = %#v, %v, want %#v", got, err, want)
+	}
+	want.Language = core.LanguageJapanese
+	if err := store.SaveSettings(context.Background(), want); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := store.Settings(context.Background()); err != nil || got != want {
+		t.Fatalf("Japanese settings = %#v, %v, want %#v", got, err, want)
+	}
+	for _, update := range []string{"UPDATE settings SET language = 4", "UPDATE settings SET playback_speed = 110", "UPDATE settings SET proxy_mode = 4"} {
+		if _, err := store.db.Exec(update); err == nil {
+			t.Fatalf("%s succeeded; the rebuilt table lost a constraint", update)
+		}
+	}
+}
 func TestFreshSchemaHasNoSettingsMPVPath(t *testing.T) {
 	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
 	defer store.Close()

@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -72,7 +73,7 @@ func (ui *view) loadDetailResources(generation uint64, animeID string) {
 				}
 				if noCover {
 					ui.detailCoverErr = false
-					ui.previewCover.SetLabel("目前沒有封面")
+					ui.previewCover.SetLabel(uitext.T().CoverNone)
 				} else if err == nil {
 					image, imageErr := newDetailCoverImage(pixels)
 					if imageErr == nil {
@@ -82,18 +83,18 @@ func (ui *view) loadDetailResources(generation uint64, animeID string) {
 						ui.previewCover.SetLabel("")
 					} else {
 						ui.detailCoverErr = true
-						ui.previewCover.SetLabel("封面暫時無法載入")
+						ui.previewCover.SetLabel(uitext.T().CoverFailed)
 					}
 				} else {
 					ui.detailCoverErr = true
-					ui.previewCover.SetLabel("封面暫時無法載入")
+					ui.previewCover.SetLabel(uitext.T().CoverFailed)
 				}
 				ui.renderPreview()
 				ui.previewCover.Redraw()
 			})
 		}()
 	} else {
-		ui.previewCover.SetLabel("目前沒有封面")
+		ui.previewCover.SetLabel(uitext.T().CoverNone)
 	}
 	go func() {
 		episodes, err := ui.service.Episodes(ctx, animeID)
@@ -145,9 +146,9 @@ func (ui *view) pauseDetailResources() {
 	if ui.detailCancel != nil {
 		ui.detailCancel()
 		ui.detailCancel = nil
-		if ui.previewCover != nil && ui.previewCover.Label() == "封面載入中…" {
+		if ui.previewCover != nil && ui.previewCover.Label() == uitext.T().CoverLoading {
 			ui.detailCoverErr = true
-			ui.previewCover.SetLabel("封面暫時無法載入")
+			ui.previewCover.SetLabel(uitext.T().CoverFailed)
 			ui.previewRetry.Show()
 		}
 	}
@@ -171,7 +172,7 @@ func (ui *view) retryDetailLoad() {
 	ui.detailEpisodesErr = false
 	ui.detailHistoryErr = false
 	ui.detailCoverErr = false
-	ui.previewCover.SetLabel("封面載入中…")
+	ui.previewCover.SetLabel(uitext.T().CoverLoading)
 	request, ctx, ok := ui.searchModel.beginDetail(item)
 	if !ok {
 		ui.searchModel.queueDetail(item)
@@ -294,18 +295,18 @@ func (ui *view) renderDetailEpisodes() {
 		index := ui.detailModel.page*detailEpisodePageSize + offset
 		label := episode.Number
 		if label != "" {
-			label = "第 " + label + " 集"
+			label = fmt.Sprintf(uitext.T().EpisodeNumber, label)
 		} else {
-			label = "集數 " + fmt.Sprint(index+1)
+			label = fmt.Sprintf(uitext.T().EpisodeIndex, index+1)
 		}
 		if episode.Title != "" {
-			label += "　" + episode.Title
+			label += uitext.T().Separator + episode.Title
 		}
 		if history, ok := ui.detailModel.historyEntry(episode); ok {
 			if history.Completed {
-				label += "　已完成"
+				label += uitext.T().Separator + uitext.T().EpisodeWatched
 			} else if history.Position > 0 {
-				label += "　" + episodeProgressLabel(history)
+				label += uitext.T().Separator + episodeProgressLabel(history)
 			}
 		}
 		x, width := ui.detailEpisodeRowSpan()
@@ -324,24 +325,24 @@ func (ui *view) renderDetailEpisodes() {
 	}
 	ui.previewEpisodes.End()
 	if ui.detailEpisodesErr {
-		ui.previewStatus.SetLabel("無法載入集數，按重試載入。")
+		ui.previewStatus.SetLabel(uitext.T().EpisodesLoadFailed)
 	} else if !ui.detailEpisodesDone {
-		ui.previewStatus.SetLabel("正在載入集數…")
+		ui.previewStatus.SetLabel(uitext.T().EpisodesLoading)
 	} else if len(ui.detailModel.episodes) == 0 {
-		ui.previewStatus.SetLabel("沒有可播放集數。")
+		ui.previewStatus.SetLabel(uitext.T().NoEpisodes)
 	} else {
 		ui.previewStatus.SetLabel("")
 	}
 	if ui.detailHistoryErr {
-		ui.previewStatus.SetLabel(ui.previewStatus.Label() + "　觀看進度暫時無法載入。")
+		ui.previewStatus.SetLabel(ui.previewStatus.Label() + uitext.T().Separator + uitext.T().ProgressUnavailable)
 	}
 	pageCount := (len(ui.detailModel.episodes) + detailEpisodePageSize - 1) / detailEpisodePageSize
 	if len(ui.detailModel.episodes) == 0 {
-		ui.previewEpisodeText.SetLabel("沒有集數")
+		ui.previewEpisodeText.SetLabel(uitext.T().NoEpisodesShort)
 	} else {
 		start := ui.detailModel.page*detailEpisodePageSize + 1
 		end := min(len(ui.detailModel.episodes), start+detailEpisodePageSize-1)
-		ui.previewEpisodeText.SetLabel(fmt.Sprintf("第 %d–%d 集，共 %d 集（%d/%d）", start, end, len(ui.detailModel.episodes), ui.detailModel.page+1, pageCount))
+		ui.previewEpisodeText.SetLabel(fmt.Sprintf(uitext.T().EpisodeRange, start, end, len(ui.detailModel.episodes), ui.detailModel.page+1, pageCount))
 	}
 	if ui.detailModel.page == 0 {
 		ui.previewPrevious.Deactivate()
@@ -400,7 +401,7 @@ func playbackPositionLabel(milliseconds int64) string {
 
 func episodeProgressLabel(history backend.History) string {
 	if history.Duration <= 0 {
-		return "已觀看 " + playbackPositionLabel(history.Position)
+		return fmt.Sprintf(uitext.T().WatchedPosition, playbackPositionLabel(history.Position))
 	}
 	return fmt.Sprintf("%s / %s", playbackPositionLabel(history.Position), playbackPositionLabel(history.Duration))
 }

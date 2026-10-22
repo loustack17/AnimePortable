@@ -48,6 +48,17 @@ static std::string fitLabel(const std::string& value, int max_units) {
     }
     return value;
 }
+// textUnits counts a label's width in half-size units: a wide (CJK) character is two, others one.
+static int textUnits(const std::string& value) {
+    int units = 0;
+    for (size_t i = 0; i < value.size();) {
+        unsigned char lead = static_cast<unsigned char>(value[i]);
+        size_t length = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1;
+        units += length >= 3 ? 2 : 1;
+        i += length;
+    }
+    return units;
+}
 static void focus(int current, int target, float x, float y, float w, float h) {
     if (current != target) return;
     ink(0.58f, 0.66f, 1.0f);
@@ -56,7 +67,7 @@ static void focus(int current, int target, float x, float y, float w, float h) {
     line(x + w, y + h, x, y + h); line(x, y + h, x, y);
 }
 
-extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int thumb_top, int thumb_height, int resolution, int loading, int progress_hover, int scrubbing, int follow_known, int following, int speed_open, int speed_index, int speed_cursor, int speed_count, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels, const char* speed_labels) {
+extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int thumb_top, int thumb_height, int resolution, int loading, int progress_hover, int scrubbing, int follow_known, int following, int speed_open, int speed_index, int speed_cursor, int speed_count, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels, const char* speed_labels, const char* fixed_labels) {
     if (!visible && !menu && !episodes) return;
     GLint oldMatrix = GL_MODELVIEW;
     glGetIntegerv(GL_MATRIX_MODE, &oldMatrix);
@@ -85,8 +96,8 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     focus(selected, 0, 14, 12, 42, 39);
     ink(0.15f, 0.19f, 0.29f, 0.92f); box(width - 195, 14, 114, 38);
     ink(1, 1, 1);
-    std::string episodeLabel = episode_count > 0 ? itemAt(episode_labels, episode) : "選集";
-    if (episodeLabel.empty()) episodeLabel = "選集";
+    std::string episodeLabel = episode_count > 0 ? itemAt(episode_labels, episode) : "";
+    if (episodeLabel.empty()) episodeLabel = itemAt(fixed_labels, 0);
     label(beforeTitle(episodeLabel).c_str(), width - 185, 39, 15);
     icon(u8"\uE70D", width - 102, 39, 14);
     focus(selected, 7, width - 195, 14, 114, 38);
@@ -141,7 +152,8 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     icon(fullscreen ? u8"\uE73F" : u8"\uE740", width - 47, static_cast<int>(mid + 9), 24);
     focus(selected, 8, width - 51, mid - 18, 36, 36);
     if (loading) {
-        ink(1, 1, 1); label("正在載入…", width / 2 - 42, height / 2, 18);
+        std::string loadingLabel = itemAt(fixed_labels, 1);
+        ink(1, 1, 1); label(loadingLabel.c_str(), width / 2 - textUnits(loadingLabel) * 18 / 4, height / 2, 18);
     }
     if (menu) {
         ink(0.04f, 0.06f, 0.11f, 0.93f); box(0, 62, 180, height - 114);

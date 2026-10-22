@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -255,7 +256,7 @@ func TestNativeHomeSaysOfflineCalmlyAndClearsAfterRefresh(t *testing.T) {
 	}
 	ui := newHomeRefreshFixture(t, service)
 	ui.loadHome()
-	pumpSearchEvents(t, func() bool { return ui.message.Label() == homeOfflineNotice })
+	pumpSearchEvents(t, func() bool { return ui.message.Label() == uitext.T().OfflineNotice })
 	if ui.loadFailed || ui.retryButton.Visible() || len(ui.cardButtons) != 1 || !ui.cardButtons[0].IsActive() {
 		t.Fatal("offline refresh hid the stored Home content or offered Retry")
 	}
@@ -265,7 +266,7 @@ func TestNativeHomeSaysOfflineCalmlyAndClearsAfterRefresh(t *testing.T) {
 		t.Fatalf("message on 追蹤 = %q", ui.message.Label())
 	}
 	ui.showSection(0)
-	pumpSearchEvents(t, func() bool { return !ui.homeLoading && ui.message.Label() == homeOfflineNotice })
+	pumpSearchEvents(t, func() bool { return !ui.homeLoading && ui.message.Label() == uitext.T().OfflineNotice })
 
 	offline.Store(false)
 	ui.refreshFollowing()

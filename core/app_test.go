@@ -758,7 +758,7 @@ func TestPlaybackSourceClonesAndRedactsSensitiveData(t *testing.T) {
 func TestSettingsResolvedFillsEveryUnchosenField(t *testing.T) {
 	want := Settings{
 		Appearance: AppearanceSystem, AutoplayNext: ToggleEnabled, AutoPlay: ToggleEnabled, ResumePlayback: ToggleEnabled,
-		PlaybackSpeed: 100, HardwareDecoding: ToggleEnabled, ProxyMode: ProxyModeNone,
+		Language: LanguageTraditionalChinese, PlaybackSpeed: 100, HardwareDecoding: ToggleEnabled, ProxyMode: ProxyModeNone,
 	}
 	if got := (Settings{}).Resolved(); got != want {
 		t.Fatalf("resolved zero settings = %#v, want %#v", got, want)
@@ -775,7 +775,7 @@ func TestSettingsResolvedKeepsChosenValues(t *testing.T) {
 	}
 	light := Settings{
 		Appearance: AppearanceLight, AutoplayNext: ToggleEnabled, AutoPlay: ToggleEnabled, ResumePlayback: ToggleEnabled,
-		PlaybackSpeed: 200, HardwareDecoding: ToggleEnabled, ProxyMode: ProxyModeSystem,
+		Language: LanguageJapanese, PlaybackSpeed: 200, HardwareDecoding: ToggleEnabled, ProxyMode: ProxyModeSystem,
 	}
 	if got := light.Resolved(); got != light {
 		t.Fatalf("resolved light settings = %#v, want %#v", got, light)

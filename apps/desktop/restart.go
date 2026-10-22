@@ -5,6 +5,8 @@ package main
 import (
 	"os/exec"
 	"path/filepath"
+
+	"animeportable/apps/desktop/uitext"
 )
 
 // startAgain starts executable again with no arguments, from its own folder, and does not
@@ -20,12 +22,10 @@ func startAgain(executable string) error {
 	return command.Process.Release()
 }
 
-const restartFailedMessage = "無法自動重新開啟，請手動開啟程式。"
-
 // restartAfterShutdown starts the program again once the app has shut down. Nothing is left
 // to show a message with at that point, so a failure goes to warn, which must not need the UI.
 func restartAfterShutdown(executable string, executableErr error, start func(string) error, warn func(string)) {
 	if executableErr != nil || start(executable) != nil {
-		warn(restartFailedMessage)
+		warn(uitext.T().RestartFailed)
 	}
 }

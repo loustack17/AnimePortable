@@ -126,6 +126,7 @@ const (
 	LanguageUnspecified Language = iota
 	LanguageTraditionalChinese
 	LanguageEnglish
+	LanguageJapanese
 )
 
 // PlaybackSpeed is the speed every episode starts at, in percent (100 is normal). The player
@@ -175,11 +176,13 @@ type Settings struct {
 }
 
 // Resolved replaces every unchosen field with its default. It is the only place defaults
-// live, so every reader sees the same behavior. Language stays as stored until the language
-// setting exists.
+// live, so every reader sees the same behavior.
 func (settings Settings) Resolved() Settings {
 	if settings.Appearance == AppearanceUnspecified {
 		settings.Appearance = AppearanceSystem
+	}
+	if settings.Language == LanguageUnspecified {
+		settings.Language = LanguageTraditionalChinese
 	}
 	settings.AutoplayNext = toggleOrDefault(settings.AutoplayNext, ToggleEnabled)
 	settings.AutoPlay = toggleOrDefault(settings.AutoPlay, ToggleEnabled)

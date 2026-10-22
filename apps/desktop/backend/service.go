@@ -575,6 +575,9 @@ func languageName(value core.Language) string {
 	if value == core.LanguageEnglish {
 		return "en"
 	}
+	if value == core.LanguageJapanese {
+		return "ja"
+	}
 	return "unspecified"
 }
 
@@ -626,6 +629,8 @@ func parseLanguage(value string) (core.Language, error) {
 		return core.LanguageTraditionalChinese, nil
 	case "en", "en-us":
 		return core.LanguageEnglish, nil
+	case "ja", "ja-jp":
+		return core.LanguageJapanese, nil
 	default:
 		return 0, ErrInvalidInput
 	}

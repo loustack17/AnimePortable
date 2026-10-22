@@ -5,22 +5,17 @@
 package fltkhome
 
 import (
+	"fmt"
 	"strings"
 
+	"animeportable/apps/desktop/uitext"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
-const (
-	dataDialogTitle = "資料位置"
-	dialogOKLabel   = "確定"
-)
-
 // missingFolderLabels are the buttons of the startup question; the first is the safe answer.
-var missingFolderLabels = [...]string{"結束", "使用預設位置"}
+func missingFolderLabels() []string { return []string{uitext.T().Quit, uitext.T().UseDefaultFolder} }
 
-func missingFolderMessage(path string) string {
-	return "找不到資料位置：\n" + path + "\n\n要改用程式旁的預設資料夾，還是結束？"
-}
+func missingFolderMessage(path string) string { return fmt.Sprintf(uitext.T().MissingFolder, path) }
 
 // AskMissingDataFolder asks, before the main window exists, whether to use the default data
 // folder because the chosen one is missing. It returns true for 使用預設位置 and false for 結束,
@@ -28,7 +23,7 @@ func missingFolderMessage(path string) string {
 // data. The stored theme is not readable yet, so the dialog follows the Windows app theme.
 func AskMissingDataFolder(path string) bool {
 	useAppFonts()
-	return showDialog(nil, "找不到資料位置", missingFolderMessage(path), systemUsesDarkTheme(), missingFolderLabels[:]...) == 1
+	return showDialog(nil, uitext.T().MissingFolderTitle, missingFolderMessage(path), systemUsesDarkTheme(), missingFolderLabels()...) == 1
 }
 
 // shownDark is the theme applyTheme last applied. FLTK's own colours are process-wide, so the
@@ -39,7 +34,7 @@ var shownDark bool
 // ShowNotice shows a message with one 確定 button in the app's style and the theme on screen,
 // centred over parent, a live top-level window. It must run on the UI thread.
 func ShowNotice(parent *fltk.Window, title, message string) {
-	showDialog(parent, title, message, shownDark, dialogOKLabel)
+	showDialog(parent, title, message, shownDark, uitext.T().OK)
 }
 
 // useAppFonts selects the scheme and the CJK-capable fonts every window of the app uses.

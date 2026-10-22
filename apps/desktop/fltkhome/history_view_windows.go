@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
 const historySection = 3
 
 func (ui *view) buildHistoryView() {
-	ui.historyPage, ui.historyStatus, ui.historyRetry, ui.historyScroll = ui.buildRowListPage("重新載入", ui.loadHistory, func() { ui.historyList().focus(0, 0) })
+	ui.historyPage, ui.historyStatus, ui.historyRetry, ui.historyScroll = ui.buildRowListPage(func(text *uitext.Strings) string { return text.Reload }, ui.loadHistory, func() { ui.historyList().focus(0, 0) })
 	// 重新載入 shows only after a failed load.
 	ui.historyRetry.Hide()
 }
@@ -84,9 +85,9 @@ func (ui *view) removeHistory(animeID string) {
 				return
 			}
 			if err != nil {
-				ui.message.SetLabel("無法移除紀錄，請重試。")
+				ui.setMessage(func() string { return uitext.T().RemoveHistoryFailed })
 			} else {
-				ui.message.SetLabel("")
+				ui.setMessage(nil)
 			}
 			if ui.historyVisible() {
 				ui.loadHistory()
@@ -130,13 +131,13 @@ func (ui *view) renderHistoryStatus() {
 	status := ""
 	switch {
 	case !ui.historyLoaded:
-		status = "正在載入觀看紀錄…"
+		status = uitext.T().HistoryLoading
 	case ui.historyLoadFailed:
-		status = "無法載入觀看紀錄，請按「重新載入」重試。"
+		status = uitext.T().HistoryLoadFailed
 	case len(ui.historyItems) == 0:
-		status = "還沒有觀看紀錄。播放任何一集後，會出現在這裡。"
+		status = uitext.T().HistoryEmpty
 	default:
-		status = fmt.Sprintf("%d 部作品。按作品從上次位置繼續播放。\n觀看紀錄只存在這台電腦。", len(ui.historyItems))
+		status = fmt.Sprintf(uitext.T().HistoryCount, len(ui.historyItems))
 	}
 	if ui.historyLoadFailed {
 		ui.historyRetry.Show()
@@ -159,12 +160,12 @@ func (ui *view) renderHistory() {
 	for _, row := range ui.historyItems {
 		item := row.History
 		followed := func() bool { return ui.historyFollowed[item.AnimeID] }
-		followLabel := "追蹤"
+		followLabel := uitext.T().Follow
 		if followed() {
-			followLabel = "取消追蹤"
+			followLabel = uitext.T().Unfollow
 		}
 		rows = append(rows, listRow{
-			id: item.AnimeID, title: row.Title, status: row.Status, tooltip: "繼續播放：" + row.Status,
+			id: item.AnimeID, title: row.Title, status: row.Status, tooltip: fmt.Sprintf(uitext.T().ContinueTooltip, row.Status),
 			open: func() { ui.continueHistory(item) },
 			icons: []rowIcon{
 				{
@@ -172,7 +173,7 @@ func (ui *view) renderHistory() {
 					style:    func(button *fltk.Button) { ui.styleFollowIcon(button, followed) },
 					activate: func() { ui.toggleHistoryFollow(item.AnimeID) },
 				},
-				{label: "移除紀錄", style: ui.styleRemoveIcon, activate: func() { ui.removeHistory(item.AnimeID) }},
+				{label: uitext.T().RemoveHistory, style: ui.styleRemoveIcon, activate: func() { ui.removeHistory(item.AnimeID) }},
 			},
 		})
 	}

@@ -9,16 +9,20 @@ import (
 )
 
 // segmentOption is one choice of a segmented control; value is what the setting stores.
-type segmentOption struct{ title, value string }
+type segmentOption struct {
+	title localText
+	value string
+}
 
 // segmentedControl is a settings row with a title and hint and a row of exclusive choices.
 // The choices sit at the end of the row, or under the text when the row is too narrow for
 // both. The selected one is filled with the accent and carries a check mark and bold text, so
 // it differs without colour.
 type segmentedControl struct {
-	title, hint string
+	title, hint localText
 	options     []segmentOption
-	segmentW    int
+	// minSegmentW is the narrowest a segment is; the longest label can widen every segment.
+	minSegmentW int
 	// selected is the index of the stored choice, or -1 when it matches none.
 	selected func() int
 	choose   func(value string)
@@ -41,7 +45,16 @@ func indexOfOption(options []segmentOption, value string) int {
 	return -1
 }
 
-func (control *segmentedControl) controlWidth() int { return len(control.options) * control.segmentW }
+// segmentW is the width of every segment: room for the longest label, bold with its check mark.
+func (control *segmentedControl) segmentW() int {
+	width := control.minSegmentW
+	for _, option := range control.options {
+		width = max(width, boldTextWidth(14, option.title.String())+30)
+	}
+	return width
+}
+
+func (control *segmentedControl) controlWidth() int { return len(control.options) * control.segmentW() }
 
 func (control *segmentedControl) stacked(width int) bool {
 	return width-36-control.controlWidth()-12 < minSegmentedTextWidth
@@ -61,7 +74,8 @@ func (ui *view) addSegmentedRow(control *segmentedControl) {
 	control.card = fltk.NewBox(fltk.NO_BOX, 0, 0, 1, 1, "")
 	control.card.SetDrawHandler(func(func()) { ui.drawSegmentedCard(control) })
 	for index, option := range control.options {
-		button := fltk.NewButton(0, 0, control.segmentW, settingsSegmentH, option.title)
+		button := fltk.NewButton(0, 0, control.minSegmentW, settingsSegmentH, "")
+		ui.labelled(button, option.title)
 		control.buttons = append(control.buttons, button)
 		ui.styleSegment(control, index)
 		ui.bindSegmentKeys(control, index)
@@ -73,8 +87,9 @@ func (ui *view) addSegmentedRow(control *segmentedControl) {
 		if control.stacked(width) {
 			left, top = x+18, y+settingsRowHeight
 		}
+		segmentW := control.segmentW()
 		for index, button := range control.buttons {
-			button.Resize(left+index*control.segmentW, top, control.segmentW, settingsSegmentH)
+			button.Resize(left+index*segmentW, top, segmentW, settingsSegmentH)
 		}
 	}
 	row.show = func(visible bool) {
@@ -130,7 +145,7 @@ func (ui *view) drawSegmentedCard(control *segmentedControl) {
 	if !control.stacked(width) {
 		textWidth -= control.controlWidth() + 12
 	}
-	drawRowText(x, y, width, height, textWidth, control.title, control.hint, title, colors.muted, false)
+	drawRowText(x, y, width, height, textWidth, control.title.String(), control.hint.String(), title, colors.muted, false)
 }
 
 // styleSegment draws one segment. Unselected ones are outlined and plain. Neighbours share a

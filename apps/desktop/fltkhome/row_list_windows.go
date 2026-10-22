@@ -32,13 +32,14 @@ type rowList struct {
 
 // buildRowListPage builds a hidden page with a status line, a top-right action button and
 // an empty row list below them. Down on the action button runs focusContent.
-func (ui *view) buildRowListPage(actionLabel string, onAction, focusContent func()) (*fltk.Group, *fltk.Box, *fltk.Button, *fltk.Scroll) {
+func (ui *view) buildRowListPage(actionText localText, onAction, focusContent func()) (*fltk.Group, *fltk.Box, *fltk.Button, *fltk.Scroll) {
 	page := fltk.NewGroup(236, 110, 741, 487)
 	page.Begin()
 	status := fltk.NewBox(fltk.NO_BOX, 252, 118, 580, 40, "")
 	status.SetLabelSize(12)
 	status.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
-	action := fltk.NewButton(845, 118, 112, 40, actionLabel)
+	action := fltk.NewButton(845, 118, 112, 40, "")
+	ui.labelled(action, actionText)
 	ui.styleButton(action, nil)
 	ui.bindKeys(action, onAction, keyRoutes{up: ui.focusNavigation, left: ui.focusNavigation, down: focusContent})
 	scroll := fltk.NewScroll(236, 166, 741, 431)

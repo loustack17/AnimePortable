@@ -157,8 +157,8 @@ func TestMissingFolderQuestionNamesThePathAndExitsOnEscape(t *testing.T) {
 	if message := missingFolderMessage(`E:\gone`); !strings.Contains(message, `E:\gone`) {
 		t.Fatalf("message %q does not show the path", message)
 	}
-	if missingFolderLabels[0] != "結束" || missingFolderLabels[1] != "使用預設位置" {
-		t.Fatalf("labels = %v; button 0 (Esc, close) must be 結束 and button 1 使用預設位置", missingFolderLabels)
+	if labels := missingFolderLabels(); labels[0] != "結束" || labels[1] != "使用預設位置" {
+		t.Fatalf("labels = %v; button 0 (Esc, close) must be 結束 and button 1 使用預設位置", missingFolderLabels())
 	}
 }
 

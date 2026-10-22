@@ -103,7 +103,7 @@ type Cover struct {
 }
 
 // ProxyTestResult is the outcome of one request to Anime1 through the proxy being tested.
-// Reason is a short Traditional Chinese category, empty when OK.
+// Reason is one of the Reason codes (network.go), empty when OK.
 type ProxyTestResult struct {
 	OK     bool   `json:"ok"`
 	Reason string `json:"reason"`

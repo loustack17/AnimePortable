@@ -21,13 +21,14 @@ const (
 	proxyTestTimeout = 8 * time.Second
 	updateTimeout    = 15 * time.Second
 
-	reasonProxyUnreachable = "無法連線到代理伺服器"
-	reasonProxyRefused     = "代理伺服器拒絕連線"
-	reasonTimeout          = "逾時"
-	reasonBadAddress       = "位址格式不正確"
-	reasonNoAddress        = "未設定代理位址"
-	reasonSystemUnusable   = "系統代理無法使用，將直接連線"
-	reasonFailed           = "連線失敗"
+	// The reasons of a failed proxy test; the UI words them in its language.
+	ReasonProxyUnreachable = "proxy_unreachable"
+	ReasonProxyRefused     = "proxy_refused"
+	ReasonTimeout          = "timeout"
+	ReasonBadAddress       = "bad_address"
+	ReasonNoAddress        = "no_address"
+	ReasonSystemUnusable   = "system_unusable"
+	ReasonFailed           = "failed"
 )
 
 // releaseSource finds the newest published release; the GitHub client is the production one.
@@ -58,15 +59,15 @@ func (service *Service) TestProxy(ctx context.Context, input Settings) (ProxyTes
 	address := strings.TrimSpace(input.ProxyAddress)
 	if mode == core.ProxyModeManual {
 		if address == "" {
-			return ProxyTestResult{Reason: reasonNoAddress}, nil
+			return ProxyTestResult{Reason: ReasonNoAddress}, nil
 		}
 		if !core.ValidProxyAddress(address) {
-			return ProxyTestResult{Reason: reasonBadAddress}, nil
+			return ProxyTestResult{Reason: ReasonBadAddress}, nil
 		}
 	}
 	resolution := service.proxy.Preview(mode, address).Resolve()
 	if resolution.SystemUnusable {
-		return ProxyTestResult{Reason: reasonSystemUnusable}, nil
+		return ProxyTestResult{Reason: ReasonSystemUnusable}, nil
 	}
 	probe := service.probeProxy
 	if probe == nil {
@@ -106,17 +107,17 @@ func proxyFailureReason(err error) string {
 	if errors.As(err, &secure) {
 		switch secure.Kind {
 		case securehttp.KindProxy:
-			return reasonProxyUnreachable
+			return ReasonProxyUnreachable
 		case securehttp.KindProxyRefused:
-			return reasonProxyRefused
+			return ReasonProxyRefused
 		case securehttp.KindTimeout:
-			return reasonTimeout
+			return ReasonTimeout
 		}
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return reasonTimeout
+		return ReasonTimeout
 	}
-	return reasonFailed
+	return ReasonFailed
 }
 
 // CheckForUpdate compares this build with the newest GitHub release, pre-releases included.

@@ -181,7 +181,7 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 		"autoplay enum":   {AutoplayNext: core.ToggleEnabled + 1},
 		"auto play enum":  {AutoPlay: core.ToggleEnabled + 1},
 		"resume enum":     {ResumePlayback: core.ToggleEnabled + 1},
-		"language enum":   {Language: core.LanguageEnglish + 1},
+		"language enum":   {Language: core.LanguageJapanese + 1},
 		"speed step":      {PlaybackSpeed: 110},
 		"speed negative":  {PlaybackSpeed: -100},
 		"hardware enum":   {HardwareDecoding: core.ToggleEnabled + 1},
@@ -197,7 +197,7 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	}
 	for _, appearance := range []core.Appearance{core.AppearanceUnspecified, core.AppearanceSystem, core.AppearanceLight, core.AppearanceDark} {
 		for _, toggle := range []core.Toggle{core.ToggleUnspecified, core.ToggleDisabled, core.ToggleEnabled} {
-			for _, language := range []core.Language{core.LanguageUnspecified, core.LanguageTraditionalChinese, core.LanguageEnglish} {
+			for _, language := range []core.Language{core.LanguageUnspecified, core.LanguageTraditionalChinese, core.LanguageEnglish, core.LanguageJapanese} {
 				settings := core.Settings{Appearance: appearance, AutoplayNext: toggle, AutoPlay: toggle, ResumePlayback: toggle, Language: language}
 				if err := store.SaveSettings(ctx, settings); err != nil {
 					t.Fatalf("settings %#v: %v", settings, err)

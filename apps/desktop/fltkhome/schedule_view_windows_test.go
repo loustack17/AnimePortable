@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
@@ -77,9 +78,9 @@ func newScheduleViewTestFixture(t *testing.T, service *scheduleViewTestService) 
 	ui.mainGroup.Begin()
 	ui.buildScheduleView()
 	// Left from the first day returns to the navigation, which the search fixture lacks.
-	ui.navigation = make([]*fltk.Button, len(sections))
+	ui.navigation = make([]*fltk.Button, len(uitext.T().Sections))
 	for index := range ui.navigation {
-		ui.navigation[index] = fltk.NewButton(0, 0, 1, 1, sections[index])
+		ui.navigation[index] = fltk.NewButton(0, 0, 1, 1, uitext.T().Sections[index])
 	}
 	ui.mainGroup.End()
 	return ui

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"animeportable/apps/desktop/uitext"
 	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -28,7 +29,7 @@ const (
 )
 
 func (ui *view) buildScheduleView() {
-	ui.schedulePage, ui.scheduleStatus, ui.scheduleRefresh, ui.scheduleScroll = ui.buildRowListPage("重新整理", ui.refreshSchedule, func() { ui.focusScheduleNear(0, 0) })
+	ui.schedulePage, ui.scheduleStatus, ui.scheduleRefresh, ui.scheduleScroll = ui.buildRowListPage(func(text *uitext.Strings) string { return text.Refresh }, ui.refreshSchedule, func() { ui.focusScheduleNear(0, 0) })
 	ui.scheduleScroll.SetType(fltk.SCROLL_BOTH)
 }
 
@@ -61,7 +62,8 @@ func (ui *view) loadSchedule() {
 			ui.scheduleLoaded = true
 			ui.scheduleLoadFailed = err != nil
 			if !ui.scheduleLoadFailed {
-				ui.scheduleColumns = scheduleWeek(items, now)
+				ui.localizeSchedule = func() { ui.scheduleColumns = scheduleWeek(items, now) }
+				ui.localizeSchedule()
 			}
 			ui.renderSchedule()
 		})
@@ -120,23 +122,23 @@ func (ui *view) renderScheduleStatus() {
 	status := ""
 	switch {
 	case !ui.scheduleLoaded:
-		status = "正在載入時間表…"
+		status = uitext.T().ScheduleLoading
 	case ui.scheduleLoadFailed:
-		status = "無法讀取已儲存的時間表，請按「重新整理」重試。"
+		status = uitext.T().ScheduleStoredFailed
 	case shows > 0:
-		status = fmt.Sprintf("接下來 %d 天共 %d 部播出。", scheduleDays, shows)
+		status = fmt.Sprintf(uitext.T().ScheduleCount, scheduleDays, shows)
 	case ui.scheduleRefreshing:
-		status = "正在取得時間表…"
+		status = uitext.T().ScheduleFetching
 	case ui.scheduleRefreshFailed:
-		status = "無法取得時間表，請按「重新整理」重試。"
+		status = uitext.T().ScheduleFetchFailed
 	default:
-		status = fmt.Sprintf("接下來 %d 天沒有播出資料。", scheduleDays)
+		status = fmt.Sprintf(uitext.T().ScheduleEmpty, scheduleDays)
 	}
 	if shows > 0 || ui.scheduleLoadFailed {
 		if ui.scheduleRefreshing {
-			status += "\n正在更新時間表，先顯示上次記錄。"
+			status += "\n" + uitext.T().ScheduleRefreshing
 		} else if ui.scheduleRefreshFailed {
-			status += "\n無法更新時間表，顯示上次記錄。"
+			status += "\n" + uitext.T().ScheduleRefreshFailed
 		}
 	}
 	ui.scheduleStatus.SetLabel(status)
@@ -169,7 +171,7 @@ func (ui *view) renderSchedule() {
 	tallest := 0
 	if ui.scheduleLoaded && !ui.scheduleLoadFailed {
 		for day, column := range ui.scheduleColumns {
-			header := fltk.NewBox(fltk.NO_BOX, 0, 0, 1, 1, column.Weekday+"\n"+column.Date)
+			header := fltk.NewBox(fltk.NO_BOX, 0, 0, 1, 1, column.heading())
 			header.SetLabelFont(fltk.HELVETICA_BOLD)
 			header.SetLabelSize(13)
 			header.SetAlign(fltk.ALIGN_CENTER | fltk.ALIGN_INSIDE | fltk.ALIGN_CLIP)
@@ -178,9 +180,9 @@ func (ui *view) renderSchedule() {
 			for index, show := range column.Shows {
 				card := fltk.NewButton(0, 0, 1, 1, show.Anime.Title)
 				if show.Anime.ID == "" {
-					card.SetTooltip("搜尋片源：" + show.Query)
+					card.SetTooltip(fmt.Sprintf(uitext.T().SearchSourceTooltip, show.Query))
 				} else {
-					card.SetTooltip("開啟作品：" + show.Anime.Title)
+					card.SetTooltip(fmt.Sprintf(uitext.T().OpenAnimeTooltip, show.Anime.Title))
 				}
 				ui.styleScheduleCard(card, show)
 				ui.bindScheduleCard(card, day, index)
@@ -233,9 +235,9 @@ func (ui *view) resizeSchedule() {
 // styleScheduleCard draws a show as a card: the title on up to two lines, then what Enter
 // does, in the accent color when the show opens directly.
 func (ui *view) styleScheduleCard(button *fltk.Button, show scheduleShow) {
-	action := "開啟作品"
+	action := uitext.T().OpenAnime
 	if show.Anime.ID == "" {
-		action = "搜尋片源"
+		action = uitext.T().SearchSource
 	}
 	button.SetBox(fltk.NO_BOX)
 	button.SetDrawHandler(func(func()) {

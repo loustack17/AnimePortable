@@ -4,11 +4,13 @@ package fltkplayer
 
 import (
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
+	"animeportable/apps/desktop/uitext"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
@@ -97,7 +99,9 @@ type View struct {
 	render        func(width, height int)
 	episodeText   unsafe.Pointer
 	menuText      unsafe.Pointer
-	speedText     unsafe.Pointer
+	// fixedText is the overlay's own labels in the current language: 選集, then 正在載入….
+	fixedText unsafe.Pointer
+	speedText unsafe.Pointer
 }
 
 func NewWindow(callbacks Callbacks) *View {
@@ -107,7 +111,6 @@ func NewWindow(callbacks Callbacks) *View {
 		lastVolume: 100,
 		visible:    true,
 		lastMove:   time.Now(),
-		menuItems:  []string{"首頁", "時間表", "追蹤", "歷史紀錄", "搜尋", "設定"},
 	}
 	view.updateLabelBuffers()
 	fltk.SetFont(fltk.HELVETICA, "Microsoft JhengHei UI")
@@ -163,6 +166,8 @@ func (view *View) Show() {
 	if view.closed || view.window == nil {
 		return
 	}
+	// The language can change while the player is hidden, never while it shows.
+	view.SetMenuItems(uitext.T().Sections[:])
 	view.window.Show()
 	view.syncNativeInput()
 }
@@ -190,8 +195,9 @@ func (view *View) SetEpisodes(labels []string, selected int) {
 	view.Redraw()
 }
 
+// SetMenuItems keeps a copy of labels in a new array, so the view never writes into the caller's.
 func (view *View) SetMenuItems(labels []string) {
-	view.menuItems = append(view.menuItems[:0], labels...)
+	view.menuItems = slices.Clone(labels)
 	view.updateLabelBuffers()
 	view.Redraw()
 }

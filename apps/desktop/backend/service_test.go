@@ -421,7 +421,7 @@ func TestFollowFollowingHistorySettingsSchedule(t *testing.T) {
 	}
 	src.mu.Unlock()
 	unset, e := s.Settings(context.Background())
-	if want := (Settings{Appearance: "system", AutoplayNext: "enabled", AutoPlay: "enabled", ResumePlayback: "enabled", Language: "unspecified", PlaybackSpeed: 100, HardwareDecoding: "enabled", ProxyMode: "none"}); e != nil || unset != want {
+	if want := (Settings{Appearance: "system", AutoplayNext: "enabled", AutoPlay: "enabled", ResumePlayback: "enabled", Language: "zh-TW", PlaybackSpeed: 100, HardwareDecoding: "enabled", ProxyMode: "none"}); e != nil || unset != want {
 		t.Fatalf("unset settings %+v %v, want resolved defaults %+v", unset, e, want)
 	}
 	settings := Settings{Appearance: "dark", AutoplayNext: "enabled", AutoPlay: "disabled", ResumePlayback: "disabled", Language: "zh-TW", HardwareDecoding: "disabled", ProxyMode: "manual", ProxyAddress: "proxy.example:8080"}

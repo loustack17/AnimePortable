@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -20,7 +21,7 @@ import (
 const followingSection = 2
 
 func (ui *view) buildFollowingView() {
-	ui.followingPage, ui.followingStatus, ui.followingRefresh, ui.followingScroll = ui.buildRowListPage("更新集數", ui.refreshFollowing, func() { ui.followingList().focus(0, 0) })
+	ui.followingPage, ui.followingStatus, ui.followingRefresh, ui.followingScroll = ui.buildRowListPage(func(text *uitext.Strings) string { return text.UpdateEpisodes }, ui.refreshFollowing, func() { ui.followingList().focus(0, 0) })
 }
 
 func (ui *view) followingVisible() bool {
@@ -64,7 +65,8 @@ func (ui *view) loadFollowing() {
 			ui.followingLoaded = true
 			ui.followingLoadFailed = firstError(libraryErr, followingErr, historyErr) != nil
 			if !ui.followingLoadFailed {
-				ui.followingItems = followingRows(following, library, history)
+				ui.localizeFollowing = func() { ui.followingItems = followingRows(following, library, history) }
+				ui.localizeFollowing()
 			}
 			ui.renderFollowing()
 		})
@@ -167,7 +169,7 @@ func (ui *view) setFollowing(animeID string, follow bool, done func(error)) bool
 			if ui.closing || ui.ctx.Err() != nil {
 				return
 			}
-			ui.message.SetLabel(FollowErrorMessage(err))
+			ui.setMessage(func() string { return FollowErrorMessage(err) })
 			done(err)
 		})
 	}()
@@ -180,7 +182,7 @@ func FollowErrorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
-	return "無法更新追蹤，請重試。"
+	return uitext.T().FollowFailed
 }
 
 // detailOrigin is the page the detail screen was opened from; the zero value is Search.
@@ -196,13 +198,13 @@ const (
 func (origin detailOrigin) backLabel() string {
 	switch origin {
 	case detailFromHome:
-		return "返回首頁"
+		return uitext.T().BackToHome
 	case detailFromFollowing:
-		return "返回追蹤"
+		return uitext.T().BackToFollowing
 	case detailFromSchedule:
-		return "返回時間表"
+		return uitext.T().BackToSchedule
 	}
-	return "返回結果"
+	return uitext.T().BackToResults
 }
 
 // openDetailFrom opens an anime's detail screen (which lives in the Search page) so that
@@ -245,20 +247,20 @@ func (ui *view) renderFollowingStatus() {
 	status := ""
 	switch {
 	case !ui.followingLoaded:
-		status = "正在載入追蹤清單…"
+		status = uitext.T().FollowingLoading
 	case ui.followingLoadFailed:
-		status = "無法載入追蹤清單，請按「更新集數」重試。"
+		status = uitext.T().FollowingLoadFailed
 	case len(ui.followingItems) == 0:
-		status = "尚未追蹤任何作品。在作品頁、歷史紀錄或播放中按星號即可追蹤。"
+		status = uitext.T().FollowingEmpty
 	default:
-		status = fmt.Sprintf("追蹤 %d 部。", len(ui.followingItems))
+		status = fmt.Sprintf(uitext.T().FollowingCount, len(ui.followingItems))
 	}
 	if ui.followingRefreshing {
-		status += "\n正在更新最新集數，先顯示上次記錄。"
+		status += "\n" + uitext.T().FollowingRefreshing
 	} else if ui.followingRefreshFailures > 0 && ui.followingRefreshFailures >= ui.followingRefreshTotal {
-		status += "\n無法更新最新集數，顯示上次記錄的狀態。"
+		status += "\n" + uitext.T().FollowingRefreshFailed
 	} else if ui.followingRefreshFailures > 0 {
-		status += fmt.Sprintf("\n%d 部作品無法更新集數，顯示上次記錄的狀態。", ui.followingRefreshFailures)
+		status += "\n" + fmt.Sprintf(uitext.T().FollowingSomeFailed, ui.followingRefreshFailures)
 	}
 	ui.followingStatus.SetLabel(status)
 	ui.followingStatus.Redraw()
@@ -283,7 +285,7 @@ func (ui *view) renderFollowing() {
 				}
 			},
 			icons: []rowIcon{{
-				label: "取消追蹤",
+				label: uitext.T().Unfollow,
 				style: func(button *fltk.Button) { ui.styleFollowIcon(button, func() bool { return true }) },
 				activate: func() {
 					if ui.followingVisible() {
@@ -325,9 +327,9 @@ func (ui *view) renderDetailFollow() {
 		return
 	}
 	if detail.Following {
-		ui.previewFollow.SetLabel("取消追蹤")
+		ui.previewFollow.SetLabel(uitext.T().Unfollow)
 	} else {
-		ui.previewFollow.SetLabel("追蹤")
+		ui.previewFollow.SetLabel(uitext.T().Follow)
 	}
 	ui.previewFollow.SetTooltip(ui.previewFollow.Label())
 	if ui.followPending {

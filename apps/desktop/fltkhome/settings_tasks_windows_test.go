@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	"animeportable/internal/release"
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -144,13 +145,13 @@ func TestNativeSettingsProxyTestShowsProgressThenTheResultAndUsesUnsavedValues(t
 	// The address is typed but not committed: the test uses it anyway, and saves nothing.
 	ui.proxyField.input.SetValue(" 10.0.0.2:8080 ")
 	ui.testProxy()
-	if got := ui.tasks.proxyStatus; got != "連線中…" || !ui.tasks.proxyTesting || !ui.proxyTest.isBusy() || ui.tasks.proxyTone != toneNeutral {
+	if got := ui.tasks.proxyStatus.String(); got != "連線中…" || !ui.tasks.proxyTesting || !ui.proxyTest.isBusy() || ui.tasks.proxyTone != toneNeutral {
 		t.Fatalf("while testing: status %q, testing %v, busy %v, tone %v", got, ui.tasks.proxyTesting, ui.proxyTest.isBusy(), ui.tasks.proxyTone)
 	}
 	ui.testProxy() // a second press while it runs does nothing
 	actions.release()
 	pumpSearchEvents(t, func() bool { return !ui.tasks.proxyTesting })
-	if got := ui.tasks.proxyStatus; got != "連線成功" || ui.proxyTest.isBusy() || ui.tasks.proxyTone != toneSuccess {
+	if got := ui.tasks.proxyStatus.String(); got != "連線成功" || ui.proxyTest.isBusy() || ui.tasks.proxyTone != toneSuccess {
 		t.Fatalf("after success: status %q, busy %v, tone %v", got, ui.proxyTest.isBusy(), ui.tasks.proxyTone)
 	}
 	inputs := actions.recordedProxyInputs()
@@ -184,8 +185,8 @@ func TestNativeSettingsProxyTestShowsTheReasonOrAGenericFailure(t *testing.T) {
 		err    error
 		status string
 	}{
-		"reason":  {backend.ProxyTestResult{Reason: "無法連線到代理伺服器"}, nil, "無法連線到代理伺服器"},
-		"timeout": {backend.ProxyTestResult{Reason: "逾時"}, nil, "逾時"},
+		"reason":  {backend.ProxyTestResult{Reason: backend.ReasonProxyUnreachable}, nil, "無法連線到代理伺服器"},
+		"timeout": {backend.ProxyTestResult{Reason: backend.ReasonTimeout}, nil, "逾時"},
 		"error":   {backend.ProxyTestResult{}, backend.ErrUnavailable, "連線失敗"},
 		"empty":   {backend.ProxyTestResult{}, nil, "連線失敗"},
 	} {
@@ -193,9 +194,9 @@ func TestNativeSettingsProxyTestShowsTheReasonOrAGenericFailure(t *testing.T) {
 		ui, _, _ := openSettingsPageWith(t, settingsOf("light", "enabled", "enabled", "enabled"), actions)
 		ui.proxyTest.button.TakeFocus()
 		pressKey(t, ui.window, vkReturn)
-		pumpSearchEvents(t, func() bool { return !ui.tasks.proxyTesting && ui.tasks.proxyStatus != proxyIdleStatus })
-		if ui.tasks.proxyStatus != want.status || ui.tasks.proxyTone != toneFailure {
-			t.Fatalf("%s: status = %q tone %v, want %q as a failure", name, ui.tasks.proxyStatus, ui.tasks.proxyTone, want.status)
+		pumpSearchEvents(t, func() bool { return !ui.tasks.proxyTesting && ui.tasks.proxyStatus.String() != uitext.T().ProxyIdle })
+		if ui.tasks.proxyStatus.String() != want.status || ui.tasks.proxyTone != toneFailure {
+			t.Fatalf("%s: status = %q tone %v, want %q as a failure", name, ui.tasks.proxyStatus.String(), ui.tasks.proxyTone, want.status)
 		}
 		if !ui.proxyTest.button.HasFocus() {
 			t.Fatalf("%s: focus left the button", name)
@@ -216,14 +217,14 @@ func TestNativeSettingsUpdateCheckShowsTheResultsAndKeepsTheButtonBusyWhileRunni
 	ui.updateCheck.button.TakeFocus()
 	pressKey(t, ui.window, vkReturn)
 	pumpSearchEvents(t, func() bool { return ui.tasks.updateChecking })
-	if ui.tasks.updateStatus != "檢查中…" || !ui.updateCheck.isBusy() || !ui.updateCheck.button.HasFocus() {
-		t.Fatalf("while checking: status %q, busy %v, focus %v", ui.tasks.updateStatus, ui.updateCheck.isBusy(), ui.updateCheck.button.HasFocus())
+	if ui.tasks.updateStatus.String() != "檢查中…" || !ui.updateCheck.isBusy() || !ui.updateCheck.button.HasFocus() {
+		t.Fatalf("while checking: status %q, busy %v, focus %v", ui.tasks.updateStatus.String(), ui.updateCheck.isBusy(), ui.updateCheck.button.HasFocus())
 	}
 	ui.checkForUpdate() // a second press while it runs does nothing
 	actions.release()
 	pumpSearchEvents(t, func() bool { return !ui.tasks.updateChecking })
-	if want := "已是最新版本（v" + release.Version + "）"; ui.tasks.updateStatus != want {
-		t.Fatalf("status = %q, want %q", ui.tasks.updateStatus, want)
+	if want := "已是最新版本（v" + release.Version + "）"; ui.tasks.updateStatus.String() != want {
+		t.Fatalf("status = %q, want %q", ui.tasks.updateStatus.String(), want)
 	}
 	if ui.updateOpen.button.Visible() {
 		t.Fatal("the download button shows although this is the newest version")
@@ -237,8 +238,8 @@ func TestNativeSettingsUpdateCheckShowsTheResultsAndKeepsTheButtonBusyWhileRunni
 	actions.mu.Unlock()
 	ui.checkForUpdate()
 	pumpSearchEvents(t, func() bool { return !ui.tasks.updateChecking && ui.tasks.update != nil })
-	if ui.tasks.updateStatus != "有新版本 v9.9.9" || !ui.updateOpen.button.Visible() {
-		t.Fatalf("newer: status %q, download button visible %v", ui.tasks.updateStatus, ui.updateOpen.button.Visible())
+	if ui.tasks.updateStatus.String() != "有新版本 v9.9.9" || !ui.updateOpen.button.Visible() {
+		t.Fatalf("newer: status %q, download button visible %v", ui.tasks.updateStatus.String(), ui.updateOpen.button.Visible())
 	}
 	if !slices.Contains(focusStops(ui), focusTarget(ui.updateOpen.button)) {
 		t.Fatal("the download button is not reachable by keyboard")
@@ -249,8 +250,8 @@ func TestNativeSettingsUpdateCheckShowsTheResultsAndKeepsTheButtonBusyWhileRunni
 	actions.mu.Unlock()
 	ui.checkForUpdate()
 	pumpSearchEvents(t, func() bool { return !ui.tasks.updateChecking })
-	if ui.tasks.updateStatus != "無法檢查更新，請稍後再試。" || ui.updateOpen.button.Visible() {
-		t.Fatalf("failure: status %q, download button visible %v", ui.tasks.updateStatus, ui.updateOpen.button.Visible())
+	if ui.tasks.updateStatus.String() != "無法檢查更新，請稍後再試。" || ui.updateOpen.button.Visible() {
+		t.Fatalf("failure: status %q, download button visible %v", ui.tasks.updateStatus.String(), ui.updateOpen.button.Visible())
 	}
 }
 
@@ -293,7 +294,7 @@ func TestNativeSettingsDownloadPageOpensOnlyReleasePagesOfTheProject(t *testing.
 			}
 			continue
 		}
-		pumpSearchEvents(t, func() bool { return ui.tasks.updateStatus == "無法開啟下載頁。" })
+		pumpSearchEvents(t, func() bool { return ui.tasks.updateStatus.String() == "無法開啟下載頁。" })
 		if len(opened) != 0 {
 			t.Fatalf("%s: opened %q although it is outside the project's release pages", name, opened)
 		}
@@ -306,8 +307,8 @@ func TestNativeSettingsDownloadPageOpensOnlyReleasePagesOfTheProject(t *testing.
 	ui.checkForUpdate()
 	pumpSearchEvents(t, func() bool { return !ui.tasks.updateChecking && ui.tasks.update != nil })
 	ui.openUpdatePage()
-	if ui.tasks.updateStatus != "無法開啟下載頁。" {
-		t.Fatalf("status after a failed open = %q", ui.tasks.updateStatus)
+	if ui.tasks.updateStatus.String() != "無法開啟下載頁。" {
+		t.Fatalf("status after a failed open = %q", ui.tasks.updateStatus.String())
 	}
 }
 
@@ -370,14 +371,14 @@ func TestNativeSettingsChangeDataLocationToAnEmptyFolder(t *testing.T) {
 	ui.dataChange.button.TakeFocus()
 	pressKey(t, ui.window, vkReturn)
 	pumpSearchEvents(t, func() bool { return ui.tasks.dataMoving })
-	if !ui.dataChange.isBusy() || !ui.dataRestore.isBusy() || ui.tasks.dataStatus != "處理中…" {
-		t.Fatalf("while moving: busy %v/%v, status %q", ui.dataChange.isBusy(), ui.dataRestore.isBusy(), ui.tasks.dataStatus)
+	if !ui.dataChange.isBusy() || !ui.dataRestore.isBusy() || ui.tasks.dataStatus.String() != "處理中…" {
+		t.Fatalf("while moving: busy %v/%v, status %q", ui.dataChange.isBusy(), ui.dataRestore.isBusy(), ui.tasks.dataStatus.String())
 	}
 	ui.changeDataLocation(false) // pressing again while it runs does nothing
 	actions.release()
 	pumpSearchEvents(t, func() bool { return !ui.tasks.dataMoving })
-	if ui.tasks.dataStatus != moveDoneStatus {
-		t.Fatalf("status after the move = %q", ui.tasks.dataStatus)
+	if ui.tasks.dataStatus.String() != moveDoneStatus {
+		t.Fatalf("status after the move = %q", ui.tasks.dataStatus.String())
 	}
 	if want := []string{defaultTestDataDir}; !slices.Equal(log.picked, want) {
 		t.Fatalf("folder picker started in %v, want %v", log.picked, want)
@@ -401,11 +402,11 @@ func TestNativeSettingsChangeDataLocationDoesNothingWhenThePickerIsCancelled(t *
 	actions := &settingsActionsFake{}
 	ui, _ := openDataPage(t, actions)
 	ui.tasks.chooseFolder = func(string) (string, bool) { return "", false }
-	status := ui.tasks.dataStatus
+	status := ui.tasks.dataStatus.String()
 	ui.changeDataLocation(false)
 	pumpFor(100 * time.Millisecond)
-	if len(actions.recordedMoves()) != 0 || ui.tasks.dataMoving || ui.tasks.dataStatus != status {
-		t.Fatalf("cancelling the picker moved %#v, moving %v, status %q", actions.recordedMoves(), ui.tasks.dataMoving, ui.tasks.dataStatus)
+	if len(actions.recordedMoves()) != 0 || ui.tasks.dataMoving || ui.tasks.dataStatus.String() != status {
+		t.Fatalf("cancelling the picker moved %#v, moving %v, status %q", actions.recordedMoves(), ui.tasks.dataMoving, ui.tasks.dataStatus.String())
 	}
 }
 
@@ -422,7 +423,7 @@ func TestNativeSettingsChangeDataLocationAsksWhatToDoWithExistingData(t *testing
 			{Target: chosenTestDataDir}, {Target: chosenTestDataDir, Existing: backend.ExistingUse}}, moveDoneStatus, chosenTestDataDir, "將改用該資料夾的資料，程式將重新開啟。"},
 		"overwrite with the current data": {[]int{0, 1}, []backend.MoveDataLocationRequest{
 			{Target: chosenTestDataDir}, {Target: chosenTestDataDir, Existing: backend.ExistingOverwrite}}, moveDoneStatus, chosenTestDataDir, "資料已複製到新位置，程式將重新開啟。"},
-		"close both dialogs": {[]int{0, 0}, []backend.MoveDataLocationRequest{{Target: chosenTestDataDir}}, dataIdleStatus, defaultTestDataDir, ""},
+		"close both dialogs": {[]int{0, 0}, []backend.MoveDataLocationRequest{{Target: chosenTestDataDir}}, uitext.T().DataIdle, defaultTestDataDir, ""},
 	} {
 		actions := &settingsActionsFake{replies: []moveReply{needsChoice}}
 		ui, log := openDataPage(t, actions)
@@ -444,8 +445,8 @@ func TestNativeSettingsChangeDataLocationAsksWhatToDoWithExistingData(t *testing
 		if got := actions.recordedMoves(); !slices.Equal(got, want.moves) {
 			t.Fatalf("%s: moves = %#v, want %#v", name, got, want.moves)
 		}
-		if ui.tasks.dataStatus != want.status || ui.dataFolderText() != want.folder {
-			t.Fatalf("%s: status %q, folder %q; want %q, %q", name, ui.tasks.dataStatus, ui.dataFolderText(), want.status, want.folder)
+		if ui.tasks.dataStatus.String() != want.status || ui.dataFolderText() != want.folder {
+			t.Fatalf("%s: status %q, folder %q; want %q, %q", name, ui.tasks.dataStatus.String(), ui.dataFolderText(), want.status, want.folder)
 		}
 		wantNotices, wantRestarts := []string(nil), 0
 		if want.notice != "" {
@@ -465,7 +466,7 @@ func TestNativeSettingsRestoreDefaultLocation(t *testing.T) {
 	actions.mu.Unlock()
 	ui.dataRestore.button.TakeFocus()
 	pressKey(t, ui.window, vkSpace)
-	pumpSearchEvents(t, func() bool { return !ui.tasks.dataMoving && ui.tasks.dataStatus == moveDoneStatus })
+	pumpSearchEvents(t, func() bool { return !ui.tasks.dataMoving && ui.tasks.dataStatus.String() == moveDoneStatus })
 	if len(log.picked) != 0 {
 		t.Fatalf("restoring opened the folder picker: %v", log.picked)
 	}
@@ -494,9 +495,9 @@ func TestNativeSettingsDataMoveFailuresShowAMessageAndChangeNothing(t *testing.T
 		actions := &settingsActionsFake{replies: []moveReply{{err: want.err}}}
 		ui, log := openDataPage(t, actions)
 		ui.changeDataLocation(false)
-		pumpSearchEvents(t, func() bool { return !ui.tasks.dataMoving && ui.tasks.dataStatus != dataMovingStatus })
-		if ui.tasks.dataStatus != want.status || ui.dataFolderText() != defaultTestDataDir {
-			t.Fatalf("%s: status %q, folder %q", name, ui.tasks.dataStatus, ui.dataFolderText())
+		pumpSearchEvents(t, func() bool { return !ui.tasks.dataMoving && ui.tasks.dataStatus.String() != uitext.T().DataMoving })
+		if ui.tasks.dataStatus.String() != want.status || ui.dataFolderText() != defaultTestDataDir {
+			t.Fatalf("%s: status %q, folder %q", name, ui.tasks.dataStatus.String(), ui.dataFolderText())
 		}
 		if len(log.notices) != 0 || log.restarts != 0 {
 			t.Fatalf("%s: a failed move restarted the app (notices %q, restarts %d)", name, log.notices, log.restarts)
@@ -559,8 +560,8 @@ func TestNativeSettingsRestartDoesNotSaveTheTypedProxyAddress(t *testing.T) {
 
 func TestNativeSettingsProjectButtonOpensExactlyTheProjectPage(t *testing.T) {
 	ui, _, _ := openSettingsPageWith(t, settingsOf("light", "enabled", "enabled", "enabled"), &settingsActionsFake{})
-	if !ui.projectOpen.button.Visible() || ui.projectOpen.title != "GitHub 專案頁" {
-		t.Fatalf("project row visible %v, title %q", ui.projectOpen.button.Visible(), ui.projectOpen.title)
+	if !ui.projectOpen.button.Visible() || ui.projectOpen.title.String() != "GitHub 專案頁" {
+		t.Fatalf("project row visible %v, title %q", ui.projectOpen.button.Visible(), ui.projectOpen.title.String())
 	}
 	var opened []string
 	ui.tasks.openURL = func(url string) error {
@@ -576,8 +577,8 @@ func TestNativeSettingsProjectButtonOpensExactlyTheProjectPage(t *testing.T) {
 
 	ui.tasks.openURL = func(string) error { return errors.New("no browser") }
 	ui.openProjectPage()
-	if ui.tasks.projectStatus != projectOpenFailedStatus {
-		t.Fatalf("status after a failed open = %q", ui.tasks.projectStatus)
+	if ui.tasks.projectStatus.String() != uitext.T().ProjectOpenFailed {
+		t.Fatalf("status after a failed open = %q", ui.tasks.projectStatus.String())
 	}
 }
 
@@ -591,7 +592,7 @@ type dialogProbe struct {
 }
 
 func (probe *dialogProbe) show(message string, labels ...string) int {
-	d := newDialog(probe.ui.window, dataDialogTitle, message, probe.ui.dark, labels...)
+	d := newDialog(probe.ui.window, uitext.T().DataDialogTitle, message, probe.ui.dark, labels...)
 	answer := probe.answers[0]
 	probe.answers = probe.answers[1:]
 	// The page opens its dialogs from an Awake callback, so the answer comes from one too.
@@ -643,7 +644,7 @@ func TestNativeSettingsDataDialogsOpenAsTopLevelWindowsFromTheMoveCallback(t *te
 		ui.tasks.choice = func(message string, options ...string) int { return probe.show(message, options...) }
 		ui.tasks.notice = func(message string) {
 			log.notices = append(log.notices, message)
-			probe.show(message, dialogOKLabel)
+			probe.show(message, uitext.T().OK)
 		}
 		ui.changeDataLocation(false)
 		deadline := time.Now().Add(5 * time.Second)

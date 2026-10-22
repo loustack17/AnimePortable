@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 	"animeportable/core"
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -51,39 +52,45 @@ type view struct {
 	// onRestart tells main to start the program again once it has shut down.
 	onRestart func()
 
-	message            *fltk.Box
-	header             *fltk.Box
-	tagline            *fltk.Box
-	sectionTitle       *fltk.Box
-	contentHint        *fltk.Box
-	scroll             *fltk.Scroll
-	scrollOriginX      int
-	scrollOriginY      int
-	loadingText        *fltk.Box
-	retryButton        *fltk.Button
-	browseButton       *fltk.Button
-	contentLabels      []themedLabel
-	staticLabels       int
-	cards              []*fltk.Box
-	cardButtons        []*fltk.Button
-	startupGroup       *fltk.Group
-	mainGroup          *fltk.Group
-	navigation         []*fltk.Button
-	selected           int
-	rows               []homeRow
-	homeCaptionLabels  []*fltk.Box
-	loadFailed         bool
-	homeLoading        bool
-	homeRefreshPending bool
-	homeLoadGeneration uint64
-	searchModel        searchModel
-	detailModel        detailModel
-	detailCancel       context.CancelFunc
-	detailGeneration   uint64
-	detailEpisodesDone bool
-	detailEpisodesErr  bool
-	detailHistoryErr   bool
-	detailCoverErr     bool
+	message *fltk.Box
+	// messageText is what message shows, read again after a language change; nil when empty.
+	messageText func() string
+	// relabels set every fixed label again after a language change (labelled).
+	relabels []func()
+	// localizeFollowing and localizeSchedule build the loaded rows again, in the current language.
+	localizeFollowing, localizeSchedule func()
+	header                              *fltk.Box
+	tagline                             *fltk.Box
+	sectionTitle                        *fltk.Box
+	contentHint                         *fltk.Box
+	scroll                              *fltk.Scroll
+	scrollOriginX                       int
+	scrollOriginY                       int
+	loadingText                         *fltk.Box
+	retryButton                         *fltk.Button
+	browseButton                        *fltk.Button
+	contentLabels                       []themedLabel
+	staticLabels                        int
+	cards                               []*fltk.Box
+	cardButtons                         []*fltk.Button
+	startupGroup                        *fltk.Group
+	mainGroup                           *fltk.Group
+	navigation                          []*fltk.Button
+	selected                            int
+	rows                                []homeRow
+	homeCaptionLabels                   []*fltk.Box
+	loadFailed                          bool
+	homeLoading                         bool
+	homeRefreshPending                  bool
+	homeLoadGeneration                  uint64
+	searchModel                         searchModel
+	detailModel                         detailModel
+	detailCancel                        context.CancelFunc
+	detailGeneration                    uint64
+	detailEpisodesDone                  bool
+	detailEpisodesErr                   bool
+	detailHistoryErr                    bool
+	detailCoverErr                      bool
 	// metadataLookedUp holds anime looked up on AniList/Bangumi this session, so an anime
 	// with no match is not queried again on every open. Touched only on the UI thread.
 	metadataLookedUp   map[string]bool
@@ -134,6 +141,7 @@ type view struct {
 	settingsRows     []*settingsRow
 	settingsToggles  []settingsToggle
 	themeControl     *segmentedControl
+	languageControl  *segmentedControl
 	proxyControl     *segmentedControl
 	proxyField       *proxyAddressField
 	proxyTest        *settingsAction
@@ -232,7 +240,7 @@ func NewWindow(plan backend.PortablePlan, planErr error, service Service, ctx co
 	})
 	ui.build()
 	if planErr != nil {
-		ui.showStartupError("無法使用這個資料夾，請將程式解壓到可寫入的位置後重新開啟。")
+		ui.showStartupError(uitext.T().StartupFolderUnusable)
 		return window, ui.showSection
 	}
 	ui.start()
@@ -257,11 +265,11 @@ func (ui *view) build() {
 	ui.startupGroup.Hide()
 	ui.mainGroup = fltk.NewGroup(0, 0, 1000, 618)
 	ui.mainGroup.Begin()
-	ui.sectionTitle = fltk.NewBox(fltk.NO_BOX, 252, 35, 580, 38, "今天想看什麼？")
+	ui.sectionTitle = fltk.NewBox(fltk.NO_BOX, 252, 35, 580, 38, "")
 	ui.sectionTitle.SetLabelFont(fltk.HELVETICA_BOLD)
 	ui.sectionTitle.SetLabelSize(25)
 	ui.sectionTitle.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
-	ui.contentHint = fltk.NewBox(fltk.NO_BOX, 252, 74, 580, 25, "輕鬆找到下一個喜歡的故事")
+	ui.contentHint = fltk.NewBox(fltk.NO_BOX, 252, 74, 580, 25, "")
 	ui.contentHint.SetLabelSize(12)
 	ui.contentHint.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
 	ui.contentHint.SetLabelColor(fltk.ColorFromRgb(85, 96, 116))
@@ -272,16 +280,19 @@ func (ui *view) build() {
 	ui.scrollOriginX = ui.scroll.X() - hero.X()
 	ui.scrollOriginY = ui.scroll.Y() - hero.Y()
 	hero.SetDrawHandler(func(func()) { roundedRect(hero.X(), hero.Y(), hero.W(), hero.H(), 20, fltk.ColorFromRgb(48, 55, 125)) })
-	heroTitle := fltk.NewBox(fltk.NO_BOX, 278, 134, 600, 35, "繼續探索喜歡的故事")
+	heroTitle := fltk.NewBox(fltk.NO_BOX, 278, 134, 600, 35, "")
+	ui.labelled(heroTitle, func(text *uitext.Strings) string { return text.HeroTitle })
 	heroTitle.SetLabelFont(fltk.HELVETICA_BOLD)
 	heroTitle.SetLabelSize(22)
 	heroTitle.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
 	heroTitle.SetLabelColor(fltk.WHITE)
-	heroHint := fltk.NewBox(fltk.NO_BOX, 278, 171, 600, 22, "最近觀看、追蹤與播出資訊，都在這裡。")
+	heroHint := fltk.NewBox(fltk.NO_BOX, 278, 171, 600, 22, "")
+	ui.labelled(heroHint, func(text *uitext.Strings) string { return text.HeroHint })
 	heroHint.SetLabelSize(13)
 	heroHint.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
 	heroHint.SetLabelColor(fltk.WHITE)
-	browse := fltk.NewButton(278, 205, 132, 37, "搜尋作品")
+	browse := fltk.NewButton(278, 205, 132, 37, "")
+	ui.labelled(browse, func(text *uitext.Strings) string { return text.BrowseAnime })
 	ui.browseButton = browse
 	browse.SetBox(fltk.NO_BOX)
 	browse.SetDrawHandler(func(func()) {
@@ -307,11 +318,13 @@ func (ui *view) build() {
 		}
 		return nil
 	})
-	ui.continueHeading = ui.contentText(253, homeFirstSectionY, 600, 32, "繼續觀看", 20, false, true)
-	ui.loadingText = fltk.NewBox(fltk.NO_BOX, 253, 326, 680, 36, "正在載入繼續觀看…")
+	ui.continueHeading = ui.contentText(253, homeFirstSectionY, 600, 32, "", 20, false, true)
+	ui.labelled(ui.continueHeading, func(text *uitext.Strings) string { return text.ContinueWatching })
+	ui.loadingText = fltk.NewBox(fltk.NO_BOX, 253, 326, 680, 36, uitext.T().LoadingContinue)
 	ui.loadingText.SetLabelSize(13)
 	ui.loadingText.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
-	ui.retryButton = fltk.NewButton(253, 365, 126, 36, "重新載入")
+	ui.retryButton = fltk.NewButton(253, 365, 126, 36, "")
+	ui.labelled(ui.retryButton, func(text *uitext.Strings) string { return text.Reload })
 	ui.styleButton(ui.retryButton, func() bool { return true })
 	ui.retryButton.SetCallback(ui.loadHome)
 	ui.bindContentKeys(ui.retryButton, ui.loadHome, func() *fltk.Button { return ui.browseButton }, nil)
@@ -338,9 +351,10 @@ func (ui *view) build() {
 	tagline.SetLabelSize(10)
 	tagline.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
 	ui.tagline = tagline
-	ui.navigation = make([]*fltk.Button, len(sections))
+	ui.navigation = make([]*fltk.Button, len(uitext.T().Sections))
 	for position, index := range navigationOrder {
-		button := fltk.NewButton(27, 111+position*55, 177, 43, sections[index])
+		button := fltk.NewButton(27, 111+position*55, 177, 43, "")
+		ui.labelled(button, func(text *uitext.Strings) string { return text.Sections[index] })
 		ui.bindNavigationKeys(button, index)
 		button.SetLabelSize(15)
 		ui.styleButton(button, func() bool { return ui.selected == index })
@@ -349,6 +363,7 @@ func (ui *view) build() {
 	pinChildren(navPanel)
 	navPanel.End()
 	ui.window.End()
+	ui.syncSectionText()
 	ui.applyTheme()
 	ui.staticLabels = len(ui.contentLabels)
 	ui.window.SetResizeHandler(func() {
@@ -371,10 +386,10 @@ func (ui *view) build() {
 }
 
 func (ui *view) showStartupError(message string) {
-	ui.message.SetLabel(message)
+	ui.setMessage(func() string { return message })
 	if ui.closeButton == nil {
 		ui.startupGroup.Begin()
-		ui.closeButton = fltk.NewButton(272, 132, 160, 40, "關閉")
+		ui.closeButton = fltk.NewButton(272, 132, 160, 40, uitext.T().Close)
 		ui.styleButton(ui.closeButton, nil)
 		ui.bindButton(ui.closeButton, ui.cancel)
 		pinChildren(ui.startupGroup)
@@ -396,7 +411,7 @@ func (ui *view) start() {
 	if ui.ctx.Err() != nil || ui.closing {
 		return
 	}
-	ui.message.SetLabel("正在準備資料…")
+	ui.setMessage(func() string { return uitext.T().PreparingData })
 	ui.startupGroup.Deactivate()
 	go func() {
 		var err error
@@ -439,14 +454,15 @@ func (ui *view) finishStartup(err error, settings backend.Settings, settingsErr 
 		settings = backend.DefaultSettings()
 	}
 	ui.settings = settings
+	ui.useLanguage(settings.Language)
 	ui.dark = resolveDark(settings.Appearance)
 	ui.proxyField.input.SetValue(settings.ProxyAddress)
 	ui.syncSettings()
 	ui.applyTheme()
 	if settingsErr != nil {
-		ui.message.SetLabel("無法載入設定，暫時使用預設值。")
+		ui.setMessage(func() string { return uitext.T().SettingsDefaultsUsed })
 	} else {
-		ui.message.SetLabel("")
+		ui.setMessage(nil)
 	}
 	ui.mainGroup.Show()
 	ui.showSection(0)
@@ -456,7 +472,7 @@ func (ui *view) finishStartup(err error, settings backend.Settings, settingsErr 
 }
 
 func (ui *view) showSection(index int) {
-	if ui.closing || index < 0 || index >= len(sections) {
+	if ui.closing || index < 0 || index >= len(uitext.T().Sections) {
 		return
 	}
 	enteringHome := index == 0 && ui.selected != 0
@@ -498,10 +514,8 @@ func (ui *view) showSection(index int) {
 	for _, button := range ui.navigation {
 		button.Redraw()
 	}
-	ui.sectionTitle.SetLabel(sections[index])
+	ui.syncSectionText()
 	if index == 0 {
-		ui.sectionTitle.SetLabel("今天想看什麼？")
-		ui.contentHint.SetLabel("輕鬆找到下一個喜歡的故事")
 		ui.scroll.Show()
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
@@ -510,32 +524,27 @@ func (ui *view) showSection(index int) {
 			ui.refreshHome()
 		}
 	} else if index == 4 {
-		ui.contentHint.SetLabel("搜尋作品名稱，先查看已儲存的作品，再按 Enter 更新搜尋。")
 		ui.scroll.Hide()
 		ui.searchPage.Show()
 		ui.previewGroup.Hide()
 		ui.loadSearchLibrary()
 		ui.renderSearch()
 	} else if index == followingSection && ui.followingPage != nil {
-		ui.contentHint.SetLabel("追蹤作品的最新集數與觀看進度；按作品開啟詳情。")
 		ui.scroll.Hide()
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
 		ui.showFollowing()
 	} else if index == historySection && ui.historyPage != nil {
-		ui.contentHint.SetLabel("最近觀看的作品與進度；按作品繼續播放。")
 		ui.scroll.Hide()
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
 		ui.showHistory()
 	} else if index == scheduleSection && ui.schedulePage != nil {
-		ui.contentHint.SetLabel("接下來 7 天的新番時間表；按作品開啟詳情或搜尋片源。")
 		ui.scroll.Hide()
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
 		ui.showSchedule()
 	} else if index == settingsSection && ui.settingsPage != nil {
-		ui.contentHint.SetLabel("變更後會立即儲存。")
 		ui.scroll.Hide()
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
@@ -543,7 +552,6 @@ func (ui *view) showSection(index int) {
 		ui.layoutSettings()
 		ui.refreshDataLocation()
 	} else {
-		ui.contentHint.SetLabel("此頁面尚未建立")
 		ui.scroll.Hide()
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
@@ -552,8 +560,27 @@ func (ui *view) showSection(index int) {
 	ui.window.Redraw()
 }
 
-// homeOfflineNotice is Home's status line when no background refresh could reach the network.
-const homeOfflineNotice = "目前無法連線，顯示上次儲存的資料。"
+// syncSectionText shows the heading and hint of the selected page.
+func (ui *view) syncSectionText() {
+	text := uitext.T()
+	title, hint := text.Sections[ui.selected], text.PageMissing
+	switch {
+	case ui.selected == 0:
+		title, hint = text.HomeTitle, text.HomeHint
+	case ui.selected == SearchSection:
+		hint = text.SearchHint
+	case ui.selected == followingSection && ui.followingPage != nil:
+		hint = text.FollowingHint
+	case ui.selected == historySection && ui.historyPage != nil:
+		hint = text.HistoryHint
+	case ui.selected == scheduleSection && ui.schedulePage != nil:
+		hint = text.ScheduleHint
+	case ui.selected == settingsSection && ui.settingsPage != nil:
+		hint = text.SettingsHint
+	}
+	ui.sectionTitle.SetLabel(title)
+	ui.contentHint.SetLabel(hint)
+}
 
 // syncHomeNotice shows the offline line on Home only. Any other notice in the shared message
 // line wins over it, and it is cleared once a refresh succeeds or another page shows.
@@ -561,9 +588,9 @@ func (ui *view) syncHomeNotice() {
 	current := ui.message.Label()
 	switch {
 	case ui.selected == 0 && ui.homeOffline && current == "":
-		ui.message.SetLabel(homeOfflineNotice)
-	case current == homeOfflineNotice && (ui.selected != 0 || !ui.homeOffline):
-		ui.message.SetLabel("")
+		ui.setMessage(func() string { return uitext.T().OfflineNotice })
+	case current == uitext.T().OfflineNotice && (ui.selected != 0 || !ui.homeOffline):
+		ui.setMessage(nil)
 	}
 }
 
@@ -608,8 +635,8 @@ func (ui *view) loadHome() {
 	}
 	if ui.service == nil {
 		ui.hideHomeContinue()
-		ui.message.SetLabel(homeErrorMessage(fmt.Errorf("service unavailable")))
-		ui.loadingText.SetLabel("無法載入作品資料。")
+		ui.setMessage(func() string { return homeErrorMessage(fmt.Errorf("service unavailable")) })
+		ui.loadingText.SetLabel(uitext.T().AnimeLoadFailed)
 		ui.loadingText.Show()
 		ui.retryButton.Show()
 		return
@@ -619,7 +646,7 @@ func (ui *view) loadHome() {
 	generation := ui.homeLoadGeneration
 	ui.hideHomeContinue()
 	ui.retryButton.Hide()
-	ui.loadingText.SetLabel("正在載入繼續觀看…")
+	ui.loadingText.SetLabel(uitext.T().LoadingContinue)
 	ui.loadingText.Show()
 	var library []backend.Anime
 	var history []backend.History
@@ -644,8 +671,9 @@ func (ui *view) loadHome() {
 			}
 			if libraryErr != nil || historyErr != nil || followingErr != nil {
 				ui.loadFailed = true
-				ui.message.SetLabel(homeErrorMessage(firstError(libraryErr, historyErr, followingErr)))
-				ui.loadingText.SetLabel("無法載入作品資料。")
+				loadErr := firstError(libraryErr, historyErr, followingErr)
+				ui.setMessage(func() string { return homeErrorMessage(loadErr) })
+				ui.loadingText.SetLabel(uitext.T().AnimeLoadFailed)
 				ui.loadingText.Show()
 				ui.retryButton.Show()
 				ui.restoreHomeFocus()
@@ -653,7 +681,7 @@ func (ui *view) loadHome() {
 				return
 			}
 			ui.loadFailed = false
-			ui.message.SetLabel("")
+			ui.setMessage(nil)
 			ui.syncHomeNotice()
 			ui.rows = selectHomeRows(history, library, rowLimit)
 			ui.populateHome(library, following)
@@ -711,7 +739,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	ui.scroll.Begin()
 
 	// 近期更新 comes first (owner decision 2026-10-15), then 繼續觀看, then 今日播出.
-	ui.contentText(253, homeFirstSectionY, 600, 32, "近期更新", 20, false, true)
+	ui.contentText(253, homeFirstSectionY, 600, 32, uitext.T().RecentUpdates, 20, false, true)
 	updates := recentUpdateRows(following, library, rowLimit, time.Now())
 	ui.homeUpdateKey = recentUpdateKey(updates)
 	updatesBottom := homeFirstRowY + len(updates)*64 - 8
@@ -760,7 +788,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	ui.retryButton.Resize(253, continueY+91, 126, 36)
 	ui.loadingText.Show()
 	if len(ui.rows) == 0 {
-		ui.loadingText.SetLabel("還沒有可繼續觀看的內容。")
+		ui.loadingText.SetLabel(uitext.T().NothingToContinue)
 	} else {
 		ui.loadingText.Hide()
 	}
@@ -774,7 +802,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		caption := ui.contentText(273, y+48, 450, 20, homeCaption(row), 12, true, false)
 		ui.homeCaptionLabels = append(ui.homeCaptionLabels, caption)
 		ui.homeCardLabels = append(ui.homeCardLabels, title, caption)
-		button := fltk.NewButton(250+ui.homeContentWidth()-22-126, y+28, 126, 36, "繼續播放")
+		button := fltk.NewButton(250+ui.homeContentWidth()-22-126, y+28, 126, 36, uitext.T().ContinuePlaying)
 		ui.styleButton(button, func() bool { return true })
 		item := row.History
 		playRow := func() { ui.playHomeRow(item, rowGeneration) }
@@ -799,8 +827,8 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 	if len(ui.rows) > 0 {
 		todayY = cardsY + len(ui.rows)*104 - 12 + homeSectionGap
 	}
-	ui.contentText(253, todayY, 600, 31, "今日播出", 20, false, true)
-	ui.contentText(270, todayY+37, 620, 22, "目前沒有本機播出資料。", 12, true, false)
+	ui.contentText(253, todayY, 600, 31, uitext.T().TodayOnAir, 20, false, true)
+	ui.contentText(270, todayY+37, 620, 22, uitext.T().NoLocalSchedule, 12, true, false)
 	ui.scroll.End()
 	ui.applyTheme()
 	ui.restoreHomeFocus()
@@ -1009,7 +1037,7 @@ func (ui *view) cancel() {
 			}
 			fltk.Awake(func() {
 				if err != nil && !(ui.restarting && errors.Is(err, backend.ErrRestartRequired)) {
-					showDialog(ui.window, "設定未儲存", "無法儲存設定，下次開啟可能恢復先前的設定。", ui.dark, dialogOKLabel)
+					showDialog(ui.window, uitext.T().SettingsNotSavedTitle, uitext.T().SettingsNotSaved, ui.dark, uitext.T().OK)
 				}
 				ui.cancelContext()
 				if ui.onClose != nil {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 )
 
 // settingsPageService keeps the settings in a settingsTestService under the Home test service
@@ -197,7 +198,7 @@ func TestNativeSettingsPageShowsDefaultsDisabledAndSavesNothingWhenStoredSetting
 	if got := ui.message.Label(); got != "無法載入設定，暫時使用預設值。" {
 		t.Fatalf("load failure message = %q", got)
 	}
-	if got := ui.settingsNotice.Label(); got != settingsLoadFailedNotice || !ui.settingsNotice.Visible() {
+	if got := ui.settingsNotice.Label(); got != uitext.T().SettingsLoadFailed || !ui.settingsNotice.Visible() {
 		t.Fatalf("settings page notice = %q, visible %v", got, ui.settingsNotice.Visible())
 	}
 	if !ui.dark {
@@ -277,8 +278,8 @@ func TestNativeSettingsKeysToggleAndSaveAtOnce(t *testing.T) {
 func TestNativeSettingsHardwareDecodingToggleSaves(t *testing.T) {
 	ui, store := openSettingsPage(t, settingsOf("light", "enabled", "enabled", "enabled"))
 	toggle := ui.settingsToggles[3]
-	if toggle.title != "硬體解碼" || !toggle.on() {
-		t.Fatalf("hardware decoding row = %q on %v, want 硬體解碼 on by default", toggle.title, toggle.on())
+	if toggle.title.String() != "硬體解碼" || !toggle.on() {
+		t.Fatalf("hardware decoding row = %q on %v, want 硬體解碼 on by default", toggle.title.String(), toggle.on())
 	}
 	toggle.button.TakeFocus()
 	pressKey(t, ui.window, vkSpace)
@@ -384,16 +385,18 @@ func TestNativeSettingsSegmentedRowIsOneStopForUpDownAndTab(t *testing.T) {
 	fakeAppsUseLightTheme(t, 1, nil)
 	ui, _ := openSettingsPage(t, settingsOf("light", "enabled", "enabled", "enabled"))
 	segments := ui.themeControl.buttons
+	// 語言 follows 主題 and shows 繁體中文 selected.
+	language := ui.languageControl.buttons[0]
 	// Right from the navigation enters the group on the selected segment; Tab and Down leave it in one step.
 	ui.navigation[settingsSection].TakeFocus()
 	pressKey(t, ui.window, vkRight)
 	pumpSearchEvents(t, func() bool { return segments[2].HasFocus() })
 	pressKey(t, ui.window, vkTab)
-	pumpSearchEvents(t, func() bool { return ui.settingsToggles[0].button.HasFocus() })
+	pumpSearchEvents(t, func() bool { return language.HasFocus() })
 	pressKey(t, ui.window, vkUp)
 	pumpSearchEvents(t, func() bool { return segments[2].HasFocus() })
 	pressKey(t, ui.window, vkDown)
-	pumpSearchEvents(t, func() bool { return ui.settingsToggles[0].button.HasFocus() })
+	pumpSearchEvents(t, func() bool { return language.HasFocus() })
 	segments[1].TakeFocus()
 	pressKey(t, ui.window, vkUp)
 	pumpSearchEvents(t, func() bool { return ui.navigation[settingsSection].HasFocus() })
@@ -409,7 +412,7 @@ func TestNativeSettingsTabWalksEveryEnabledRowInOrder(t *testing.T) {
 		t.Fatal("a row that does not apply is enabled")
 	}
 	want := []focusTarget{
-		ui.themeControl.buttons[0], ui.settingsToggles[0].button, ui.settingsToggles[2].button,
+		ui.themeControl.buttons[0], ui.languageControl.buttons[0], ui.settingsToggles[0].button, ui.settingsToggles[2].button,
 		ui.settingsToggles[3].button, ui.proxyControl.buttons[0], ui.proxyTest.button,
 		ui.dataChange.button, ui.updateCheck.button, ui.projectOpen.button,
 	}
@@ -489,7 +492,7 @@ func TestNativeSettingsFailedSaveShowsTheMessage(t *testing.T) {
 	ui, store := openSettingsPage(t, settingsOf("light", "enabled", "enabled", "enabled"))
 	store.writeErr = errors.New("disk full")
 	ui.toggleAutoPlay()
-	pumpSearchEvents(t, func() bool { return ui.message.Label() == settingsSaveFailedMessage })
+	pumpSearchEvents(t, func() bool { return ui.message.Label() == uitext.T().SettingsSaveFailed })
 
 	// The next save that works clears it.
 	ui.toggleAutoPlay()
@@ -595,8 +598,8 @@ func TestNativeSettingsProxyAddressRefusesABadAddressAndSaysSo(t *testing.T) {
 	stored.ProxyMode, stored.ProxyAddress = "manual", "127.0.0.1:1080"
 	ui, store := openSettingsPage(t, stored)
 	input := ui.proxyField.input
-	if proxyAddressInvalid != "位址格式不正確，請輸入 主機名稱:連接埠。" {
-		t.Fatalf("invalid address message = %q", proxyAddressInvalid)
+	if uitext.T().ProxyAddressInvalid != "位址格式不正確，請輸入 主機名稱:連接埠。" {
+		t.Fatalf("invalid address message = %q", uitext.T().ProxyAddressInvalid)
 	}
 	for _, bad := range []string{"http://127.0.0.1:7890", "127.0.0.1", "host:99999", "user:pw@host:80", "bad host:80"} {
 		input.TakeFocus()

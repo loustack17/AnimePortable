@@ -11,11 +11,10 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/backend"
+	"animeportable/apps/desktop/uitext"
 )
 
 const rowLimit = 6
-
-var sections = [...]string{"首頁", "時間表", "追蹤", "歷史紀錄", "搜尋", "設定"}
 
 var navigationOrder = [...]int{0, 4, 1, 2, 3, 5}
 
@@ -37,12 +36,12 @@ type homeRow struct {
 func homeCaption(row homeRow) string {
 	number := strings.TrimSpace(row.History.EpisodeNumber)
 	if number == "" {
-		number = "未知"
+		number = uitext.T().UnknownNumber
 	}
 	if finished(row.History) {
-		return fmt.Sprintf("集數：%s · 已看完", number)
+		return fmt.Sprintf(uitext.T().RowFinished, number)
 	}
-	return fmt.Sprintf("集數：%s · 上次播放位置 %s", number, formatPosition(row.History.Position))
+	return fmt.Sprintf(uitext.T().RowPosition, number, formatPosition(row.History.Position))
 }
 
 func selectHomeRows(history []backend.History, library []backend.Anime, limit int) []homeRow {
@@ -105,7 +104,7 @@ func animeTitles(library []backend.Anime) func(string) string {
 		if title := titles[id]; title != "" {
 			return title
 		}
-		return "未知作品"
+		return uitext.T().UnknownTitle
 	}
 }
 
@@ -124,7 +123,7 @@ func historyRows(history []backend.History, library []backend.Anime, now time.Ti
 	for _, item := range ordered {
 		status := EpisodeLabel(item.EpisodeNumber) + " · " + historyProgress(item)
 		if played, err := time.Parse(time.RFC3339Nano, item.LastPlayed); err == nil {
-			status += " · 上次觀看：" + daysAgo(now, played)
+			status += fmt.Sprintf(uitext.T().LastWatched, daysAgo(now, played))
 		}
 		rows = append(rows, historyRow{History: item, Title: titles(item.AnimeID), Status: status})
 	}
@@ -134,9 +133,9 @@ func historyRows(history []backend.History, library []backend.Anime, now time.Ti
 func historyProgress(item backend.History) string {
 	switch {
 	case finished(item):
-		return "已看完"
+		return uitext.T().Finished
 	case item.Position <= 0:
-		return "尚未開始"
+		return uitext.T().NotStarted
 	case item.Duration <= 0:
 		return formatPosition(item.Position)
 	}
@@ -201,7 +200,7 @@ func followingRows(following []backend.Following, library []backend.Anime, histo
 		}
 		anime.Title = strings.TrimSpace(anime.Title)
 		if anime.Title == "" {
-			anime.Title = "未知作品"
+			anime.Title = uitext.T().UnknownTitle
 		}
 		rows = append(rows, followingRow{Anime: anime, Status: followingStatus(item, history)})
 	}
@@ -262,28 +261,28 @@ func daysAgo(now, at time.Time) string {
 	}
 	switch days := int(day(now).Sub(day(at)).Hours() / 24); {
 	case days <= 0:
-		return "今天"
+		return uitext.T().Today
 	case days == 1:
-		return "昨天"
+		return uitext.T().Yesterday
 	default:
-		return fmt.Sprintf("%d 天前", days)
+		return fmt.Sprintf(uitext.T().DaysAgo, days)
 	}
 }
 
 func recentUpdateEmptyText(following []backend.Following) string {
 	if len(following) == 0 {
-		return "尚未追蹤任何作品。在作品頁按星號即可追蹤。"
+		return uitext.T().NoFollowing
 	}
-	return "最近 7 天，追蹤的作品沒有新集數。"
+	return uitext.T().NoRecentUpdates
 }
 
 // followingStatus says which episode the user has watched up to and the saved position in
 // it, for example "看到：第 10 集 · 7:52 / 24:00".
 func followingStatus(item backend.Following, history []backend.History) string {
 	if !item.HasWatched {
-		return "尚未觀看"
+		return uitext.T().NotWatched
 	}
-	status := "看到：" + EpisodeLabel(item.LatestWatchedNumber)
+	status := fmt.Sprintf(uitext.T().WatchedUpTo, EpisodeLabel(item.LatestWatchedNumber))
 	for _, entry := range history {
 		// An episode only opened has no position worth showing.
 		if entry.AnimeID == item.AnimeID && entry.EpisodeID == item.LatestWatched && (entry.Completed || entry.Position > 0) {
@@ -296,12 +295,22 @@ func followingStatus(item backend.Following, history []backend.History) string {
 // scheduleDays is how many days 時間表 shows, starting today.
 const scheduleDays = 7
 
-// scheduleDay is one column of the 時間表 week, for example 週二 with date 今天 10/20.
+// scheduleDay is one column of the 時間表 week, for example Tuesday 10/20, today.
 type scheduleDay struct {
-	Weekday string
+	Weekday time.Weekday
 	Date    string
 	Today   bool
 	Shows   []scheduleShow
+}
+
+// heading names the day in the current language, for example 週二 and 今天 10/20.
+func (day scheduleDay) heading() string {
+	text := uitext.T()
+	date := day.Date
+	if day.Today {
+		date = fmt.Sprintf(text.TodayDate, date)
+	}
+	return text.Weekdays[day.Weekday] + "\n" + date
 }
 
 // scheduleShow is one show on a day. Anime.ID is empty when the app does not know the show;
@@ -311,8 +320,6 @@ type scheduleShow struct {
 	Query string
 }
 
-var weekdayNames = [...]string{"週日", "週一", "週二", "週三", "週四", "週五", "週六"}
-
 // scheduleWeek lays the weekly schedule onto the scheduleDays days from today, in source
 // order within a day. Every day gets a column, with or without shows.
 func scheduleWeek(items []backend.ScheduleItem, now time.Time) []scheduleDay {
@@ -321,17 +328,14 @@ func scheduleWeek(items []backend.ScheduleItem, now time.Time) []scheduleDay {
 	days := make([]scheduleDay, 0, scheduleDays)
 	for offset := range scheduleDays {
 		day := today.AddDate(0, 0, offset)
-		column := scheduleDay{Weekday: weekdayNames[day.Weekday()], Date: fmt.Sprintf("%d/%d", day.Month(), day.Day()), Today: offset == 0}
-		if column.Today {
-			column.Date = "今天 " + column.Date
-		}
+		column := scheduleDay{Weekday: day.Weekday(), Date: fmt.Sprintf("%d/%d", day.Month(), day.Day()), Today: offset == 0}
 		for _, item := range items {
 			if time.Weekday(item.Weekday) != day.Weekday() {
 				continue
 			}
 			show := scheduleShow{Anime: backend.Anime{ID: item.AnimeID, Title: strings.TrimSpace(item.Title)}, Query: item.Query}
 			if show.Anime.Title == "" {
-				show.Anime.Title = "未知作品"
+				show.Anime.Title = uitext.T().UnknownTitle
 			}
 			column.Shows = append(column.Shows, show)
 		}
@@ -344,9 +348,9 @@ func scheduleWeek(items []backend.ScheduleItem, now time.Time) []scheduleDay {
 func EpisodeLabel(number string) string {
 	number = strings.TrimSpace(number)
 	if number == "" {
-		return "集數未知"
+		return uitext.T().EpisodeUnknown
 	}
-	return "第 " + number + " 集"
+	return fmt.Sprintf(uitext.T().EpisodeNumber, number)
 }
 
 func playRequest(item backend.History) backend.PlayRequest {
@@ -355,22 +359,22 @@ func playRequest(item backend.History) backend.PlayRequest {
 
 func startupErrorMessage(err error, copying, imported bool) string {
 	if backend.IsPortableImportConflict(err) {
-		return "資料夾內已有資料，不會覆蓋。請關閉後重新開啟。"
+		return uitext.T().DataExists
 	}
 	if imported {
-		return "舊資料已複製到這個資料夾，但目前無法開啟。請關閉後重試；舊資料仍保留。"
+		return uitext.T().DataCopiedUnopenable
 	}
 	if copying {
-		return "無法複製舊資料；舊資料沒有變更。你可以建立新的空白資料，或關閉程式。"
+		return uitext.T().DataCopyFailed
 	}
-	return "無法在此資料夾開啟資料，請確認解壓資料夾可寫入後重新開啟。"
+	return uitext.T().DataFolderUnwritable
 }
 
 func homeErrorMessage(err error) string {
 	if err == nil {
 		return ""
 	}
-	return "無法載入作品資料，請重試。"
+	return uitext.T().LoadAnimeFailed
 }
 
 func isCanceled(err error) bool {
