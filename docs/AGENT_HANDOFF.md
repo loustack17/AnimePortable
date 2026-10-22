@@ -12,6 +12,7 @@ branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
   None. Loop 37 (Settings) passed on 2026-10-22 (docs/loops/LOOP37.md; f582da8 + fixes 1966449, f2c4f51; CI 39734539484 green).
+  Pre-release v0.3.0-alpha published 2026-10-22 (tag on b005d3a; release job 39738301609 reused the CI-tested exe; DLL hash matches the pin).
   Next loops: 37b (language: zh-TW default, English, Japanese) and 37c (skip the opening with AniSkip), then 38; each needs owner approval to start.
 active_acceptance: none
 next_actions:
@@ -20,7 +21,7 @@ next_actions:
   - Ask before any GUI test run while the owner may be using the PC (owner request 2026-10-22).
   - 2. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
   - Open owner choices: console window next to the app (exe built as a console program; -H windowsgui?); 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md); Home 今日播出 from the stored schedule.
-  - Releases: push a v* tag with notes in docs/releases/<tag>.md; CI packages and publishes a pre-release (owner approval each time).
+  - Releases: bump internal/release.Version + notes in docs/releases/<tag>.md, push to main, wait for CI, then push the v* tag; the release job reuses that run's exe (owner approval each time). CI is small by owner decision: no window or libmpv tests there; run them locally (ask the owner first).
   - When a followed anime gets a new episode, ask the owner to confirm a live Home 近期更新 row (open it, Back returns Home).
   - If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
