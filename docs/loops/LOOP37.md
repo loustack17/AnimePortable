@@ -2,7 +2,7 @@
 
 # Loop 37: Settings
 
-Status: PASS (owner accepted 2026-10-22, owner check 5).
+Status: PASS (owner accepted 2026-10-22, owner check 5). Commits f582da8, 1966449 (CI crash fix), f2c4f51 (test wait under race); GitHub Windows CI 39734539484 green.
 
 ## Goal
 
@@ -138,3 +138,4 @@ Test build: `artifacts/test-build/AnimePortable.exe` (uncommitted worktree build
 - Final local check on the committed state (owner allowed): gofmt and vet clean, full native suite and race green (`full-suite-12.txt`, `full-suite-race-12.txt`, `vet-12.txt`; scoop msvcrt gcc 15.2). Owner approved commit and push to main (2026-10-22).
 - Pushed f582da8; GitHub Windows CI 39729430380 failed: an access violation at address 0 in the FLTK event loop of `TestFollowingPageShowsStoredStateWhenRefreshFails` (TypeSafe ci-log: tests stage, repository-caused 0.72). Reproduced locally with `go test -count=3 ./apps/desktop/fltkhome/...` (single runs passed). Causes: (1) go-fltk's widget deletion handler unregisters a child's draw-handler id from the plain callback map, so destroying a window whose children have draw handlers drops an unrelated live callback or timeout, which a later event loop calls at address 0; the 設定 page added many draw-handler widgets to Home, and test teardown destroyed Home windows; the app never destroys Home, and dialogs now destroy their children one by one first (this also protected the real app at every dialog close); (2) the dialog tests did not lock their OS thread like the other window tests; (3) the global `homeWindow` could point at a destroyed window, so it is removed and `ShowNotice` takes a live parent (player while shown, else Home). Test teardown hides Home windows through one helper instead of destroying them. fltkhome passes 5 runs and 2 race runs in a row; full suite and race green (`fltkhome-x5-15.txt`, `full-suite-15.txt`, `full-suite-race-15.txt`).
 - Owner approved commit and push of the fix: 1966449; CI 39731777551: the 20-repeat window step passed (crash gone), but the race step timed out in two 設定 tests after the 2 s limit of the shared `pumpSearchEvents` helper. Reproduced locally only under the same load (`go test -race -count=3 ./apps/desktop/...`, all packages at once while the libmpv tests take every core; fltkhome alone passes). The limit only bounds a failure, so it is now 10 s with a comment; the same load then passes 3 times (`desktop-race-x3-17.txt`), full suite and race green (`full-suite-17.txt`, `full-suite-race-17.txt`).
+- Owner approved commit and push: f2c4f51; GitHub Windows CI 39734539484 green (2026-10-22).

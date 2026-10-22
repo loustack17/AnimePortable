@@ -11,11 +11,10 @@ status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 37 (Settings) passed on 2026-10-22 (docs/loops/LOOP37.md; check CI for the push commit).
+  None. Loop 37 (Settings) passed on 2026-10-22 (docs/loops/LOOP37.md; f582da8 + fixes 1966449, f2c4f51; CI 39734539484 green).
   Next loops: 37b (language: zh-TW default, English, Japanese) and 37c (skip the opening with AniSkip), then 38; each needs owner approval to start.
 active_acceptance: none
 next_actions:
-  - 1. Confirm GitHub Windows CI for the Loop 37 push; classify any failure with the ci-log template.
   - Migrations 0007-0009 are applied to the owner's test data; never edit them.
   - Loop 37c: AniSkip origin api.aniskip.com needs a 03_SECURITY section and owner approval; a new FLTK window outside fltkhome newDialog must close leaked groups at the source (see LOOP37 final review).
   - Ask before any GUI test run while the owner may be using the PC (owner request 2026-10-22).
