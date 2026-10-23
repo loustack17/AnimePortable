@@ -137,3 +137,6 @@ Test build: `artifacts/test-build/AnimePortable.exe` (uncommitted Loop 37d workt
 3. 點開 關於我轉生變成史萊姆這檔事 第四季：應顯示第四季的簡介，不可以是第一季或其他季的。
 4. 點開 Dr.STONE 新石紀 SCIENCE FUTURE：目前預期仍沒有簡介；若有，必須是 SCIENCE FUTURE 的。
 5. 從任一動畫頁播放一集：應照常開始播放。
+## Release
+
+Pre-release v0.4.1-beta (patch, owner request 2026-10-23: "這算是小修正"): release commit f2c3483 (CI 39917947428 green), tag v0.4.1-beta, release job 39918270994. The published ZIP holds animeportable.exe (Windows GUI, version 0.4.1-beta), libmpv-2.dll (SHA-256 matches the pin), LICENSE, THIRD_PARTY_NOTICES.md and licenses/libmpv.txt; unzipped to a new folder it starts, shows its window and creates its database. Notes: [releases/v0.4.1-beta.md](../releases/v0.4.1-beta.md).

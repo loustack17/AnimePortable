@@ -12,7 +12,7 @@ branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
   None. Loop 37d (Reliable starts and more synopses) passed on 2026-10-23 (docs/loops/LOOP37D.md; de3c9ed; CI 39917415783 green): stored episode list first (backend action StoredEpisodes), Anime1 page timeout + retry, 20 s start check, migration 0011, synopsis matching 193/228 with 0 wrong.
-  Release v0.4.1-beta (patch, owner request 2026-10-23) in progress: release commit pushed to main; tag after its CI is green; then check the published ZIP.
+  Pre-release v0.4.1-beta published 2026-10-23 (tag on f2c3483; CI 39917947428; release job 39918270994; ZIP checked, DLL matches the pin). Owner to try it.
   Loop 37c (Skip the opening) passed 2026-10-22; v0.4.0-beta published 2026-10-22. Next loop: 38 (hardening and release, v1.0.0); needs owner approval to start.  Never drive the owner's desktop to investigate (owner 2026-10-22); reproduce headlessly.
   Loop 37c (Skip the opening) passed on 2026-10-22 (docs/loops/LOOP37C.md; af53275; CI 39877272016 green): AniSkip 跳過片頭, new action OpeningTimes, builds with -H windowsgui (no console window).
   Pre-release v0.4.0-beta published 2026-10-22 (tag on 2caceaa; CI 39880655456; release job 39880999897): 37b, 37c, app icon (apps/desktop/appicon, rsrc_windows_amd64.syso), no console. Owner to try it.
