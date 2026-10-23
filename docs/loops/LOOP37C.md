@@ -2,7 +2,7 @@
 
 # Loop 37c: Skip the opening
 
-Status: PASS (owner accepted 2026-10-22, owner check 1); commit and CI pending. Owner allowed window tests 2026-10-22. Scope approved 2026-10-22 with the MyAnimeList id kept in memory ("存記憶體, 沒影響太大就這樣做"); the owner approved one new backend action, `OpeningTimes` (same day).
+Status: PASS (owner accepted 2026-10-22, owner check 1). Commit af53275; GitHub Windows CI 39877272016 green (includes the new GUI-subsystem check). Owner allowed window tests 2026-10-22. Scope approved 2026-10-22 with the MyAnimeList id kept in memory ("存記憶體, 沒影響太大就這樣做"); the owner approved one new backend action, `OpeningTimes` (same day).
 
 ## Goal
 

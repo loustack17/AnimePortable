@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-37 and 37b are complete. Loops 37c and 38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-37, 37b and 37c are complete. Loop 38 remains. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux, then macOS (see "After the MVP").
 
@@ -52,6 +52,7 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 | 36 | Autoplay next episode: a normal end starts the next episode in the same player, the last one stops cleanly; Home shows a finished newest episode as 已看完; the player's episode list opens on the playing episode. |
 | 37 | Settings: a 設定 page (theme 跟隨系統/暗色/明亮, 自動下一集, 自動播放, resume, hardware decoding, proxy with 測試連線, 檢查更新 and GitHub link, data folder location with restart), a remembered speed button in the player, app-styled dialogs. |
 | 37b | Language: 語言 繁體中文 / English / 日本語 switches every screen at once and is saved; one string table for all UI text. |
+| 37c | Skip the opening: 跳過片頭 (and S) only during the opening, times from AniSkip by MyAnimeList id (AniList, kept in memory); builds open no console window. |
 
 ## Remaining loops
 
@@ -63,14 +64,6 @@ Two loops remain, run in this order. The owner changed the plan on 2026-10-14:
 On 2026-10-22 the owner split autoplay into two settings (自動下一集, 自動播放) and moved language to its own Loop 37b, adding Japanese. After owner check 1 of Loop 37 (same day) the owner added the data folder location and player and system settings (chosen from settings that Animeko, Kazumi and mpv.net offer) to Loop 37, reopening the earlier "no player options" decision, and approved an HTTP forward proxy ([03_SECURITY.md](03_SECURITY.md)).
 
 Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.md) true.
-
-### Loop 37c - Skip the opening
-
-- Goal: Like Netflix, a 跳過片頭 button appears only while the opening plays and jumps to its end.
-- In scope: Opening times from AniSkip (`api.aniskip.com`, community timestamps looked up by MyAnimeList id, episode number and episode length); the MyAnimeList id from AniList metadata; the button (and S key) shown only inside the opening, gone after it; no button when there is no data. A security section for the new origin (what is sent: only those three numbers).
-- Out of scope: Detecting openings from audio, skipping endings, user-submitted timestamps.
-- Done when: For an episode with AniSkip data the button appears during the opening and jumps past it; for one without data nothing appears; no request is made unless an episode plays.
-- Owner check: Play an episode of a popular series, see 跳過片頭 during the opening only, press it, and see playback continue after the song.
 
 ### Loop 38 - Hardening and release (Windows MVP)
 
