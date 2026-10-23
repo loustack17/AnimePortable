@@ -53,7 +53,7 @@ SOFTWARE.
 
 ## Remote services and content
 
-The project license applies only to AnimePortable material that the project can license. It does not grant rights to Anime1, AniList, or Bangumi names, trademarks, logos, remote API responses, metadata, covers, subtitles, video files, or other provider and rights-holder content. Use of those services and content remains subject to their own terms and applicable law.
+The project license applies only to AnimePortable material that the project can license. It does not grant rights to Anime1, AniList, Bangumi, or AniSkip names, trademarks, logos, remote API responses, metadata, covers, subtitles, video files, or other provider and rights-holder content. Use of those services and content remains subject to their own terms and applicable law.
 
 ## Reviewed upstream projects
 
