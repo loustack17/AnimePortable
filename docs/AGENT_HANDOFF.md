@@ -12,10 +12,11 @@ branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
   None. Loop 37c (Skip the opening) passed on 2026-10-22 (docs/loops/LOOP37C.md; af53275; CI 39877272016 green): AniSkip 跳過片頭, new action OpeningTimes, builds with -H windowsgui (no console window).
+  Pre-release v0.4.0-beta published 2026-10-22 (tag on 2caceaa; CI 39880655456; release job 39880999897): 37b, 37c, app icon (apps/desktop/appicon, rsrc_windows_amd64.syso), no console. Owner to try it.
   Loop 37b (Language) passed on 2026-10-22 (docs/loops/LOOP37B.md; 17d13be; CI 39845099717 green): live switch, uitext table, migration 0010.
   Loop 37 (Settings) passed on 2026-10-22 (docs/loops/LOOP37.md; f582da8 + fixes 1966449, f2c4f51; CI 39734539484 green).
   Pre-release v0.3.0-alpha published 2026-10-22 (tag on b005d3a; release job 39738301609 reused the CI-tested exe; DLL hash matches the pin).
-  Next loop: 38 (hardening and release); needs owner approval to start. With 37c done the stage becomes beta: the next pre-release is a beta (owner approval).
+  Next loop: 38 (hardening and release, v1.0.0); needs owner approval to start.
 active_acceptance: none
 next_actions:
   - Migrations 0007-0010 are applied to the owner's test data; never edit them.
@@ -30,6 +31,7 @@ next_actions:
   - If playback-failures.log shows repeated proxy_upstream 502, propose one bounded automatic retry to the owner.
 do_not_repeat:
   - Do not remember a MyAnimeList-id miss that searched only the Anime1 (Chinese) title; metadata stored later may find it (Loop 37c review).
+  - Do not hard-code versions newer than the current one in tests; derive them from release.Version (v0.4.0-beta release commit failed CI, Loop 37c).
   - Do not slice a uitext array into storage that is later appended to; it writes into the shared table (Loop 37b review). Copy with slices.Clone.
   - Do not destroy an FLTK group or window whose children have draw handlers: go-fltk's deletion handler unregisters the draw id from the callback map and a later callback crashes at address 0 (Loop 37 CI). Destroy children one by one first (dialogs), or hide (test teardown).
   - Do not use the runner's UCRT C:\mingw64 gcc in CI; go-fltk libraries need msvcrt.
