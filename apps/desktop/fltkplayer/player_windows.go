@@ -26,6 +26,7 @@ const (
 	focusFullscreen
 	focusFollow
 	focusSpeed
+	focusSkip
 )
 
 const controlsIdleTimeout = 3 * time.Second
@@ -65,6 +66,10 @@ type State struct {
 	// FollowKnown shows the follow star; Following fills it.
 	FollowKnown bool
 	Following   bool
+	// OpeningStart and OpeningEnd, in seconds, are the episode's opening; an end of 0 means
+	// none is known, and 跳過片頭 never shows.
+	OpeningStart float64
+	OpeningEnd   float64
 }
 
 type View struct {
@@ -102,6 +107,8 @@ type View struct {
 	// fixedText is the overlay's own labels in the current language: 選集, then 正在載入….
 	fixedText unsafe.Pointer
 	speedText unsafe.Pointer
+	// skipWidth is the 跳過片頭 button's width for the current language.
+	skipWidth int
 }
 
 func NewWindow(callbacks Callbacks) *View {
@@ -112,10 +119,11 @@ func NewWindow(callbacks Callbacks) *View {
 		visible:    true,
 		lastMove:   time.Now(),
 	}
-	view.updateLabelBuffers()
 	fltk.SetFont(fltk.HELVETICA, "Microsoft JhengHei UI")
 	fltk.SetFont(fltk.HELVETICA_BOLD, "Microsoft JhengHei UI Bold")
 	fltk.SetFont(fltk.COURIER, "Segoe MDL2 Assets")
+	// After the fonts: the 跳過片頭 width is measured in the bold one.
+	view.updateLabelBuffers()
 	view.window = fltk.NewWindow(1000, 618, "AnimePortable")
 	// Narrower, the speed button would meet the time label.
 	view.window.SetSizeRange(playerMinWidth, playerMinHeight, 0, 0, 0, 0, false)
@@ -304,6 +312,9 @@ func (view *View) hideControls() {
 
 func (view *View) actionAt(x, y int) int {
 	width, height := view.video.W(), view.video.H()
+	if view.skipButtonAt(x, y) {
+		return focusSkip
+	}
 	if x >= 12 && x <= 60 && y >= 10 && y <= 55 {
 		return focusMenu
 	}
@@ -390,6 +401,8 @@ func (view *View) activate(index int) {
 		if view.callbacks.ToggleFollow != nil && view.state.FollowKnown {
 			view.callbacks.ToggleFollow()
 		}
+	case focusSkip:
+		view.skipOpening()
 	}
 	view.showControls()
 }
@@ -581,7 +594,7 @@ func (view *View) handleKeyEvent(event fltk.Event, key, modifiers int) bool {
 
 func isOneShotKey(key int) bool {
 	switch key {
-	case 9, 0xff09, 27, 0xff1b, fltk.ENTER_KEY, 13, 0xff8d, ' ', 'k', 'm', 'f', '/':
+	case 9, 0xff09, 27, 0xff1b, fltk.ENTER_KEY, 13, 0xff8d, ' ', 'k', 'm', 'f', 's', '/':
 		return true
 	default:
 		return false
@@ -639,6 +652,11 @@ func (view *View) handleKey(key, modifiers int) bool {
 		if view.callbacks.Fullscreen != nil {
 			view.callbacks.Fullscreen()
 		}
+		view.showControls()
+		return true
+	}
+	if key == 's' && view.state.skipShown() && !view.menuVisible() && !view.episodesOpen && !view.speedOpen {
+		view.skipOpening()
 		view.showControls()
 		return true
 	}
@@ -793,19 +811,21 @@ func (view *View) showControls() {
 	view.Redraw()
 }
 
-var tabFocusOrder = [...]int{focusMenu, focusFollow, focusEpisodes, focusProgress, focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusSpeed, focusFullscreen}
+// 跳過片頭 follows the progress bar, so neither end of the order is a control that can hide.
+var tabFocusOrder = [...]int{focusMenu, focusFollow, focusEpisodes, focusProgress, focusSkip, focusPlayPause, focusSeekBack, focusSeekForward, focusStop, focusVolume, focusSpeed, focusFullscreen}
 
 // focusable reports whether a control exists and shows; the follow star shows only once
-// the follow state is known.
+// the follow state is known, 跳過片頭 only inside the opening.
 func (state State) focusable(index int) bool {
-	return index >= focusMenu && index <= focusSpeed && (index != focusFollow || state.FollowKnown)
+	return index >= focusMenu && index <= focusSkip && (index != focusFollow || state.FollowKnown) && (index != focusSkip || state.skipShown())
 }
 
 func (view *View) moveTabFocus(reverse bool) {
 	view.speedOpen = false
 	next := nextTabFocus(view.state.Focus, reverse)
 	if !view.state.focusable(next) {
-		// The star is never first or last in the ring, so its neighbour exists.
+		// Neither the star nor 跳過片頭 is first or last in the ring, so a neighbour exists; they
+		// are never next to each other.
 		next = nextTabFocus(next, reverse)
 	}
 	view.SetFocus(next)

@@ -4,8 +4,9 @@ package main
 
 import "golang.org/x/sys/windows"
 
-// showRestartFailure uses the native message box because FLTK is already shut down.
-func showRestartFailure(message string) {
+// showNativeError uses the native message box, for errors when no FLTK window exists: FLTK
+// has not started or is already shut down. The app has no console to print to.
+func showNativeError(message string) {
 	text, textErr := windows.UTF16PtrFromString(message)
 	title, titleErr := windows.UTF16PtrFromString("AnimePortable")
 	if textErr != nil || titleErr != nil {

@@ -16,7 +16,7 @@ func TestNativeServiceSurface(t *testing.T) {
 		"Detail": false, "RefreshMetadata": false, "Episodes": false, "Following": false,
 		"Follow": false, "Unfollow": false, "Schedule": false, "CachedSchedule": false,
 		"History": false, "RemoveHistory": false, "Settings": false,
-		"SaveSettings": false, "SavePlaybackSpeed": false, "Play": false, "StopPlayback": false, "GetCover": false,
+		"SaveSettings": false, "SavePlaybackSpeed": false, "OpeningTimes": false, "Play": false, "StopPlayback": false, "GetCover": false,
 		"CheckForUpdate": false, "TestProxy": false, "DataLocation": false, "MoveDataLocation": false,
 	}
 	serviceType := reflect.TypeOf((*backend.Service)(nil))

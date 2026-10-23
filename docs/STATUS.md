@@ -22,7 +22,7 @@ Platform: Windows amd64 only. Native tests run locally (about 90 seconds includi
 | Item | Next action |
 | --- | --- |
 | 追蹤 更新集數 wording; core/backend `NewEpisode` unused by the UI | Owner to decide whether to reword the refresh button and notes, and whether to remove `NewEpisode`. |
-| Console window opens next to the app (exe built as a console program) | Owner to decide whether builds use -H windowsgui. |
+| Console window opens next to the app (exe built as a console program) | Fixed in Loop 37c: builds use -H windowsgui; CI checks the subsystem. |
 | Playback failures (suspected intermittent Anime1 HTTP 502) | Read `playback-failures.log` after the next failure; decide on an automatic retry from the recorded stage and status. |
 
 ## Settled owner decisions (2026-10-13)

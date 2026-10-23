@@ -157,7 +157,9 @@ type Strings struct {
 	EpisodeUnavailable, NextEpisodeFailed   string
 	SpeedTitle, SpeedSaveFailed             string
 	FollowFailedTitle, RestartFailed        string
+	// StartFailed is shown in a Windows message box: the app has no console and no window yet.
+	StartFailed string
 
 	// The player's own labels.
-	PlayerEpisodes, PlayerLoading string
+	PlayerEpisodes, PlayerLoading, PlayerSkipIntro string
 }

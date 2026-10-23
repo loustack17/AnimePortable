@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"animeportable/adapters/metadata/anilist"
+	"animeportable/adapters/metadata/aniskip"
 	"animeportable/adapters/metadata/bangumi"
 	"animeportable/adapters/metadata/cover"
 	"animeportable/adapters/network/forwardproxy"
@@ -38,14 +39,17 @@ var (
 )
 
 type dependencies struct {
-	store     core.Store
-	source    core.AnimeSource
-	cover     *cover.Loader
-	metadata  []core.MetadataProvider
-	schedule  core.ScheduleProvider
-	updates   releaseSource
-	newPlayer func() (core.Player, error)
-	close     func() error
+	store    core.Store
+	source   core.AnimeSource
+	cover    *cover.Loader
+	metadata []core.MetadataProvider
+	schedule core.ScheduleProvider
+	updates  releaseSource
+	// myAnimeList and openings find opening times; either nil means no opening is ever found.
+	myAnimeList core.MyAnimeListSource
+	openings    core.OpeningSource
+	newPlayer   func() (core.Player, error)
+	close       func() error
 }
 
 type Service struct {
@@ -74,11 +78,16 @@ type Service struct {
 	metadata        []core.MetadataProvider
 	schedule        core.ScheduleProvider
 	updates         releaseSource
-	proxy           *forwardproxy.Source
-	probeProxy      proxyProbe
-	closeDeps       func() error
-	newPlayer       func() (core.Player, error)
-	databasePath    string
+	myAnimeList     core.MyAnimeListSource
+	openings        core.OpeningSource
+	// myAnimeListIDs keeps each anime's MyAnimeList id for the app run, 0 for none (owner,
+	// 2026-10-22: memory only, nothing stored).
+	myAnimeListIDs map[core.AnimeID]int
+	proxy          *forwardproxy.Source
+	probeProxy     proxyProbe
+	closeDeps      func() error
+	newPlayer      func() (core.Player, error)
+	databasePath   string
 	// plan is the portable layout the app started with; moving the data folder updates it.
 	plan     PortablePlan
 	app      *core.App
@@ -128,6 +137,8 @@ func newWithDependencies(deps dependencies) *Service {
 	service.metadata = deps.metadata
 	service.schedule = deps.schedule
 	service.updates = deps.updates
+	service.myAnimeList = deps.myAnimeList
+	service.openings = deps.openings
 	service.closeDeps = deps.close
 	if deps.newPlayer != nil {
 		service.newPlayer = deps.newPlayer
@@ -197,6 +208,8 @@ func (service *Service) Start(ctx context.Context) error {
 	service.metadata = deps.metadata
 	service.schedule = deps.schedule
 	service.updates = deps.updates
+	service.myAnimeList = deps.myAnimeList
+	service.openings = deps.openings
 	service.closeDeps = deps.close
 	service.app = core.NewApp(service.source, nil, service.store)
 	service.mu.Unlock()
@@ -378,7 +391,7 @@ func openProduction(ctx context.Context, databasePath string, proxySource *forwa
 		_ = store.Close()
 		return dependencies{}, err
 	}
-	loader, err := cover.New(proxy)
+	openingClient, err := securehttp.New(securehttp.Config{AllowedOrigins: aniskip.AllowedOrigins(), MaxResponseBytes: aniskip.MaxResponseBytes, Proxy: proxy})
 	if err != nil {
 		client.CloseIdleConnections()
 		metadataClient.CloseIdleConnections()
@@ -386,18 +399,31 @@ func openProduction(ctx context.Context, databasePath string, proxySource *forwa
 		_ = store.Close()
 		return dependencies{}, err
 	}
+	loader, err := cover.New(proxy)
+	if err != nil {
+		client.CloseIdleConnections()
+		metadataClient.CloseIdleConnections()
+		updateClient.CloseIdleConnections()
+		openingClient.CloseIdleConnections()
+		_ = store.Close()
+		return dependencies{}, err
+	}
+	anilistClient := anilist.New(metadataClient)
 	bangumiClient := bangumi.New(metadataClient)
 	return dependencies{
-		store:    store,
-		source:   anime1.New(client),
-		cover:    loader,
-		metadata: []core.MetadataProvider{anilist.New(metadataClient), bangumiClient},
-		schedule: bangumiClient,
-		updates:  github.New(updateClient),
+		store:       store,
+		source:      anime1.New(client),
+		cover:       loader,
+		metadata:    []core.MetadataProvider{anilistClient, bangumiClient},
+		schedule:    bangumiClient,
+		updates:     github.New(updateClient),
+		myAnimeList: anilistClient,
+		openings:    aniskip.New(openingClient),
 		close: func() error {
 			client.CloseIdleConnections()
 			metadataClient.CloseIdleConnections()
 			updateClient.CloseIdleConnections()
+			openingClient.CloseIdleConnections()
 			return nil
 		},
 	}, nil

@@ -135,7 +135,8 @@ var traditionalChinese = Strings{
 	EpisodeUnavailable: "此集暫時無法播放。請重新選取該集或稍後再試。", NextEpisodeFailed: "無法播放下一集，請重試。",
 	SpeedTitle: "播放速度", SpeedSaveFailed: "無法儲存播放速度，下次開啟可能恢復先前的速度。",
 	FollowFailedTitle: "追蹤失敗", RestartFailed: "無法自動重新開啟，請手動開啟程式。",
+	StartFailed: "程式無法開啟視窗。",
 
-	PlayerEpisodes: "選集", PlayerLoading: "正在載入…",
+	PlayerEpisodes: "選集", PlayerLoading: "正在載入…", PlayerSkipIntro: "跳過片頭",
 	Separator: "　",
 }

@@ -135,7 +135,8 @@ var english = Strings{
 	EpisodeUnavailable: "This episode cannot be played right now. Choose it again or try later.", NextEpisodeFailed: "Could not play the next episode. Please try again.",
 	SpeedTitle: "Playback speed", SpeedSaveFailed: "Could not save the speed; the earlier one may come back next time.",
 	FollowFailedTitle: "Follow failed", RestartFailed: "Could not restart automatically. Please open the app yourself.",
+	StartFailed: "The app could not start its window.",
 
-	PlayerEpisodes: "Episodes", PlayerLoading: "Loading…",
+	PlayerEpisodes: "Episodes", PlayerLoading: "Loading…", PlayerSkipIntro: "Skip Intro",
 	Separator: "  ",
 }

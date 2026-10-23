@@ -86,6 +86,14 @@ type ScheduleItem struct {
 	Weekday int    `json:"weekday"`
 }
 
+// Opening is an episode's opening song in milliseconds from the start; Found is false when
+// there is none to skip.
+type Opening struct {
+	Found bool  `json:"found"`
+	Start int64 `json:"start"`
+	End   int64 `json:"end"`
+}
+
 type PlayRequest struct {
 	AnimeID   string `json:"animeId"`
 	EpisodeID string `json:"episodeId"`

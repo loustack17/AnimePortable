@@ -38,6 +38,8 @@ const (
 	maxSeasonYear        = 3000
 	maxEpisodeCount      = 100000
 	searchDocument       = `query ($search: String!) { Page(page: 1, perPage: 10) { media(search: $search, type: ANIME) { id title { romaji native } seasonYear episodes } } }`
+	malDocument          = `query ($id: Int!) { Media(id: $id, type: ANIME) { id idMal } }`
+	maxMyAnimeListID     = 1<<31 - 1
 	getDocument          = `query ($id: Int!) { Media(id: $id, type: ANIME) { id title { romaji native } seasonYear episodes description coverImage { extraLarge large medium } season studios(isMain: true) { nodes { name isAnimationStudio } } } }`
 )
 
@@ -151,6 +153,51 @@ func (client *Client) Get(ctx context.Context, ref core.MetadataRef) (core.Anime
 		return core.AnimeMetadata{}, err
 	}
 	return metadata, nil
+}
+
+// MyAnimeListID returns the MyAnimeList id of an AniList anime; core.ErrNotFound means AniList
+// has none.
+func (client *Client) MyAnimeListID(ctx context.Context, ref core.MetadataRef) (int, error) {
+	if err := checkContext(ctx); err != nil {
+		return 0, err
+	}
+	if ref.Provider != providerID {
+		return 0, errMetadataInvalidRef
+	}
+	id, numericID, ok := parseMetadataID(ref.ID)
+	if !ok {
+		return 0, errMetadataInvalidRef
+	}
+	response, err := client.doRequest(ctx, malDocument, struct {
+		ID int `json:"id"`
+	}{ID: numericID}, true)
+	if err != nil {
+		return 0, err
+	}
+	var payload malResponse
+	if err := decodeResponse(response.Body, &payload); err != nil {
+		return 0, err
+	}
+	if len(payload.Errors) > 0 {
+		return 0, errMetadataProvider
+	}
+	if payload.Data == nil || payload.Data.Media == nil {
+		return 0, core.ErrNotFound
+	}
+	media := payload.Data.Media
+	if mediaID, _, ok := parseJSONMetadataID(media.ID); !ok || mediaID != id {
+		return 0, errMetadataMalformed
+	}
+	if media.MyAnimeListID == nil {
+		return 0, core.ErrNotFound
+	}
+	if *media.MyAnimeListID <= 0 || *media.MyAnimeListID > maxMyAnimeListID {
+		return 0, errMetadataMalformed
+	}
+	if err := checkContext(ctx); err != nil {
+		return 0, err
+	}
+	return *media.MyAnimeListID, nil
 }
 
 func (client *Client) doRequest(ctx context.Context, document string, variables any, notFoundIsMissing bool) (*securehttp.Response, error) {
@@ -443,6 +490,16 @@ type mediaResponse struct {
 	Studios     *studioConnection `json:"studios"`
 }
 
+type malResponse struct {
+	graphqlErrors
+	Data *struct {
+		Media *struct {
+			ID            json.RawMessage `json:"id"`
+			MyAnimeListID *int            `json:"idMal"`
+		} `json:"Media"`
+	} `json:"data"`
+}
+
 type mediaTitle struct {
 	Romaji *string `json:"romaji"`
 	Native *string `json:"native"`
@@ -463,4 +520,7 @@ type studioNode struct {
 	IsAnimationStudio bool    `json:"isAnimationStudio"`
 }
 
-var _ core.MetadataProvider = (*Client)(nil)
+var (
+	_ core.MetadataProvider  = (*Client)(nil)
+	_ core.MyAnimeListSource = (*Client)(nil)
+)

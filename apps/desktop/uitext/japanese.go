@@ -135,7 +135,8 @@ var japanese = Strings{
 	EpisodeUnavailable: "この話は一時的に再生できません。もう一度選ぶか、後でお試しください。", NextEpisodeFailed: "次の話を再生できません。もう一度お試しください。",
 	SpeedTitle: "再生速度", SpeedSaveFailed: "再生速度を保存できません。次回起動時に以前の速度に戻る場合があります。",
 	FollowFailedTitle: "フォローできません", RestartFailed: "自動で再起動できません。手動でアプリを開いてください。",
+	StartFailed: "アプリのウィンドウを開始できません。",
 
-	PlayerEpisodes: "エピソード", PlayerLoading: "読み込み中…",
+	PlayerEpisodes: "エピソード", PlayerLoading: "読み込み中…", PlayerSkipIntro: "OPをスキップ",
 	Separator: "　",
 }

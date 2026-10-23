@@ -85,10 +85,12 @@ jobs:
       - name: Build Windows desktop
         shell: pwsh
         run: |
-          go build -trimpath -buildvcs=false -o "$env:RUNNER_TEMP\animeportable.exe" ./apps/desktop
+          # A Windows GUI program, so no console window opens next to the app (owner, 2026-10-22).
+          go build -trimpath -buildvcs=false -ldflags "-H windowsgui" -o "$env:RUNNER_TEMP\animeportable.exe" ./apps/desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $imports = & $env:ANIMEPORTABLE_OBJDUMP -p (Join-Path $env:RUNNER_TEMP 'animeportable.exe')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not ($imports -match '^Subsystem\s+0+2\s')) { throw 'The executable is not a Windows GUI program' }
           $dllNames = @($imports | Select-String 'DLL Name:' | ForEach-Object { $_.Line.Trim() })
           $dllNames
           if ($dllNames -match 'gallium|LLVM|mesa') { throw 'Verifier dependency entered the product executable' }

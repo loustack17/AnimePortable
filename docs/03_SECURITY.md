@@ -98,13 +98,22 @@ The user may route outbound requests through one HTTP forward proxy: none (defau
 
 `檢查更新` is the only update check. It runs only when the user presses it and asks `https://api.github.com` for the releases of `loustack17/AnimePortable` through the secure client (allowlisted origin, bounded body). It never downloads or runs anything; it shows the version and can open the release page in the default browser.
 
+## Opening times (owner-approved 2026-10-22, Loop 37c)
+
+`https://api.aniskip.com` is asked only when an episode starts playing, through the secure client (own allowlist with that one origin, bounded body, proxy setting applied like every other request).
+
+- Sent: only the MyAnimeList id, the episode number and the episode length in whole seconds, in the path and query of one `GET /v2/skip-times/...`. No title, user data, cookies, Anime1 address or identifiers of the user. The usual `User-Agent` only.
+- To find the MyAnimeList id the anime's title goes to AniList, an origin already allowed for metadata; only a match `core.MatchMetadata` accepts is used.
+- The response is untrusted: JSON only, at most 64 KiB, at most 20 results; only `op`/`mixed-op` results with finite `startTime` ≥ 0, `endTime` > `startTime`, `endTime` no later than the episode length, an opening of at most 4 minutes, and a submission length within 5 seconds of the episode are used. Anything else is ignored, and a malformed response means no button. No text from the response reaches the UI.
+- Failures are silent for the user and never delay or stop playback; nothing is logged. Only the MyAnimeList id per anime is kept, in memory for the app run.
+
 ## Redirect policy
 
 Do not auto-follow blindly. For each redirect: parse the destination, apply protocol policy, apply host policy, resolve, apply the SSRF policy, then continue. A legal source redirecting to localhost or a private IP is blocked. Do not forward sensitive headers to unrelated origins.
 
 ## Domain policy
 
-Use explicit origin allowlists for the Anime1 site and API, the AniList API, the Bangumi API and, for the update check only, the GitHub API. Playback CDN origins may be dynamic but must satisfy HTTPS, valid TLS, public IP, acceptable redirects and an expected media response. Unknown playback origins fail closed unless resolver policy approves them.
+Use explicit origin allowlists for the Anime1 site and API, the AniList API, the Bangumi API, for the update check only the GitHub API, and for opening times only the AniSkip API (Loop 37c). Playback CDN origins may be dynamic but must satisfy HTTPS, valid TLS, public IP, acceptable redirects and an expected media response. Unknown playback origins fail closed unless resolver policy approves them.
 
 ## Remote HTML
 

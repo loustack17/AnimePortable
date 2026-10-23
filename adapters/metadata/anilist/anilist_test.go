@@ -620,3 +620,41 @@ func TestLiveAniListAdapter(t *testing.T) {
 		t.Fatalf("metadata ref = %#v, candidate ref = %#v", metadata.Ref, items[0].Ref)
 	}
 }
+
+func TestAniListMyAnimeListID(t *testing.T) {
+	ref := core.MetadataRef{Provider: providerID, ID: "123"}
+	media := func(id, idMal any) *securehttp.Response {
+		return jsonResponse(t, map[string]any{"data": map[string]any{"Media": map[string]any{"id": id, "idMal": idMal}}})
+	}
+	client := &fakeClient{response: media(123, 52991)}
+	got, err := newWithDo(client).MyAnimeListID(context.Background(), ref)
+	if err != nil || got != 52991 {
+		t.Fatal(got, err)
+	}
+	assertRequest(t, client.requests[0], malDocument)
+	if body := string(client.bodies[0]); !strings.Contains(body, `"variables":{"id":123}`) || !strings.Contains(body, "idMal") {
+		t.Fatal(body)
+	}
+	for name, test := range map[string]struct {
+		response *securehttp.Response
+		want     error
+	}{
+		"no idMal":    {media(123, nil), core.ErrNotFound},
+		"no media":    {jsonResponse(t, map[string]any{"data": map[string]any{"Media": nil}}), core.ErrNotFound},
+		"zero idMal":  {media(123, 0), errMetadataMalformed},
+		"huge idMal":  {media(123, int64(1)<<40), errMetadataMalformed},
+		"text idMal":  {media(123, "52991"), errMetadataMalformed},
+		"other anime": {media(124, 52991), errMetadataMalformed},
+		"graphql":     {jsonResponse(t, map[string]any{"errors": []any{map[string]any{"message": "x"}}}), errMetadataProvider},
+		"404 missing": {&securehttp.Response{StatusCode: http.StatusNotFound, Header: http.Header{"Content-Type": {"application/json"}}}, core.ErrNotFound},
+	} {
+		got, err := newWithDo(&fakeClient{response: test.response}).MyAnimeListID(context.Background(), ref)
+		if got != 0 || !errors.Is(err, test.want) {
+			t.Errorf("%s: %d, %v", name, got, err)
+		}
+	}
+	empty := &fakeClient{}
+	if _, err := newWithDo(empty).MyAnimeListID(context.Background(), core.MetadataRef{Provider: "bangumi", ID: "123"}); !errors.Is(err, errMetadataInvalidRef) || len(empty.requests) != 0 {
+		t.Fatal(err)
+	}
+}

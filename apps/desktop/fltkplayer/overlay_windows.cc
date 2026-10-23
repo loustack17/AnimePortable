@@ -67,8 +67,20 @@ static void focus(int current, int target, float x, float y, float w, float h) {
     line(x + w, y + h, x, y + h); line(x, y + h, x, y);
 }
 
-extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int thumb_top, int thumb_height, int resolution, int loading, int progress_hover, int scrubbing, int follow_known, int following, int speed_open, int speed_index, int speed_cursor, int speed_count, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels, const char* speed_labels, const char* fixed_labels) {
-    if (!visible && !menu && !episodes) return;
+// Mirrors skip_intro_windows.go: right inset 24, top 140 above the bottom, 40 tall, 20 padding.
+static void skipButton(int width, int height, int skip_width, const std::string& text) {
+    const int left = width - 24 - skip_width, top = height - 140;
+    ink(0.03f, 0.05f, 0.10f, 0.82f); box(left, top, skip_width, 40);
+    ink(1, 1, 1, 0.85f); glLineWidth(1);
+    line(left, top, left + skip_width, top); line(left + skip_width, top, left + skip_width, top + 40);
+    line(left + skip_width, top + 40, left, top + 40); line(left, top + 40, left, top);
+    ink(1, 1, 1); label(text.c_str(), left + 20, top + 26, 16);
+}
+
+extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, int episodes, int volume_open, int playing, int paused, int fullscreen, int selected, int menu_cursor, int volume, int episode, int episode_count, int episode_start, int episode_cursor, int thumb_top, int thumb_height, int resolution, int loading, int progress_hover, int scrubbing, int follow_known, int following, int speed_open, int speed_index, int speed_cursor, int speed_count, int skip, int skip_width, double position, double duration, double scrub_position, const char* episode_labels, const char* menu_labels, const char* speed_labels, const char* fixed_labels) {
+    // 跳過片頭 shows during the opening even while the other controls are hidden.
+    const bool controls = visible || menu || episodes;
+    if (!controls && !skip) return;
     GLint oldMatrix = GL_MODELVIEW;
     glGetIntegerv(GL_MATRIX_MODE, &oldMatrix);
     glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT | GL_LINE_BIT | GL_VIEWPORT_BIT | GL_SCISSOR_BIT);
@@ -78,6 +90,11 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity();
     glDisable(GL_DEPTH_TEST); glDisable(GL_TEXTURE_2D);
     glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    if (skip) skipButton(width, height, skip_width, itemAt(fixed_labels, 2));
+    if (!controls) {
+        glPopMatrix(); glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(oldMatrix); glPopAttrib();
+        return;
+    }
     const float mid = height - 26.0f;
     ink(0.03f, 0.05f, 0.10f, 0.78f);
     box(0, 0, width, 62); box(0, height - 84, width, 84);
@@ -151,6 +168,7 @@ extern "C" void ap_overlay_draw(int width, int height, int visible, int menu, in
     ink(1, 1, 1);
     icon(fullscreen ? u8"\uE73F" : u8"\uE740", width - 47, static_cast<int>(mid + 9), 24);
     focus(selected, 8, width - 51, mid - 18, 36, 36);
+    if (skip) focus(selected, 11, width - 26 - skip_width, height - 142, skip_width + 4, 44);
     if (loading) {
         std::string loadingLabel = itemAt(fixed_labels, 1);
         ink(1, 1, 1); label(loadingLabel.c_str(), width / 2 - textUnits(loadingLabel) * 18 / 4, height / 2, 18);

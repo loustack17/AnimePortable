@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -30,7 +29,7 @@ func main() {
 	// notifications, backend results) after the main thread has called Fl::lock once.
 	// Without it those callbacks wait for an unrelated event, and video stutters.
 	if !fltk.Lock() {
-		fmt.Fprintln(os.Stderr, "FLTK threading support is unavailable")
+		showNativeError(uitext.T().StartFailed)
 		os.Exit(1)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -41,7 +40,7 @@ func main() {
 	var restartRequested atomic.Bool
 	defer func() {
 		if restartRequested.Load() {
-			restartAfterShutdown(executable, executableErr, startAgain, showRestartFailure)
+			restartAfterShutdown(executable, executableErr, startAgain, showNativeError)
 		}
 	}()
 	configDir, _ := os.UserConfigDir()
@@ -122,9 +121,22 @@ func main() {
 			fltkhome.ShowNotice(noticeParent(), uitext.T().FollowFailedTitle, fltkhome.FollowErrorMessage(err))
 		},
 	}
+	opening := &playerOpening{
+		ctx:   ctx,
+		start: func(work func()) { go work() },
+		awake: func(update func()) { fltk.Awake(update) },
+		view:  viewGeneration.Load,
+		show: func(found backend.Opening) {
+			state := player.State()
+			state.OpeningStart = float64(found.Start) / 1000
+			state.OpeningEnd = float64(found.End) / 1000
+			player.SetState(state)
+		},
+	}
 	stop := func(destination int) {
 		generation := viewGeneration.Add(1)
 		cancelPlayback()
+		opening.stop()
 		expectedPlaybackGeneration.Store(0)
 		awaitingPlayback.Store(false)
 		playQueue.Enqueue(func() {
@@ -163,6 +175,7 @@ func main() {
 		awaitingPlayback.Store(true)
 		generation := viewGeneration.Add(1)
 		cancelPlayback()
+		opening.stop()
 		expectedPlaybackGeneration.Store(0)
 		engineMu.Lock()
 		current := active
@@ -176,6 +189,7 @@ func main() {
 		state.Loading = false
 		state.Position = 0
 		state.Duration = 0
+		state.OpeningStart, state.OpeningEnd = 0, 0
 		for index, episode := range episodes {
 			if episode.ID == selection().EpisodeID {
 				state.Episode = index
@@ -244,12 +258,14 @@ func main() {
 		}
 		generation := viewGeneration.Add(1)
 		operationCtx, cancelOperation := newPlaybackContext()
+		opening.stop()
 		previousGeneration := expectedPlaybackGeneration.Swap(0)
 		awaitingPlayback.Store(true)
 		loading := player.State()
 		loading.Loading = true
 		loading.Position = 0
 		loading.Duration = 0
+		loading.OpeningStart, loading.OpeningEnd = 0, 0
 		// A list click already set this; an autoplay switch relies on it to show the new episode.
 		loading.Episode = index
 		player.SetState(loading)
@@ -407,6 +423,7 @@ func main() {
 				state.Duration = duration.Seconds()
 				state.Resolution = resolution
 				player.SetState(state)
+				opening.playing(viewGeneration.Load(), selection(), duration)
 			})
 			created.SetLoadHandler(func(generation uint64) {
 				if actionGeneration.Load() == viewGeneration.Load() {
@@ -451,6 +468,7 @@ func main() {
 	})
 	defer func() { _ = service.Close(); player.Close() }()
 	follow.service = service
+	opening.service = service
 	autoplay = &playerAutoplay{
 		ctx:      ctx,
 		settings: service,
@@ -471,6 +489,7 @@ func main() {
 	play = func(request backend.PlayRequest) {
 		generation := viewGeneration.Add(1)
 		operationCtx, cancelOperation := newPlaybackContext()
+		opening.stop()
 		expectedPlaybackGeneration.Store(0)
 		awaitingPlayback.Store(true)
 		setSelection(request)
