@@ -94,6 +94,7 @@ type Service struct {
 	player   core.Player
 	session  core.PlaybackSession
 	failures *FailureLog
+	timeline *StartTimeline
 }
 
 func New() *Service {
@@ -122,17 +123,18 @@ func NewAtWithPlayback(databasePath string, proxy *forwardproxy.Source, failures
 }
 
 // NewAtWithPlan is NewAtWithPlayback for a portable plan, which also lets the Service move
-// the data folder.
-func NewAtWithPlan(plan PortablePlan, proxy *forwardproxy.Source, failures *FailureLog, factory func() (core.Player, error)) *Service {
+// the data folder. timeline (nil allowed) times each Resolve.
+func NewAtWithPlan(plan PortablePlan, proxy *forwardproxy.Source, failures *FailureLog, timeline *StartTimeline, factory func() (core.Player, error)) *Service {
 	service := NewAtWithPlayback(plan.DatabasePath, proxy, failures, factory)
 	service.plan = plan
+	service.timeline = timeline
 	return service
 }
 
 func newWithDependencies(deps dependencies) *Service {
 	service := New()
 	service.store = service.guardedStore(deps.store)
-	service.source = stageSource{deps.source}
+	service.source = stageSource{AnimeSource: deps.source, timeline: service.timeline}
 	service.cover = deps.cover
 	service.metadata = deps.metadata
 	service.schedule = deps.schedule
@@ -203,7 +205,7 @@ func (service *Service) Start(ctx context.Context) error {
 		return ErrClosed
 	}
 	service.store = service.guardedStore(deps.store)
-	service.source = stageSource{deps.source}
+	service.source = stageSource{AnimeSource: deps.source, timeline: service.timeline}
 	service.cover = deps.cover
 	service.metadata = deps.metadata
 	service.schedule = deps.schedule

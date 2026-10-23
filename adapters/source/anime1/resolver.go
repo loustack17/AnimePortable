@@ -33,7 +33,6 @@ const (
 	maxResolverURLBytes    = 8 << 10
 	maxResolverCookieBytes = 4 << 10
 	maxResolverHeaderBytes = 13 << 10
-	resolverPageTimeout    = 5 * time.Second
 )
 
 var (
@@ -96,24 +95,14 @@ func validResolverRef(ref core.EpisodeRef) bool {
 }
 
 func (client *Client) fetchResolver(ctx context.Context, method, target, body, contentType, referer string) (*securehttp.Response, error) {
-	attempts := 1
-	if method == http.MethodGet {
-		attempts = 2
-	}
-	for attempt := 0; attempt < attempts; attempt++ {
-		requestCtx := ctx
-		cancel := func() {}
-		if method == http.MethodGet {
-			requestCtx, cancel = context.WithTimeout(ctx, resolverPageTimeout)
-		}
+	newRequest := func(requestCtx context.Context) (*http.Request, error) {
 		var reader io.Reader
 		if body != "" {
 			reader = strings.NewReader(body)
 		}
 		request, err := http.NewRequestWithContext(requestCtx, method, target, reader)
 		if err != nil {
-			cancel()
-			return nil, errResolverUnavailable
+			return nil, err
 		}
 		if contentType != "" {
 			request.Header.Set("Content-Type", contentType)
@@ -121,32 +110,41 @@ func (client *Client) fetchResolver(ctx context.Context, method, target, body, c
 		if referer != "" {
 			request.Header.Set("Referer", referer)
 		}
-		response, err := client.do.Do(request)
-		cancel()
-		if err != nil {
-			if method == http.MethodGet && attempt == 0 && ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
-				continue
-			}
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			return nil, sanitizeResolverError(err)
-		}
-		if response == nil {
+		return request, nil
+	}
+	var response *securehttp.Response
+	var err error
+	if method == http.MethodGet {
+		response, err = client.getPage(ctx, newRequest)
+	} else {
+		var request *http.Request
+		if request, err = newRequest(ctx); err != nil {
 			return nil, errResolverUnavailable
 		}
-		if err := response.RequireSuccess(); err != nil {
-			return nil, err
-		}
-		if len(response.Body) > maxResolverBodyBytes {
-			return nil, errResolverMalformed
-		}
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		return response, nil
+		response, err = client.do.Do(request)
 	}
-	return nil, errResolverUnavailable
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if errors.Is(err, errPageRequest) {
+			return nil, errResolverUnavailable
+		}
+		return nil, sanitizeResolverError(err)
+	}
+	if response == nil {
+		return nil, errResolverUnavailable
+	}
+	if err := response.RequireSuccess(); err != nil {
+		return nil, err
+	}
+	if len(response.Body) > maxResolverBodyBytes {
+		return nil, errResolverMalformed
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func sanitizeResolverError(err error) error {

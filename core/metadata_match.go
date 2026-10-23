@@ -4,6 +4,7 @@ package core
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -112,6 +113,7 @@ func validMetadataRequest(request MetadataMatchRequest, queryTitle, queryNative 
 
 func scoreMetadataCandidates(request MetadataMatchRequest, queryTitle, queryNative, querySeason string) []metadataScoredCandidate {
 	scored := make([]metadataScoredCandidate, 0, len(request.Candidates))
+	series := metadataSeriesNames(queryTitle, queryNative, request.Candidates)
 	for _, candidate := range request.Candidates {
 		if strings.TrimSpace(candidate.Ref.Provider) == "" || strings.TrimSpace(candidate.Ref.ID) == "" {
 			continue
@@ -119,6 +121,9 @@ func scoreMetadataCandidates(request MetadataMatchRequest, queryTitle, queryNati
 		title, native, season := metadataFields(candidate.Title, candidate.NativeTitle, candidate.Season)
 		aliases := metadataAliases(candidate.Aliases)
 		titleScore := bestMetadataTitleScore(queryTitle, queryNative, []string{title, native}, aliases)
+		if titleScore < metadataWeakExactScore && metadataSeriesMatch(series, title, native) {
+			titleScore = metadataWeakExactScore
+		}
 		if titleScore == 0 {
 			continue
 		}
@@ -132,6 +137,50 @@ func scoreMetadataCandidates(request MetadataMatchRequest, queryTitle, queryNati
 		})
 	}
 	return scored
+}
+
+// metadataNamesMatch reports whether any name of the candidate scores against the query, as
+// scoreMetadataCandidates would score it with series (from metadataSeriesNames).
+func metadataNamesMatch(query MetadataQuery, candidate MetadataCandidate, series []string) bool {
+	queryTitle, queryNative, _ := metadataFields(query.Title, query.NativeTitle, query.Season)
+	title, native, _ := metadataFields(candidate.Title, candidate.NativeTitle, candidate.Season)
+	return bestMetadataTitleScore(queryTitle, queryNative, []string{title, native}, metadataAliases(candidate.Aliases)) > 0 ||
+		metadataSeriesMatch(series, title, native)
+}
+
+// metadataSeriesNames finds the provider's own name for the query's series. Taiwan names are
+// often only an alias of a series' first entry (Bangumi's 藥屋少女的呢喃 lists 药师少女的独语),
+// while its sequels carry none ("藥屋少女的呢喃 第三季"). A candidate with an alias equal to the
+// query's title, season markers aside, gives its own title as the series name; a sequel named
+// so then matches weakly, and the season and year hints decide. queryTitle and queryNative are
+// normalized as by metadataFields.
+func metadataSeriesNames(queryTitle, queryNative string, candidates []MetadataCandidate) []string {
+	var names []string
+	for _, candidate := range candidates {
+		title, native, _ := metadataFields(candidate.Title, candidate.NativeTitle, candidate.Season)
+		for _, alias := range metadataAliases(candidate.Aliases) {
+			if metadataTextScore(queryTitle, alias) != metadataHighScore && metadataTextScore(queryNative, alias) != metadataHighScore {
+				continue
+			}
+			for _, name := range []string{title, native} {
+				if name != "" && name != queryTitle && name != queryNative && !slices.Contains(names, name) {
+					names = append(names, name)
+				}
+			}
+			break
+		}
+	}
+	return names
+}
+
+// metadataSeriesMatch reports a candidate named exactly as one of the series names.
+func metadataSeriesMatch(series []string, title, native string) bool {
+	for _, name := range series {
+		if metadataTextScore(name, title) == metadataHighScore || metadataTextScore(name, native) == metadataHighScore {
+			return true
+		}
+	}
+	return false
 }
 
 func metadataCandidateBefore(left, right metadataScoredCandidate) bool {
@@ -264,6 +313,20 @@ func metadataNameMatch(left, right string) (equal, full bool) {
 	return leftSubtitle == "" || rightSubtitle == "", false
 }
 
+// metadataParticles are written in one name and left out of another ("世界最強後衛" and
+// "世界最強的後衛"), or written as their Japanese counterpart (之 and の).
+var metadataParticles = strings.NewReplacer("的", "", "之", "", "の", "")
+
+// metadataParticleMatch is a weak match for two names whose main titles differ only in
+// metadataParticles and whose subtitles are the same and present: the subtitle carries the
+// evidence the shortened main title lacks.
+func metadataParticleMatch(left, right string) bool {
+	leftMain, leftSubtitle, _ := strings.Cut(left, metadataSubtitleSeparator)
+	rightMain, rightSubtitle, _ := strings.Cut(right, metadataSubtitleSeparator)
+	return leftSubtitle != "" && metadataCompareKey(leftSubtitle) == metadataCompareKey(rightSubtitle) &&
+		metadataParticles.Replace(metadataCompareKey(leftMain)) == metadataParticles.Replace(metadataCompareKey(rightMain))
+}
+
 // metadataSubtitlesDiffer reports two names that both carry a subtitle and the subtitles differ:
 // different works, even when the main titles contain each other.
 func metadataSubtitlesDiffer(left, right string) bool {
@@ -278,7 +341,7 @@ func metadataTextScore(query, candidate string) int {
 	}
 	if equal, full := metadataNameMatch(query, candidate); full {
 		return metadataHighScore
-	} else if equal {
+	} else if equal || metadataParticleMatch(query, candidate) {
 		return metadataWeakExactScore
 	}
 	if metadataSubtitlesDiffer(query, candidate) {
@@ -306,9 +369,13 @@ func metadataHintScore(query MetadataQuery, candidate MetadataCandidate, querySe
 		score -= 10
 	}
 	if query.Year > 0 && candidate.Year > 0 {
-		if query.Year == candidate.Year {
+		switch difference := query.Year - candidate.Year; {
+		case difference == 0:
 			score += 12
-		} else {
+		case difference == 1 || difference == -1:
+			// Anime1 gives the year a show reached it, which can be the year after Japan's
+			// (魔法少女奈葉 Detonation: 2018 there, 2019 on Bangumi); neither for nor against.
+		default:
 			score -= 14
 		}
 	}

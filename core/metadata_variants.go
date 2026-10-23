@@ -15,8 +15,9 @@ var (
 		// Whitespace before the numeral, so "ARC-V" is not read as season 5.
 		regexp.MustCompile(`\s+(II|III|IV|V|VI)[\s\p{P}]*$`),
 	}
-	// NFKC has already turned a full-width ～ into ~.
-	metadataSubtitle                 = regexp.MustCompile(`\s*[~〜]([^~〜]+)[~〜]\s*`)
+	// NFKC has already turned a full-width ～ into ~. A long light-novel subtitle often opens
+	// with ～ and is never closed ("…第二人生。～不只是武器…嗎？"); it runs to the end.
+	metadataSubtitle                 = regexp.MustCompile(`\s*[~〜]([^~〜]+)(?:[~〜]\s*|$)`)
 	metadataAttachedRoman            = regexp.MustCompile(`(\p{Han})(II|III|IV|V|VI)([\s\p{P}]|$)`)
 	metadataMidSeason                = regexp.MustCompile(`(?i)[\s\p{P}]+(?:第\s*([0-9]+|[一二三四五六七八九十]+)\s*[季期]|0*([0-9]+)(?:st|nd|rd|th)\s*season)[\s\p{P}]+`)
 	metadataPartMarker               = regexp.MustCompile(`(?i)part|cour|部分|クール|[前後]半|[前後][篇編]`)

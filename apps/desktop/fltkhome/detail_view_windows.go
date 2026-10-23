@@ -96,6 +96,22 @@ func (ui *view) loadDetailResources(generation uint64, animeID string) {
 	} else {
 		ui.previewCover.SetLabel(uitext.T().CoverNone)
 	}
+	// The stored list shows at once; Anime1's answer replaces it. A first answer for a list
+	// takes Anime1 one to three seconds (Loop 37d).
+	if stored, ok := ui.service.(interface {
+		StoredEpisodes(context.Context, string) ([]backend.Episode, error)
+	}); ok {
+		go func() {
+			episodes, err := stored.StoredEpisodes(ctx, animeID)
+			fltk.Awake(func() {
+				if err != nil || !ui.detailRequestCurrent(generation, animeID) || ctx.Err() != nil || !ui.detailModel.applyStored(episodes) {
+					return
+				}
+				ui.renderPreview()
+				ui.renderDetailEpisodes()
+			})
+		}()
+	}
 	go func() {
 		episodes, err := ui.service.Episodes(ctx, animeID)
 		fltk.Awake(func() {
@@ -103,10 +119,7 @@ func (ui *view) loadDetailResources(generation uint64, animeID string) {
 				return
 			}
 			ui.detailEpisodesDone = true
-			ui.detailEpisodesErr = err != nil
-			if err == nil {
-				ui.detailModel.setEpisodes(episodes)
-			}
+			ui.detailEpisodesErr = ui.detailModel.applyRefresh(episodes, err)
 			ui.renderPreview()
 			ui.renderDetailEpisodes()
 		})
@@ -326,7 +339,7 @@ func (ui *view) renderDetailEpisodes() {
 	ui.previewEpisodes.End()
 	if ui.detailEpisodesErr {
 		ui.previewStatus.SetLabel(uitext.T().EpisodesLoadFailed)
-	} else if !ui.detailEpisodesDone {
+	} else if !ui.detailEpisodesDone && len(ui.detailModel.episodes) == 0 {
 		ui.previewStatus.SetLabel(uitext.T().EpisodesLoading)
 	} else if len(ui.detailModel.episodes) == 0 {
 		ui.previewStatus.SetLabel(uitext.T().NoEpisodes)

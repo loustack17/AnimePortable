@@ -31,8 +31,10 @@ var simplifiedCharacters = sync.OnceValue(func() map[rune]rune {
 	return table
 })
 
-// foldToSimplified maps every Traditional character to its Simplified form for comparison only.
-func foldToSimplified(value string) string {
+// FoldToSimplified maps every Traditional character to its Simplified form, one character at a
+// time. The matcher compares titles in this form; a provider whose search index is Simplified
+// searches in it too (Bangumi finds 判处勇者刑 but nothing for 判處勇者刑).
+func FoldToSimplified(value string) string {
 	table := simplifiedCharacters()
 	return strings.Map(func(character rune) rune {
 		if simplified, ok := table[character]; ok {

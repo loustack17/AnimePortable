@@ -29,7 +29,17 @@ func validAnime(anime core.Anime) bool {
 	return validIdentity(string(anime.ID)) &&
 		validText(anime.Title, maxTitleBytes) &&
 		validText(anime.NativeTitle, maxTitleBytes) &&
-		validText(anime.Description, maxDescriptionBytes)
+		validText(anime.Description, maxDescriptionBytes) &&
+		validCatalogInfo(anime.Catalog)
+}
+
+func validCatalogInfo(info core.CatalogInfo) bool {
+	switch info.AiringSeason {
+	case "", "winter", "spring", "summer", "fall":
+	default:
+		return false
+	}
+	return info.Year >= 0 && info.Year <= 9999 && info.EpisodeCount >= 0 && info.EpisodeCount <= 100000
 }
 
 func validSourceRef(ref core.SourceRef) bool {

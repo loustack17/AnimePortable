@@ -34,6 +34,7 @@ const (
 	stageResolve       failureStage = "resolve"
 	stageProxyUpstream failureStage = "proxy_upstream"
 	stagePlayerLoad    failureStage = "player_load"
+	stageStartTimeout  failureStage = "start_timeout"
 	stageOther         failureStage = "other"
 )
 
@@ -148,6 +149,22 @@ func (log *FailureLog) PlayerFailed() {
 	log.record(stagePlayerLoad, 0, categoryPlayerFailed)
 }
 
+// StartTimedOut records a start that showed no frame in time, with the status of a proxy
+// rejection seen during the same attempt, if any.
+func (log *FailureLog) StartTimedOut() {
+	if log == nil {
+		return
+	}
+	log.mu.Lock()
+	status := 0
+	if !log.upstreamAt.IsZero() && log.now().Sub(log.upstreamAt) <= upstreamFailureWindow {
+		status = log.upstreamStatus
+	}
+	log.upstreamAt = time.Time{}
+	log.mu.Unlock()
+	log.record(stageStartTimeout, status, categoryTimeout)
+}
+
 func upstreamCategory(status int) failureCategory {
 	if status == 0 {
 		return failureCategory(securehttp.KindNetwork)
@@ -174,7 +191,7 @@ func writeLinesAtomically(path string, lines []string) error {
 
 func formatFailureLine(at time.Time, stage failureStage, status int, category failureCategory) string {
 	switch stage {
-	case stageResolve, stageProxyUpstream, stagePlayerLoad, stageOther:
+	case stageResolve, stageProxyUpstream, stagePlayerLoad, stageStartTimeout, stageOther:
 	default:
 		stage = stageOther
 	}
@@ -224,11 +241,17 @@ type stageError struct {
 func (e *stageError) Error() string { return e.err.Error() }
 func (e *stageError) Unwrap() error { return e.err }
 
-// stageSource tags Resolve failures so Play can tell resolve from player failures.
-type stageSource struct{ core.AnimeSource }
+// stageSource tags Resolve failures so Play can tell resolve from player failures, and
+// times each Resolve for the start timeline.
+type stageSource struct {
+	core.AnimeSource
+	timeline *StartTimeline
+}
 
 func (source stageSource) Resolve(ctx context.Context, ref core.EpisodeRef) (core.PlaybackSource, error) {
+	began := time.Now()
 	resolved, err := source.AnimeSource.Resolve(ctx, ref)
+	source.timeline.resolved(time.Since(began), err)
 	if err != nil {
 		return resolved, &stageError{stage: stageResolve, err: err}
 	}

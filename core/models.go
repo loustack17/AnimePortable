@@ -48,6 +48,7 @@ type Anime struct {
 	Title       string
 	NativeTitle string
 	Description string
+	Catalog     CatalogInfo
 }
 
 type Episode struct {

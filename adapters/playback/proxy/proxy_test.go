@@ -1317,3 +1317,55 @@ func TestDefaultUpstreamClientsUseTheConfiguredForwardProxy(t *testing.T) {
 		t.Fatalf("Open error = %v, want a proxy failure", err)
 	}
 }
+
+func TestStreamObserverReportsEachRequestWithNumbersOnly(t *testing.T) {
+	var mu sync.Mutex
+	var seen []StreamEvent
+	var clock time.Time
+	remote := &fakeRemote{response: func(request *http.Request) *securehttp.StreamResponse {
+		if request.Header.Get("Range") == "" {
+			return streamResponse(http.StatusBadGateway, http.Header{"Content-Type": {"text/html"}}, "upstream error")
+		}
+		header := http.Header{"Content-Type": {"video/mp4"}, "Content-Range": {"bytes 3-9/10"}, "Content-Length": {"7"}}
+		return streamResponse(http.StatusPartialContent, header, "defghij")
+	}}
+	server := newProxyWithDeps(t, remote, Config{MaxConcurrentStreams: 1, MaxStreamsPerSession: 1, OnStream: func(event StreamEvent) {
+		mu.Lock()
+		seen = append(seen, event)
+		mu.Unlock()
+	}}, serverDeps{now: func() time.Time {
+		// Every reading is 10 ms later, so Elapsed counts readings.
+		mu.Lock()
+		defer mu.Unlock()
+		clock = clock.Add(10 * time.Millisecond)
+		return clock
+	}})
+	session, err := server.NewSession(newSource())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ranged := sessionRequest(t, session, http.MethodGet)
+	ranged.Header.Set("Range", "bytes=3-")
+	if result := handleRequest(t, server, ranged); result.status != http.StatusPartialContent {
+		t.Fatalf("ranged status = %d", result.status)
+	}
+	if result := handleRequest(t, server, sessionRequest(t, session, http.MethodGet)); result.status != http.StatusBadGateway {
+		t.Fatalf("failed status = %d", result.status)
+	}
+	session.streams <- struct{}{}
+	if result := handleRequest(t, server, sessionRequest(t, session, http.MethodGet)); result.status != http.StatusServiceUnavailable {
+		t.Fatalf("busy status = %d", result.status)
+	}
+	<-session.streams
+	mu.Lock()
+	defer mu.Unlock()
+	want := []StreamEvent{
+		{Outcome: StreamOpened, RangeStart: 3, Status: http.StatusPartialContent, Elapsed: 10 * time.Millisecond},
+		{Outcome: StreamFinished, RangeStart: 3, Status: http.StatusPartialContent, Elapsed: 20 * time.Millisecond, Bytes: 7},
+		{Outcome: StreamFailed, RangeStart: -1, Status: http.StatusBadGateway, Elapsed: 10 * time.Millisecond},
+		{Outcome: StreamBusy, RangeStart: -1, Elapsed: 10 * time.Millisecond},
+	}
+	if fmt.Sprint(seen) != fmt.Sprint(want) {
+		t.Fatalf("events = %+v, want %+v", seen, want)
+	}
+}

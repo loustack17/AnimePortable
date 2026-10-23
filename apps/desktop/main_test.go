@@ -13,7 +13,7 @@ import (
 func TestNativeServiceSurface(t *testing.T) {
 	allowed := map[string]bool{
 		"Catalog": false, "Search": false, "Library": false,
-		"Detail": false, "RefreshMetadata": false, "Episodes": false, "Following": false,
+		"Detail": false, "RefreshMetadata": false, "Episodes": false, "StoredEpisodes": false, "Following": false,
 		"Follow": false, "Unfollow": false, "Schedule": false, "CachedSchedule": false,
 		"History": false, "RemoveHistory": false, "Settings": false,
 		"SaveSettings": false, "SavePlaybackSpeed": false, "OpeningTimes": false, "Play": false, "StopPlayback": false, "GetCover": false,

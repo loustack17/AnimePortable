@@ -7,11 +7,14 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: PASS
+status: OWNER_CHECK
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 37c (Skip the opening) passed on 2026-10-22 (docs/loops/LOOP37C.md; af53275; CI 39877272016 green): AniSkip 跳過片頭, new action OpeningTimes, builds with -H windowsgui (no console window).
+  Loop 37d (owner request 2026-10-22; docs/loops/LOOP37D.md) built, uncommitted in worktree dazzling-swanson-161792; waiting for the owner check of artifacts/test-build (EXE C1184A88…B501). Then: owner approval to commit and push, CI, close the loop.
+  Delivered: detail page shows the stored episode list at once (backend action StoredEpisodes, owner-approved 2026-10-23); Anime1 page requests 5 s + one retry with client timeouts; 20 s start watch; start timeline (ANIMEPORTABLE_START_TIMELINE=1); migration 0011 (anime catalog year/season/count); synopsis matching: Simplified Bangumi search, season browse fallback (shared per season), year/count hints, three narrow name rules. Eval 193 hits / 0 wrong / 3 misses over the owner's 228 anime (135 before).
+  Checks: gofmt, vet, full suite and -race pass (window tests owner-approved 2026-10-23; one settings-scroll window test flaked once, passes alone: artifacts/evidence/loop37d/flaky-settings-scroll.txt). Oracle review: 1 MUST_FIX fixed, re-review no MUST_FIX.  Never drive the owner's desktop to investigate (owner 2026-10-22); reproduce headlessly.
+  Loop 37c (Skip the opening) passed on 2026-10-22 (docs/loops/LOOP37C.md; af53275; CI 39877272016 green): AniSkip 跳過片頭, new action OpeningTimes, builds with -H windowsgui (no console window).
   Pre-release v0.4.0-beta published 2026-10-22 (tag on 2caceaa; CI 39880655456; release job 39880999897): 37b, 37c, app icon (apps/desktop/appicon, rsrc_windows_amd64.syso), no console. Owner to try it.
   Loop 37b (Language) passed on 2026-10-22 (docs/loops/LOOP37B.md; 17d13be; CI 39845099717 green): live switch, uitext table, migration 0010.
   Loop 37 (Settings) passed on 2026-10-22 (docs/loops/LOOP37.md; f582da8 + fixes 1966449, f2c4f51; CI 39734539484 green).
@@ -40,7 +43,7 @@ do_not_repeat:
   - Do not remove fltk.Lock() from main; without it libmpv frame notifications are delayed and video stutters.
   - Do not use a Go OpenCC library; they link GPL-2.0 cedar-go. Use the embedded Apache OpenCC dictionaries.
   - Do not show Simplified Chinese; convert Bangumi text with s2twp. Japanese-only synopses stay unconverted.
-  - Do not add backend actions without owner approval; main_test.go allowlist is fixed (CachedSchedule was approved 2026-10-20).
+  - Do not add backend actions without owner approval; main_test.go allowlist is fixed (CachedSchedule approved 2026-10-20, StoredEpisodes 2026-10-23).
   - Never change a migration already applied to the owner's test data; the checksum check then refuses the database (happened 2026-10-20, repaired; broken copy in artifacts/evidence/loop33/).
   - Do not let Esc reach FLTK's default on the main window: unhandled Esc runs the window callback and closed the app (fixed Loop 34 by isEscapeClose).
   - Do not take the schedule from Anime1 (owner, 2026-10-20): its season pages lag; the schedule is Bangumi's calendar.
@@ -53,6 +56,7 @@ boundaries:
   - Keep .codex/, artifacts/ and portable data untouched.
   - Commit, push, workflow and release need owner approval.
 references:
+  - docs/loops/LOOP37D.md
   - docs/loops/LOOP37C.md
   - docs/loops/LOOP37B.md
   - docs/loops/LOOP37.md

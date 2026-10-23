@@ -30,7 +30,7 @@ func (service *Service) ingestAnime(ctx context.Context, store core.Store, items
 		if idErr != nil {
 			return nil, idErr
 		}
-		actual, ingestErr := atomic.IngestSourceAnime(ctx, core.Anime{ID: core.AnimeID(candidateID), Title: item.Title, NativeTitle: item.NativeTitle}, item.Ref)
+		actual, ingestErr := atomic.IngestSourceAnime(ctx, core.Anime{ID: core.AnimeID(candidateID), Title: item.Title, NativeTitle: item.NativeTitle, Catalog: item.Catalog}, item.Ref)
 		if ingestErr != nil {
 			return nil, ingestErr
 		}
@@ -77,6 +77,7 @@ func (service *Service) ingestEpisodes(ctx context.Context, store core.Store, an
 			if err := store.SaveEpisodeMapping(ctx, mapping); err != nil {
 				return nil, err
 			}
+
 			known[item.Ref] = mapping
 		}
 		result = append(result, Episode{ID: string(mapping.EpisodeID), AnimeID: string(animeID), Number: number, Title: title})

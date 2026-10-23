@@ -29,14 +29,15 @@ func (store *Store) IngestSourceAnime(ctx context.Context, candidate core.Anime,
 				rollbackCheckpoint(conn)
 			}
 		}()
-		err = conn.QueryRowContext(ctx, `SELECT a.id, a.title, a.native_title, a.description
+		err = conn.QueryRowContext(ctx, `SELECT a.id, a.title, a.native_title, a.description, a.catalog_year, a.catalog_season, a.catalog_episode_count
 			FROM anime a JOIN source_refs r ON r.anime_id = a.id
 			WHERE r.provider = ? AND r.external_id = ?`, ref.Provider, ref.ID).
-			Scan(&result.ID, &result.Title, &result.NativeTitle, &result.Description)
+			Scan(animeFields(&result)...)
 		switch err {
 		case nil:
-			result.Title, result.NativeTitle = candidate.Title, candidate.NativeTitle
-			_, err = conn.ExecContext(ctx, `UPDATE anime SET title = ?, native_title = ? WHERE id = ?`, result.Title, result.NativeTitle, result.ID)
+			result.Title, result.NativeTitle, result.Catalog = candidate.Title, candidate.NativeTitle, candidate.Catalog
+			_, err = conn.ExecContext(ctx, `UPDATE anime SET title = ?, native_title = ?, catalog_year = ?, catalog_season = ?, catalog_episode_count = ? WHERE id = ?`,
+				result.Title, result.NativeTitle, result.Catalog.Year, result.Catalog.AiringSeason, result.Catalog.EpisodeCount, result.ID)
 		case sql.ErrNoRows:
 			var existing int
 			err = conn.QueryRowContext(ctx, `SELECT 1 FROM anime WHERE id = ?`, candidate.ID).Scan(&existing)
@@ -47,7 +48,8 @@ func (store *Store) IngestSourceAnime(ctx context.Context, candidate core.Anime,
 				return err
 			}
 			result = candidate
-			if _, err = conn.ExecContext(ctx, `INSERT INTO anime (id, title, native_title, description) VALUES (?, ?, ?, ?)`, result.ID, result.Title, result.NativeTitle, result.Description); err != nil {
+			if _, err = conn.ExecContext(ctx, `INSERT INTO anime (id, title, native_title, description, catalog_year, catalog_season, catalog_episode_count) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				result.ID, result.Title, result.NativeTitle, result.Description, result.Catalog.Year, result.Catalog.AiringSeason, result.Catalog.EpisodeCount); err != nil {
 				return err
 			}
 			_, err = conn.ExecContext(ctx, `INSERT INTO source_refs (anime_id, provider, external_id) VALUES (?, ?, ?)`, result.ID, ref.Provider, ref.ID)

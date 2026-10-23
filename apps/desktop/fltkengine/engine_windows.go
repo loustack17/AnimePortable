@@ -33,22 +33,24 @@ var glGetStringOnce sync.Once
 var glGetStringFunc func(uint32) *byte
 
 type Engine struct {
-	video            *fltk.GlWindow
-	library          *mpv.Library
-	core             *mpv.Mpv
-	render           *mpv.RenderContext
-	events           chan libmpv.Event
-	mu               sync.Mutex
-	closed           bool
-	generation       uint64
-	position         time.Duration
-	duration         time.Duration
-	paused           bool
-	observed         observedProperties
-	pending          bool
-	ended            bool
-	pendingStarted   bool
-	failed           bool
+	video          *fltk.GlWindow
+	library        *mpv.Library
+	core           *mpv.Mpv
+	render         *mpv.RenderContext
+	events         chan libmpv.Event
+	mu             sync.Mutex
+	closed         bool
+	generation     uint64
+	position       time.Duration
+	duration       time.Duration
+	paused         bool
+	observed       observedProperties
+	pending        bool
+	ended          bool
+	pendingStarted bool
+	failed         bool
+	// started is the last start stage reported for the current load (0 for none yet).
+	started          StartStage
 	seekPending      bool
 	seekStarted      bool
 	speedPercent     int
@@ -58,8 +60,19 @@ type Engine struct {
 	onLoad           func(uint64)
 	onFailure        func(uint64)
 	onEnd            func(uint64)
+	onStart          func(uint64, StartStage)
 	closeOnce        sync.Once
 }
+
+// StartStage is how far the current load has come towards showing video.
+type StartStage uint8
+
+const (
+	// StartFileLoaded: mpv opened the file and read its headers.
+	StartFileLoaded StartStage = iota + 1
+	// StartPlaying: mpv decoded the first frame and began playback (or holds it, paused).
+	StartPlaying
+)
 
 // Options are the settings an engine is built with. They are fixed for its lifetime: mpv
 // reads hwdec once at initialization, which is why the setting applies the next time the
@@ -309,6 +322,7 @@ func (engine *Engine) Load(ctx context.Context, url string, startAt time.Duratio
 		engine.pendingStarted = false
 		engine.ended = false
 		engine.failed = false
+		engine.started = 0
 		engine.seekPending = false
 		engine.seekStarted = false
 		engine.forgetObservedPlayback()
@@ -341,6 +355,14 @@ func (engine *Engine) SetFailureHandler(handler func(uint64)) {
 func (engine *Engine) SetEndHandler(handler func(uint64)) {
 	engine.mu.Lock()
 	engine.onEnd = handler
+	engine.mu.Unlock()
+}
+
+// SetStartHandler sets the handler called on the UI thread when the current load reaches
+// each start stage, once per stage and load.
+func (engine *Engine) SetStartHandler(handler func(uint64, StartStage)) {
+	engine.mu.Lock()
+	engine.onStart = handler
 	engine.mu.Unlock()
 }
 
@@ -580,9 +602,22 @@ func (engine *Engine) pollEvents() {
 			// Property changes of the previous file may still have been queued behind loadfile.
 			engine.forgetObservedPlayback()
 		}
+		var startReached StartStage
 		if event.EventID == mpv.EventFileLoaded {
+			// Only the load in flight: a late file-loaded of a replaced file arrives before its start.
+			if pending && started {
+				startReached = StartFileLoaded
+			}
 			engine.pending = false
 			engine.pendingStarted = false
+		}
+		if event.EventID == mpv.EventPlaybackRestart && engine.started == StartFileLoaded {
+			startReached = StartPlaying
+		}
+		var notifyStart func(uint64, StartStage)
+		if startReached != 0 && generation != 0 {
+			engine.started = startReached
+			notifyStart = engine.onStart
 		}
 		if event.EventID == mpv.EventEnd && pending && started && event.EndFile().Reason == mpv.EndFileError {
 			engine.pending = false
@@ -617,6 +652,9 @@ func (engine *Engine) pollEvents() {
 		}
 		endPosition, endDuration := engine.position, engine.duration
 		engine.mu.Unlock()
+		if notifyStart != nil {
+			fltk.Awake(func() { notifyStart(generation, startReached) })
+		}
 		if generation == 0 || event.EventID != mpv.EventEnd {
 			continue
 		}

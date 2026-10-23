@@ -3,6 +3,7 @@
 package fltkhome
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -97,5 +98,42 @@ func TestDetailModelReordersNoEpisodesAndClearsOnClose(t *testing.T) {
 	}
 	if _, ok := model.playRequest(); ok {
 		t.Fatal("closed detail produced playback")
+	}
+}
+
+func TestDetailModelShowsTheStoredListUntilAnime1Answers(t *testing.T) {
+	stored := []backend.Episode{{ID: "episode:1", Number: "01"}, {ID: "episode:2", Number: "02"}}
+	fresh := []backend.Episode{{ID: "episode:1", Number: "01", Title: "出發"}, {ID: "episode:2", Number: "02"}, {ID: "episode:3", Number: "03"}}
+	failure := errors.New("anime1 unreachable")
+
+	model := detailModel{}
+	model.open("anime")
+	if !model.applyStored(stored) || len(model.episodes) != 2 {
+		t.Fatalf("stored list not shown: %#v", model.episodes)
+	}
+	model.selected = 1
+	if failed := model.applyRefresh(fresh, nil); failed || len(model.episodes) != 3 || model.episodes[0].Title != "出發" || model.selected != 1 {
+		t.Fatalf("refresh: failed=%t episodes=%#v selected=%d", failed, model.episodes, model.selected)
+	}
+	if model.applyStored(stored) || len(model.episodes) != 3 {
+		t.Fatal("a late stored list replaced Anime1's answer")
+	}
+
+	model.open("anime")
+	model.applyStored(stored)
+	if failed := model.applyRefresh(nil, failure); failed || len(model.episodes) != 2 {
+		t.Fatalf("failed refresh over a stored list: failed=%t episodes=%d, want the stored list kept", failed, len(model.episodes))
+	}
+
+	model.open("never-loaded")
+	if model.applyStored(nil) {
+		t.Fatal("an empty stored list counted as shown")
+	}
+	if failed := model.applyRefresh(nil, failure); !failed {
+		t.Fatal("failed refresh without a stored list must report the failure")
+	}
+	model.open("next")
+	if model.refreshed || !model.applyStored(stored) {
+		t.Fatal("opening another anime kept the previous refresh state")
 	}
 }

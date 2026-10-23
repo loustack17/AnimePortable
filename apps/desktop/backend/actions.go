@@ -13,6 +13,7 @@ import (
 
 	"animeportable/adapters/player/libmpv"
 	"animeportable/core"
+	metadata "animeportable/internal/metadata"
 )
 
 type sourceIdentity struct {
@@ -143,7 +144,7 @@ func (service *Service) RefreshMetadata(ctx context.Context, animeID string) (bo
 	if err != nil {
 		return false, err
 	}
-	app, _, _, err := service.appSnapshot()
+	app, store, source, err := service.appSnapshot()
 	if err != nil {
 		return false, err
 	}
@@ -152,8 +153,69 @@ func (service *Service) RefreshMetadata(ctx context.Context, animeID string) (bo
 	service.mu.Unlock()
 	lookupCtx, cancel := context.WithTimeout(operationCtx, metadataLookupTimeout)
 	defer cancel()
+	service.fillCatalogInfo(lookupCtx, store, source, localAnimeID)
 	found, err := app.RefreshMetadata(lookupCtx, localAnimeID, providers)
 	return found, safeError(err)
+}
+
+// fillCatalogInfo reads the catalog row of an anime stored before catalog info was kept
+// (migration 0011), so its year and episode count help the lookup. It is best effort: without
+// the row the lookup runs on the title alone, as before. A row whose values are all unclear
+// ("1-12+OVA", "2023/2024") stays unknown, so its catalog is read again at its next lookup;
+// that is at most once per anime and app run (the detail page looks an anime up once).
+func (service *Service) fillCatalogInfo(ctx context.Context, store core.Store, source core.AnimeSource, animeID core.AnimeID) {
+	anime, err := store.Anime(ctx, animeID)
+	if err != nil || anime.Catalog != (core.CatalogInfo{}) {
+		return
+	}
+	refs, err := store.SourceRefs(ctx, animeID)
+	if err != nil || len(refs) == 0 {
+		return
+	}
+	catalog, err := source.Catalog(ctx)
+	if err != nil {
+		return
+	}
+	for _, item := range catalog {
+		if slices.Contains(refs, item.Ref) {
+			_, _ = service.ingestAnime(ctx, store, []core.SourceAnime{item})
+			return
+		}
+	}
+}
+
+// StoredEpisodes lists the episodes stored the last time the anime's list was loaded, from local
+// data only, so a screen can show them at once and refresh them with Episodes behind them. The
+// stored list has no episode titles; an anime never loaded has none.
+func (service *Service) StoredEpisodes(ctx context.Context, animeID string) ([]Episode, error) {
+	operationCtx, done, err := service.begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	localAnimeID, err := localID(animeID)
+	if err != nil {
+		return nil, err
+	}
+	_, store, _, err := service.appSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	mappings, err := store.EpisodeMappings(operationCtx, localAnimeID)
+	if err != nil {
+		return nil, safeError(err)
+	}
+	episodes := make([]Episode, 0, len(mappings))
+	for _, mapping := range mappings {
+		number, ok := metadata.NormalizePlainText(mapping.Number, metadata.TitleLimits())
+		// A mapping stored before episode numbers were kept has none; the refresh fills it.
+		if !ok || number == "" {
+			continue
+		}
+		episodes = append(episodes, Episode{ID: string(mapping.EpisodeID), AnimeID: string(localAnimeID), Number: number})
+	}
+	orderEpisodes(episodes)
+	return episodes, nil
 }
 
 func (service *Service) Episodes(ctx context.Context, animeID string) ([]Episode, error) {
@@ -180,6 +242,7 @@ func (service *Service) Episodes(ctx context.Context, animeID string) ([]Episode
 	var episodes []core.SourceEpisode
 	var parent core.SourceRef
 	for _, ref := range refs {
+
 		episodes, err = source.Episodes(operationCtx, ref)
 		if err == nil {
 			parent = ref

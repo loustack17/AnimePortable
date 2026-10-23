@@ -48,6 +48,13 @@ func (app *App) RefreshMetadata(ctx context.Context, animeID AnimeID, providers 
 	}
 	match := MatchMetadata(MetadataMatchRequest{Query: query, Candidates: candidates})
 	if match.Decision != MetadataMatchAccepted {
+		candidates = addSeasonCandidates(ctx, query, anime.Catalog, providers, candidates, sources)
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		match = MatchMetadata(MetadataMatchRequest{Query: query, Candidates: candidates})
+	}
+	if match.Decision != MetadataMatchAccepted {
 		return false, nil
 	}
 	metadata, err := sources[match.Candidate.Ref.Provider].Get(ctx, match.Candidate.Ref)
@@ -63,6 +70,43 @@ func (app *App) RefreshMetadata(ctx context.Context, animeID AnimeID, providers 
 	return true, nil
 }
 
+// addSeasonCandidates adds the anime of the catalog's airing season, from every provider that
+// can list one, to a search that found no accepted match. The same matching rules apply; the
+// season list only brings in works the search did not return, and only those whose names
+// match the query at all (the rest would score nothing and only count against the candidate
+// limit). A provider that cannot list the season adds nothing, and the search result stands.
+func addSeasonCandidates(ctx context.Context, query MetadataQuery, catalog CatalogInfo, providers []MetadataProvider, candidates []MetadataCandidate, sources map[string]MetadataProvider) []MetadataCandidate {
+	if catalog.Year == 0 || catalog.AiringSeason == "" {
+		return candidates
+	}
+	queryTitle, queryNative, _ := metadataFields(query.Title, query.NativeTitle, query.Season)
+	series := metadataSeriesNames(queryTitle, queryNative, candidates)
+	known := make(map[MetadataRef]bool, len(candidates))
+	for _, candidate := range candidates {
+		known[candidate.Ref] = true
+	}
+	for _, provider := range providers {
+		browser, ok := provider.(MetadataSeasonBrowser)
+		if !ok {
+			continue
+		}
+		found, err := browser.BrowseSeason(ctx, catalog.Year, catalog.AiringSeason)
+		if err != nil {
+			continue
+		}
+		for _, candidate := range found {
+			// MatchMetadata takes a bounded number of candidates; past that, the rest are left out.
+			if known[candidate.Ref] || len(candidates) >= metadataMaxCandidates || !metadataNamesMatch(query, candidate, series) {
+				continue
+			}
+			known[candidate.Ref] = true
+			sources[candidate.Ref.Provider] = provider
+			candidates = append(candidates, candidate)
+		}
+	}
+	return candidates
+}
+
 var bracketedName = regexp.MustCompile(`^(.+?)\s*[(（]([^()（）]+)[)）]\s*$`)
 
 // metadataQueryFor builds the lookup query. Anime1 sometimes gives a Latin-script title with its
@@ -70,7 +114,9 @@ var bracketedName = regexp.MustCompile(`^(.+?)\s*[(（]([^()（）]+)[)）]\s*$`
 // matched as the alternative title. Brackets on a Chinese title are left alone: they hold edition
 // markers such as "(劇場版)" or "(第二季)", and dropping those would match the wrong work.
 func metadataQueryFor(anime Anime) MetadataQuery {
-	query := MetadataQuery{Title: anime.Title, NativeTitle: anime.NativeTitle}
+	// The airing season stays out: only AniList candidates carry one, and a season on one side
+	// only counts against every Bangumi candidate.
+	query := MetadataQuery{Title: anime.Title, NativeTitle: anime.NativeTitle, Year: anime.Catalog.Year, EpisodeCount: anime.Catalog.EpisodeCount}
 	match := bracketedName.FindStringSubmatch(anime.Title)
 	if query.NativeTitle != "" || match == nil || containsHan(match[1]) || !containsHan(match[2]) {
 		return query

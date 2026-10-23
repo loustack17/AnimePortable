@@ -392,6 +392,69 @@ func TestMigrationAllowsJapaneseKeepingSettings(t *testing.T) {
 		}
 	}
 }
+func TestMigrationAddsCatalogInfoKeepingAnime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "anime.sqlite")
+	var previous []migration
+	for version, name := range []string{"0001_initial.sql", "0002_episode_mappings.sql", "0003_drop_settings_mpv_path.sql", "0004_episode_number.sql", "0005_recent_updates.sql", "0006_schedule.sql", "0007_settings_auto_play.sql", "0008_settings_playback_proxy.sql", "0009_settings_drop_skip_intro.sql", "0010_settings_language_japanese.sql"} {
+		contents, err := migrationFS.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous = append(previous, migration{version: version + 1, name: name, sql: string(contents)})
+	}
+	legacy, err := open(context.Background(), path, migrationSource{migrations: previous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`INSERT INTO anime (id, title, native_title, description) VALUES ('anime:1', '判處勇者刑', '', ''), ('anime:2', '殺手旅店', 'Hotel', 'kept')`,
+		`INSERT INTO source_refs (anime_id, provider, external_id) VALUES ('anime:1', 'anime1', '1785'), ('anime:2', 'anime1', '1701')`,
+		`INSERT INTO following (anime_id) VALUES ('anime:2')`,
+	} {
+		if _, err := legacy.db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store := openLibraryStore(t, path)
+	defer store.Close()
+	ctx := context.Background()
+	items, err := store.ListAnime(ctx)
+	want := []core.Anime{{ID: "anime:1", Title: "判處勇者刑"}, {ID: "anime:2", Title: "殺手旅店", NativeTitle: "Hotel", Description: "kept"}}
+	if err != nil || len(items) != 2 || items[0] != want[0] || items[1] != want[1] {
+		t.Fatalf("anime after migration = %#v, %v", items, err)
+	}
+	if refs, err := store.SourceRefs(ctx, "anime:2"); err != nil || len(refs) != 1 || refs[0].ID != "1701" {
+		t.Fatalf("source refs = %v, %v", refs, err)
+	}
+	if following, err := store.Following(ctx); err != nil || len(following) != 1 {
+		t.Fatalf("following = %v, %v", following, err)
+	}
+	updated := want[0]
+	updated.Catalog = core.CatalogInfo{Year: 2026, AiringSeason: "winter", EpisodeCount: 12}
+	if err := store.SaveAnime(ctx, updated); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := store.Anime(ctx, "anime:1"); err != nil || got != updated {
+		t.Fatalf("anime = %#v, %v, want %#v", got, err, updated)
+	}
+	for _, invalid := range []core.CatalogInfo{{Year: -1}, {Year: 10000}, {AiringSeason: "冬"}, {EpisodeCount: -1}} {
+		bad := updated
+		bad.Catalog = invalid
+		if err := store.SaveAnime(ctx, bad); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("SaveAnime(%+v) = %v, want ErrInvalidInput", invalid, err)
+		}
+	}
+	for _, update := range []string{"UPDATE anime SET catalog_season = 'autumn'", "UPDATE anime SET catalog_year = -1", "UPDATE anime SET catalog_episode_count = -1"} {
+		if _, err := store.db.Exec(update); err == nil {
+			t.Fatalf("%s succeeded; the column lacks its constraint", update)
+		}
+	}
+}
+
 func TestFreshSchemaHasNoSettingsMPVPath(t *testing.T) {
 	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
 	defer store.Close()

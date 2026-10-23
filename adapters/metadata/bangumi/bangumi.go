@@ -7,12 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"mime"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -41,6 +43,12 @@ const (
 	maxYear              = 3000
 	maxMetadataIDDigits  = 10
 	maxAliases           = 16
+	browsePageSize       = 50
+	// A season holds about 130-150 anime; the bound keeps a broken listing from paging forever.
+	maxBrowseSubjects = 400
+	// browseFirstPages covers a usual season (about 130-150 anime) in one round of requests.
+	browseFirstPages = 3
+	maxCachedSeasons = 16
 )
 
 var regionTag = regexp.MustCompile(`\s*[(（](?:港|台|港/台|台/港|港台)[)）]\s*$`)
@@ -58,14 +66,19 @@ type responseClient interface {
 
 type Client struct {
 	do responseClient
+
+	seasonsMu sync.Mutex
+	seasons   map[seasonKey]*seasonFetch
 }
+
+type seasonKey struct{ year, month int }
 
 func New(client *securehttp.Client) *Client {
 	return newWithDo(client)
 }
 
 func newWithDo(do responseClient) *Client {
-	return &Client{do: do}
+	return &Client{do: do, seasons: make(map[seasonKey]*seasonFetch)}
 }
 
 func AllowedOrigins() []string {
@@ -76,7 +89,11 @@ func (client *Client) Search(ctx context.Context, query core.MetadataQuery) ([]c
 	if err := checkContext(ctx); err != nil {
 		return nil, err
 	}
-	keyword := strings.TrimSpace(query.Title)
+	// Bangumi's Chinese names are Simplified, and its search does not match a Taiwan title
+	// written in Traditional characters (判處勇者刑 finds nothing, 判处勇者刑 finds it; Loop
+	// 37d), so the Chinese title is searched in Simplified. A Japanese native title is searched
+	// as it is: folding would turn 日本語 into 日本语.
+	keyword := core.FoldToSimplified(strings.TrimSpace(query.Title))
 	if keyword == "" {
 		keyword = strings.TrimSpace(query.NativeTitle)
 	}
@@ -114,6 +131,154 @@ func (client *Client) Search(ctx context.Context, query core.MetadataQuery) ([]c
 		return nil, err
 	}
 	return candidates, nil
+}
+
+// seasonStartMonths maps an airing season to the month Bangumi dates its new shows in.
+var seasonStartMonths = map[string]int{"winter": 1, "spring": 4, "summer": 7, "fall": 10}
+
+// BrowseSeason lists the anime Bangumi dates in the first month of the season, in pages of
+// browsePageSize. Each season is fetched once per app run; several anime share it.
+func (client *Client) BrowseSeason(ctx context.Context, year int, season string) ([]core.MetadataCandidate, error) {
+	if err := checkContext(ctx); err != nil {
+		return nil, err
+	}
+	month, ok := seasonStartMonths[season]
+	if !ok || year < 1900 || year > maxYear {
+		return nil, errMetadataInvalidQuery
+	}
+	key := seasonKey{year: year, month: month}
+	for {
+		candidates, err := client.sharedSeason(ctx, key)
+		// The shared fetch ran under the context of the lookup that started it. If that one was
+		// cancelled (its page closed) while this lookup still runs, it fetches the season itself.
+		if errors.Is(err, context.Canceled) && ctx.Err() == nil {
+			continue
+		}
+		return candidates, err
+	}
+}
+
+// sharedSeason returns the season's listing, fetching it or waiting for the fetch another
+// lookup started. Lookups of anime from the same season often run at once (追蹤 refresh).
+func (client *Client) sharedSeason(ctx context.Context, key seasonKey) ([]core.MetadataCandidate, error) {
+	client.seasonsMu.Lock()
+	fetch, found := client.seasons[key]
+	if !found {
+		if len(client.seasons) >= maxCachedSeasons {
+			for other, entry := range client.seasons {
+				if entry.finished() {
+					delete(client.seasons, other)
+				}
+			}
+		}
+		fetch = &seasonFetch{done: make(chan struct{})}
+		client.seasons[key] = fetch
+	}
+	client.seasonsMu.Unlock()
+	if found {
+		select {
+		case <-fetch.done:
+			return fetch.candidates, fetch.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	fetch.candidates, fetch.err = client.fetchSeason(ctx, key.year, key.month)
+	if fetch.err != nil {
+		// A failed fetch is not kept: the next lookup tries again.
+		client.seasonsMu.Lock()
+		delete(client.seasons, key)
+		client.seasonsMu.Unlock()
+	}
+	close(fetch.done)
+	return fetch.candidates, fetch.err
+}
+
+// seasonFetch is one season's listing, shared by the lookups that ask for it while or after it
+// is fetched. candidates and err are set before done is closed.
+type seasonFetch struct {
+	done       chan struct{}
+	candidates []core.MetadataCandidate
+	err        error
+}
+
+func (fetch *seasonFetch) finished() bool {
+	select {
+	case <-fetch.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func (client *Client) fetchSeason(ctx context.Context, year, month int) ([]core.MetadataCandidate, error) {
+	// Bangumi takes seconds per page, so the pages a season usually fills are asked for at once,
+	// and any further ones the first page's total calls for after that.
+	pages, total, err := client.browsePages(ctx, year, month, 0, browseFirstPages)
+	if err != nil {
+		return nil, err
+	}
+	if more := min(total, maxBrowseSubjects) - browseFirstPages*browsePageSize; more > 0 {
+		rest, _, err := client.browsePages(ctx, year, month, browseFirstPages, (more+browsePageSize-1)/browsePageSize)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, rest...)
+	}
+	var candidates []core.MetadataCandidate
+	for _, page := range pages {
+		for _, subject := range page {
+			// One odd entry in a list of a hundred must not hide the others; it is left out.
+			if candidate, ok := mapCandidate(subject); ok {
+				candidates = append(candidates, candidate)
+			}
+		}
+	}
+	return candidates, nil
+}
+
+// browsePages fetches count browse pages from page first on, all at once, and returns their
+// subjects in page order and the total the first of them reports. The first failure cancels
+// the other requests and is returned.
+func (client *Client) browsePages(ctx context.Context, year, month, first, count int) ([][]subjectResponse, int, error) {
+	pages := make([][]subjectResponse, count)
+	totals := make([]int, count)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var failOnce sync.Once
+	var failure error
+	fail := func(err error) {
+		failOnce.Do(func() { failure = err; cancel() })
+	}
+	var wait sync.WaitGroup
+	for index := range count {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			offset := (first + index) * browsePageSize
+			target := fmt.Sprintf("%s/v0/subjects?type=2&year=%d&month=%d&limit=%d&offset=%d", apiOrigin, year, month, browsePageSize, offset)
+			response, err := client.doRequest(ctx, http.MethodGet, target, nil, false)
+			if err != nil {
+				fail(err)
+				return
+			}
+			var page browseResponse
+			if err := decodeResponse(response.Body, &page); err != nil {
+				fail(err)
+				return
+			}
+			if len(page.Data) > browsePageSize || page.Total < 0 {
+				fail(errMetadataMalformed)
+				return
+			}
+			pages[index], totals[index] = page.Data, page.Total
+		}()
+	}
+	wait.Wait()
+	if failure != nil {
+		return nil, 0, failure
+	}
+	return pages, totals[0], nil
 }
 
 func (client *Client) Get(ctx context.Context, ref core.MetadataRef) (core.AnimeMetadata, error) {
@@ -528,6 +693,11 @@ func (response *searchResponse) UnmarshalJSON(body []byte) error {
 	return nil
 }
 
+type browseResponse struct {
+	Total int               `json:"total"`
+	Data  []subjectResponse `json:"data"`
+}
+
 type subjectResponse struct {
 	ID            json.RawMessage `json:"id"`
 	Type          *int            `json:"type"`
@@ -547,4 +717,7 @@ type subjectImages struct {
 	Common *string `json:"common"`
 }
 
-var _ core.MetadataProvider = (*Client)(nil)
+var (
+	_ core.MetadataProvider      = (*Client)(nil)
+	_ core.MetadataSeasonBrowser = (*Client)(nil)
+)

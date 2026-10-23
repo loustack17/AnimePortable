@@ -173,6 +173,21 @@ func TestBangumiAdapterAcceptance(t *testing.T) {
 	}
 }
 
+func TestBangumiSearchesTaiwanTitlesInSimplified(t *testing.T) {
+	for _, test := range []struct{ title, keyword string }{
+		{"判處勇者刑", "判处勇者刑"},
+		{"殺手旅店 第二季", "杀手旅店 第二季"},
+		{"Dr.STONE 新石紀 SCIENCE FUTURE", "Dr.STONE 新石纪 SCIENCE FUTURE"},
+		{"判处勇者刑", "判处勇者刑"},
+	} {
+		client := &fakeClient{response: jsonResponse(t, searchPayload())}
+		if _, err := newWithDo(client).Search(context.Background(), core.MetadataQuery{Title: test.title, NativeTitle: "勇者刑に処す"}); err != nil {
+			t.Fatal(err)
+		}
+		assertSearchBody(t, client.bodies[0], test.keyword)
+	}
+}
+
 func TestBangumiRequestShape(t *testing.T) {
 	searchClient := &fakeClient{response: jsonResponse(t, searchPayload())}
 	provider := newWithDo(searchClient)
@@ -183,7 +198,8 @@ func TestBangumiRequestShape(t *testing.T) {
 		t.Fatalf("search requests = %d", len(searchClient.requests))
 	}
 	assertSearchRequest(t, searchClient.requests[0])
-	assertSearchBody(t, searchClient.bodies[0], "中文標題")
+	// Bangumi's index is Simplified; the Traditional title is searched in Simplified.
+	assertSearchBody(t, searchClient.bodies[0], "中文标题")
 
 	getClient := &fakeClient{response: jsonResponse(t, validSubject())}
 	if _, err := newWithDo(getClient).Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"}); err != nil {

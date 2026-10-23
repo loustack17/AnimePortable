@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"animeportable/adapters/network/securehttp"
@@ -263,9 +264,53 @@ func parseRow(ctx context.Context, row json.RawMessage) (core.SourceAnime, bool)
 		return core.SourceAnime{}, false
 	}
 	return core.SourceAnime{
-		Ref:   core.SourceRef{Provider: providerID, ID: id},
-		Title: title,
+		Ref:     core.SourceRef{Provider: providerID, ID: id},
+		Title:   title,
+		Catalog: parseCatalogInfo(fields[2:]),
 	}, true
+}
+
+var airingSeasons = map[string]string{"冬": "winter", "春": "spring", "夏": "summer", "秋": "fall"}
+
+// parseCatalogInfo reads the row's episode range, year and season (fields 2 to 4, as in
+// `"1-12", "2026", "冬"`). Anything else, such as "連載中(16)", "1-12+OVA", "2023/2024" or
+// "冬/夏", is left unknown: a wrong hint would count against the right metadata.
+func parseCatalogInfo(fields []json.RawMessage) core.CatalogInfo {
+	text := func(index int) string {
+		var value string
+		if index >= len(fields) || len(fields[index]) > 64 || json.Unmarshal(fields[index], &value) != nil {
+			return ""
+		}
+		return strings.TrimSpace(value)
+	}
+	var info core.CatalogInfo
+	if first, last, found := strings.Cut(text(0), "-"); found {
+		from, fromOK := parseSmallNumber(first, 4)
+		to, toOK := parseSmallNumber(last, 4)
+		if fromOK && toOK && from <= to {
+			info.EpisodeCount = to - from + 1
+		}
+	}
+	if year, ok := parseSmallNumber(text(1), 4); ok && year >= 1900 && year <= 3000 {
+		info.Year = year
+	}
+	info.AiringSeason = airingSeasons[text(2)]
+	return info
+}
+
+// parseSmallNumber accepts only 1 to maxDigits ASCII digits.
+func parseSmallNumber(value string, maxDigits int) (int, bool) {
+	if value == "" || len(value) > maxDigits {
+		return 0, false
+	}
+	number := 0
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return 0, false
+		}
+		number = number*10 + int(digit-'0')
+	}
+	return number, true
 }
 
 func parseID(raw json.RawMessage) (string, bool) {
@@ -357,12 +402,45 @@ func sanitizeRequestError(err error) error {
 	return errCatalogUnavailable
 }
 
+// Anime1 sometimes leaves a page request without an answer, then answers the same request at
+// once when it is sent again: one in 30 resolver page requests stalled for the full timeout and
+// its retry took half a second (Loop 37d). pageTimeout ends such a request early and getPage
+// sends it once more, so a stall costs seconds instead of failing after the client's 30 s. The
+// retry has only the client's own timeouts, so a slow but working connection still gets its page.
+const pageTimeout = 5 * time.Second
+
+var errPageRequest = errors.New("anime1: page request could not be built")
+
+// getPage sends a GET request built by newRequest, under pageTimeout, and sends it once more,
+// without that limit, if the first attempt ran out of time while ctx is still live. Any other
+// failure is returned at once.
+func (client *Client) getPage(ctx context.Context, newRequest func(context.Context) (*http.Request, error)) (*securehttp.Response, error) {
+	for attempt := 0; ; attempt++ {
+		attemptCtx, cancel := ctx, context.CancelFunc(func() {})
+		if attempt == 0 {
+			attemptCtx, cancel = context.WithTimeout(ctx, pageTimeout)
+		}
+		request, err := newRequest(attemptCtx)
+		if err != nil {
+			cancel()
+			return nil, errPageRequest
+		}
+		response, err := client.do.Do(request)
+		cancel()
+		if err != nil && attempt == 0 && ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+			continue
+		}
+		return response, err
+	}
+}
+
 func (client *Client) fetchEpisodePage(ctx context.Context, pageURL *url.URL) ([]byte, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL.String(), nil)
-	if err != nil {
+	response, err := client.getPage(ctx, func(requestCtx context.Context) (*http.Request, error) {
+		return http.NewRequestWithContext(requestCtx, http.MethodGet, pageURL.String(), nil)
+	})
+	if errors.Is(err, errPageRequest) {
 		return nil, errEpisodesUnavailable
 	}
-	response, err := client.do.Do(request)
 	if err != nil {
 		return nil, sanitizeEpisodeRequestError(err)
 	}

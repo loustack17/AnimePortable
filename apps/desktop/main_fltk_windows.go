@@ -62,6 +62,13 @@ func main() {
 	var play func(backend.PlayRequest)
 	var player *fltkplayer.View
 	var service *backend.Service
+	// The failure log and the start timeline sit next to the database.
+	var failures *backend.FailureLog
+	var timeline *backend.StartTimeline
+	if plan.DatabasePath != "" {
+		failures = backend.NewFailureLog(filepath.Dir(plan.DatabasePath))
+		timeline = backend.NewStartTimeline(filepath.Dir(plan.DatabasePath), os.Getenv(backend.StartTimelineVariable) == "1")
+	}
 	// noticeParent is the window a message belongs over: the player while it is shown, else Home.
 	// Both live as long as the process.
 	noticeParent := func() *fltk.Window {
@@ -133,10 +140,16 @@ func main() {
 			player.SetState(state)
 		},
 	}
+	watch := &playerStartWatch{
+		after: func(delay time.Duration, run func()) func() bool { return time.AfterFunc(delay, run).Stop },
+		awake: func(update func()) { fltk.Awake(update) },
+		view:  viewGeneration.Load,
+	}
 	stop := func(destination int) {
 		generation := viewGeneration.Add(1)
 		cancelPlayback()
 		opening.stop()
+		watch.end()
 		expectedPlaybackGeneration.Store(0)
 		awaitingPlayback.Store(false)
 		playQueue.Enqueue(func() {
@@ -176,6 +189,7 @@ func main() {
 		generation := viewGeneration.Add(1)
 		cancelPlayback()
 		opening.stop()
+		watch.end()
 		expectedPlaybackGeneration.Store(0)
 		engineMu.Lock()
 		current := active
@@ -222,6 +236,12 @@ func main() {
 		}
 		endPlayback()
 	}
+	watch.fail = func() {
+		timeline.TimedOut()
+		go failures.StartTimedOut() // off the UI thread: the log writes to disk
+		endPlayback()
+		fltkhome.ShowNotice(noticeParent(), uitext.T().PlaybackFailedTitle, uitext.T().EpisodeUnavailable)
+	}
 	// Playback settings are read once per load, here, so a change on 設定 applies to the next
 	// load. A failed read keeps the last values, which start as the defaults.
 	var playbackSettingsMu sync.Mutex
@@ -257,6 +277,8 @@ func main() {
 			return
 		}
 		generation := viewGeneration.Add(1)
+		timeline.Begin()
+		watch.begin(generation)
 		operationCtx, cancelOperation := newPlaybackContext()
 		opening.stop()
 		previousGeneration := expectedPlaybackGeneration.Swap(0)
@@ -280,7 +302,9 @@ func main() {
 			}
 			actionGeneration.Store(generation)
 			loadPlaybackSettings(operationCtx)
-			if err := service.Play(operationCtx, request); err != nil {
+			err := service.Play(operationCtx, request)
+			timeline.PlayReturned(err)
+			if err != nil {
 				if generation == viewGeneration.Load() {
 					// A failed switch leaves the previous file playing; keep hearing its end and
 					// failures unless a load already replaced it.
@@ -289,6 +313,8 @@ func main() {
 				}
 				fltk.Awake(func() {
 					if generation == viewGeneration.Load() {
+						// This failure is reported here; the start watch must not report it again.
+						watch.end()
 						previous := 0
 						playing := selection()
 						for current, episode := range episodes {
@@ -392,15 +418,10 @@ func main() {
 	})
 	player.SetSpeed(playbackSettings.PlaybackSpeed)
 	player.Window().SetCallback(func() { stop(0) })
-	// The failure log sits next to the database.
-	var failures *backend.FailureLog
-	if plan.DatabasePath != "" {
-		failures = backend.NewFailureLog(filepath.Dir(plan.DatabasePath))
-	}
 	// One source for every client that needs the forward proxy; the service keeps it in step
 	// with the saved settings.
 	proxySource := forwardproxy.New()
-	service = backend.NewAtWithPlan(plan, proxySource, failures, func() (core.Player, error) {
+	service = backend.NewAtWithPlan(plan, proxySource, failures, timeline, func() (core.Player, error) {
 		return libmpv.NewPlayer(func(factoryCtx context.Context) (libmpv.Bridge, libmpv.Renderer, error) {
 			playbackSettingsMu.Lock()
 			hardwareDecoding := playbackSettings.HardwareDecoding == "enabled"
@@ -440,12 +461,27 @@ func main() {
 				if !current || generation != expectedPlaybackGeneration.Load() || !created.FailedGeneration(generation) {
 					return
 				}
+				watch.end() // the failure is reported here, once
 				state := player.State()
 				state.Playing = false
 				state.Loading = false
 				player.SetState(state)
 				go failures.PlayerFailed() // off the UI thread: the log writes to disk
 				fltkhome.ShowNotice(noticeParent(), uitext.T().PlaybackFailedTitle, uitext.T().EpisodeUnavailable)
+			})
+			created.SetStartHandler(func(generation uint64, stage fltkengine.StartStage) {
+				engineMu.Lock()
+				current := active == created
+				engineMu.Unlock()
+				if !current || generation != expectedPlaybackGeneration.Load() {
+					return
+				}
+				if stage == fltkengine.StartFileLoaded {
+					timeline.FileLoaded()
+					return
+				}
+				timeline.Playing()
+				watch.playing(viewGeneration.Load())
 			})
 			created.SetEndHandler(func(generation uint64) {
 				if ctx.Err() != nil {
@@ -464,7 +500,7 @@ func main() {
 			engineMu.Unlock()
 			fltk.Awake(func() { player.SetRenderHook(func(width, height int) { _ = created.Render(width, height) }) })
 			return created, created, nil
-		}, failures.UpstreamRejected, proxySource.Address), nil
+		}, failures.UpstreamRejected, timeline.Stream, proxySource.Address), nil
 	})
 	defer func() { _ = service.Close(); player.Close() }()
 	follow.service = service
@@ -488,6 +524,8 @@ func main() {
 	}
 	play = func(request backend.PlayRequest) {
 		generation := viewGeneration.Add(1)
+		timeline.Begin()
+		watch.begin(generation)
 		operationCtx, cancelOperation := newPlaybackContext()
 		opening.stop()
 		expectedPlaybackGeneration.Store(0)
@@ -508,7 +546,9 @@ func main() {
 			actionGeneration.Store(generation)
 			err := startPlayback(operationCtx, cancelOperation, func(playCtx context.Context) error {
 				loadPlaybackSettings(playCtx)
-				if err := service.Play(playCtx, request); err != nil {
+				err := service.Play(playCtx, request)
+				timeline.PlayReturned(err)
+				if err != nil {
 					return err
 				}
 				if generation == viewGeneration.Load() {
@@ -548,6 +588,7 @@ func main() {
 					if generation != viewGeneration.Load() {
 						return
 					}
+					watch.end() // the failure is reported here, once
 					player.Window().Hide()
 					home.Show()
 					// Shown after Home so a late Home reload cannot clear it.

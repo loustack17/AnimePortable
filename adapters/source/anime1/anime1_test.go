@@ -206,8 +206,8 @@ func TestParseCatalogFixtureExact(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := []core.SourceAnime{
-		{Ref: core.SourceRef{Provider: providerID, ID: "42"}, Title: "Alpha Show"},
-		{Ref: core.SourceRef{Provider: providerID, ID: "7"}, Title: "Beta & Gamma"},
+		{Ref: core.SourceRef{Provider: providerID, ID: "42"}, Title: "Alpha Show", Catalog: core.CatalogInfo{Year: 2026}},
+		{Ref: core.SourceRef{Provider: providerID, ID: "7"}, Title: "Beta & Gamma", Catalog: core.CatalogInfo{Year: 2025}},
 	}
 	if !reflect.DeepEqual(items, expected) {
 		t.Fatalf("items = %#v, want %#v", items, expected)
@@ -387,7 +387,7 @@ func TestSearchIsLocalCaseInsensitiveSubstringAndBlankQueryDoesNotRequest(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := []core.SourceAnime{{Ref: core.SourceRef{Provider: providerID, ID: "7"}, Title: "Beta & Gamma"}}
+	expected := []core.SourceAnime{{Ref: core.SourceRef{Provider: providerID, ID: "7"}, Title: "Beta & Gamma", Catalog: core.CatalogInfo{Year: 2025}}}
 	if !reflect.DeepEqual(items, expected) {
 		t.Fatalf("items = %#v, want %#v", items, expected)
 	}
@@ -544,6 +544,65 @@ func TestEpisodesPropagatesCancellationAndSanitizesFailures(t *testing.T) {
 	if _, err := newWithDo(&fakeClient{err: status}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); !errors.Is(err, status) {
 		t.Fatalf("secure error = %v", err)
 	}
+}
+
+func TestEpisodePageTimeoutRetriesOnce(t *testing.T) {
+	ref := core.SourceRef{Provider: providerID, ID: "42"}
+	page := episodeResponse(episodeFixture(t, "episodes-page-2.html"))
+	fake := &sequenceEpisodeClient{errors: []error{context.DeadlineExceeded}, responses: []*securehttp.Response{nil, page}}
+	if items, err := newWithDo(fake).Episodes(context.Background(), ref); err != nil || len(items) == 0 || fake.index != 2 {
+		t.Fatalf("stalled page then answer: items=%d err=%v requests=%d", len(items), err, fake.index)
+	}
+	fake = &sequenceEpisodeClient{errors: []error{context.DeadlineExceeded, context.DeadlineExceeded}}
+	if _, err := newWithDo(fake).Episodes(context.Background(), ref); err == nil || fake.index != 2 {
+		t.Fatalf("two stalls: err=%v requests=%d, want an error after 2 requests", err, fake.index)
+	}
+	status := &securehttp.Error{Kind: securehttp.KindStatus, Status: http.StatusBadGateway}
+	fake = &sequenceEpisodeClient{errors: []error{status}, responses: []*securehttp.Response{nil, page}}
+	if _, err := newWithDo(fake).Episodes(context.Background(), ref); !errors.Is(err, status) || fake.index != 1 {
+		t.Fatalf("non-timeout failure: err=%v requests=%d, want no retry", err, fake.index)
+	}
+}
+
+func TestEpisodePageRequestsCarryThePageTimeout(t *testing.T) {
+	fake := &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(episodeFixture(t, "episodes-page-2.html"))}}
+	if _, err := newWithDo(fake).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); err != nil {
+		t.Fatal(err)
+	}
+	deadline, ok := fake.requests[0].Context().Deadline()
+	if !ok || time.Until(deadline) > pageTimeout {
+		t.Fatalf("page request deadline = %v, %t; want at most %s ahead", deadline, ok, pageTimeout)
+	}
+}
+
+func TestEpisodePageRetryKeepsTheClientTimeoutsOnly(t *testing.T) {
+	var deadlines []bool
+	fake := &deadlineRecordingClient{record: func(request *http.Request) {
+		_, ok := request.Context().Deadline()
+		deadlines = append(deadlines, ok)
+	}, first: context.DeadlineExceeded, then: episodeResponse(episodeFixture(t, "episodes-page-2.html"))}
+	if _, err := newWithDo(fake).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(deadlines) != 2 || !deadlines[0] || deadlines[1] {
+		t.Fatalf("request deadlines = %v, want the first limited and the retry not", deadlines)
+	}
+}
+
+type deadlineRecordingClient struct {
+	record func(*http.Request)
+	first  error
+	then   *securehttp.Response
+	calls  int
+}
+
+func (client *deadlineRecordingClient) Do(request *http.Request) (*securehttp.Response, error) {
+	client.record(request)
+	client.calls++
+	if client.calls == 1 {
+		return nil, client.first
+	}
+	return client.then, nil
 }
 
 func TestEpisodesRejectsMalformedPagesAndDoesNotReturnPartialResults(t *testing.T) {
@@ -897,5 +956,30 @@ func TestUnsupportedMethods(t *testing.T) {
 	}
 	if _, err := client.Resolve(context.Background(), core.EpisodeRef{}); !errors.Is(err, errResolverInvalidRef) {
 		t.Fatal(err)
+	}
+}
+
+func TestCatalogRowsGiveYearSeasonAndEpisodeCountOnlyWhenClear(t *testing.T) {
+	cases := []struct {
+		row  string
+		want core.CatalogInfo
+	}{
+		{`[1785, "判處勇者刑", "1-12", "2026", "冬", ""]`, core.CatalogInfo{Year: 2026, AiringSeason: "winter", EpisodeCount: 12}},
+		{`[1841, "異獸魔都 第二季", "13-23", "2026", "春", ""]`, core.CatalogInfo{Year: 2026, AiringSeason: "spring", EpisodeCount: 11}},
+		{`[1, "a", "1-12", "2025", "夏", ""]`, core.CatalogInfo{Year: 2025, AiringSeason: "summer", EpisodeCount: 12}},
+		{`[1, "a", "1-24", "2025", "秋", ""]`, core.CatalogInfo{Year: 2025, AiringSeason: "fall", EpisodeCount: 24}},
+		{`[1983, "殺手旅店 第二季", "連載中(16)", "2026", "秋", ""]`, core.CatalogInfo{Year: 2026, AiringSeason: "fall"}},
+		{`[1, "a", "1-12+OVA", "2023/2024", "冬/夏", ""]`, core.CatalogInfo{}},
+		{`[1, "a", "劇場版", "2019", "2017秋/2018春", ""]`, core.CatalogInfo{Year: 2019}},
+		{`[1, "a", "12-1", "999", "winter", ""]`, core.CatalogInfo{}},
+		{`[1, "a", "1-12.5", "20260", "", ""]`, core.CatalogInfo{}},
+		{`[1, "a", 12, 2026, null]`, core.CatalogInfo{}},
+		{`[1, "a"]`, core.CatalogInfo{}},
+	}
+	for _, test := range cases {
+		item, ok := parseRow(context.Background(), json.RawMessage(test.row))
+		if !ok || item.Catalog != test.want {
+			t.Errorf("%s: ok=%t catalog=%+v, want %+v", test.row, ok, item.Catalog, test.want)
+		}
 	}
 }

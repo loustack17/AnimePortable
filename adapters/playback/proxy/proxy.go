@@ -53,9 +53,38 @@ type Config struct {
 	// the request goroutine, so it must return quickly and must not retain anything
 	// but the number.
 	OnUpstreamFailure func(status int)
+	// OnStream, when set, is told about every request mpv makes: refused for lack of a stream
+	// slot, upstream opened or failed, and transfer finished. It runs on the request goroutine,
+	// so it must return quickly. The event holds only numbers, never the URL or the token.
+	OnStream func(StreamEvent)
 	// Proxy, when set, names the forward proxy (host:port, or "" for direct) that upstream
 	// requests use; it is asked for every request.
 	Proxy func() string
+}
+
+type StreamOutcome uint8
+
+const (
+	// StreamBusy: refused with 503 because every stream slot was in use.
+	StreamBusy StreamOutcome = iota + 1
+	// StreamOpened: the upstream answered and its response is being sent to mpv.
+	StreamOpened
+	// StreamFailed: the upstream open failed or its response was rejected; mpv got 502.
+	StreamFailed
+	// StreamFinished: a transfer that was opened has ended.
+	StreamFinished
+)
+
+// StreamEvent describes one mpv request. RangeStart is the first requested byte (-1 for
+// none or a suffix range). Status is the upstream HTTP status, 0 when none arrived. Elapsed
+// runs from the request's arrival to the upstream headers (opened, failed) or to the end
+// of the transfer (finished). Bytes is the body size sent to mpv (finished only).
+type StreamEvent struct {
+	Outcome    StreamOutcome
+	RangeStart int64
+	Status     int
+	Elapsed    time.Duration
+	Bytes      int64
 }
 
 type remoteClient interface {
@@ -567,12 +596,24 @@ func (server *Server) serveSession(writer http.ResponseWriter, request *http.Req
 		writer.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 		return
 	}
+	arrived := server.deps.now()
+	rangeStart := int64(-1)
+	if rangeRequested && rangeSpec.kind != rangeSuffix {
+		rangeStart = rangeSpec.start
+	}
+	report := func(outcome StreamOutcome, status int, bytes int64) {
+		if observer := server.config.OnStream; observer != nil {
+			observer(StreamEvent{Outcome: outcome, RangeStart: rangeStart, Status: status, Elapsed: server.deps.now().Sub(arrived), Bytes: bytes})
+		}
+	}
 	if !tryAcquire(server.streams) {
+		report(StreamBusy, 0, 0)
 		writer.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 	if !tryAcquire(session.streams) {
 		release(server.streams)
+		report(StreamBusy, 0, 0)
 		writer.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
@@ -605,6 +646,7 @@ func (server *Server) serveSession(writer http.ResponseWriter, request *http.Req
 		// mpv aborts ranges while seeking or stopping; that is not an upstream rejection.
 		if ctx.Err() == nil && !isCanceled(err) {
 			server.upstreamFailed(0)
+			report(StreamFailed, 0, 0)
 		}
 		writer.WriteHeader(http.StatusBadGateway)
 		return
@@ -620,25 +662,30 @@ func (server *Server) serveSession(writer http.ResponseWriter, request *http.Req
 			writer.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 			return
 		}
-		server.upstreamFailed(response.StatusCode)
-		writer.WriteHeader(http.StatusBadGateway)
+		server.rejectUpstream(writer, response.StatusCode, report)
 		return
 	}
 	if !validStatusAndRange(response, rangeSpec, rangeRequested) || !validVideoType(response.Header.Get("Content-Type")) || !validContentEncoding(response.Header) {
-		server.upstreamFailed(response.StatusCode)
-		writer.WriteHeader(http.StatusBadGateway)
+		server.rejectUpstream(writer, response.StatusCode, report)
 		return
 	}
 	if !copyResponseHeaders(writer.Header(), response, rangeRequested) {
-		server.upstreamFailed(response.StatusCode)
-		writer.WriteHeader(http.StatusBadGateway)
+		server.rejectUpstream(writer, response.StatusCode, report)
 		return
 	}
+	report(StreamOpened, response.StatusCode, 0)
 	writer.WriteHeader(response.StatusCode)
 	if request.Method == http.MethodHead {
 		return
 	}
-	_, _ = io.Copy(writer, body)
+	sent, _ := io.Copy(writer, body)
+	report(StreamFinished, response.StatusCode, sent)
+}
+
+func (server *Server) rejectUpstream(writer http.ResponseWriter, status int, report func(StreamOutcome, int, int64)) {
+	server.upstreamFailed(status)
+	report(StreamFailed, status, 0)
+	writer.WriteHeader(http.StatusBadGateway)
 }
 
 func isCanceled(err error) bool {

@@ -158,6 +158,47 @@ func TestEngineDoesNotReportEndOfReplacedOrFailedLoads(t *testing.T) {
 	}
 }
 
+func TestEngineReportsStartStagesOncePerLoadIncludingPausedLoads(t *testing.T) {
+	fixture := newEndFixture(t)
+	type start struct {
+		generation uint64
+		stage      fltkengine.StartStage
+	}
+	var starts []start
+	fixture.engine.SetStartHandler(func(generation uint64, stage fltkengine.StartStage) {
+		starts = append(starts, start{generation, stage})
+	})
+	reached := func(generation uint64) bool {
+		return slices.Contains(starts, start{generation, fltkengine.StartPlaying})
+	}
+
+	fixture.load(fixture.media, 0, 1)
+	if !pumpUntil(t, endWait, func() bool { return reached(1) }) {
+		t.Fatalf("playing load never started; starts=%v", starts)
+	}
+	// A seek restarts playback in mpv; it is not a new start.
+	if err := pumpFLTKError(t, 10*time.Second, func() error { return fixture.engine.Control(context.Background(), "seek", 5) }); err != nil {
+		t.Fatal(err)
+	}
+	fltkWaitFor(2 * time.Second)
+
+	// Autoplay loads the next episode paused; that start must be reported too.
+	fixture.loadWithPause(fixture.media, 10*time.Second, true, 2)
+	if !pumpUntil(t, endWait, func() bool { return reached(2) }) {
+		t.Fatalf("paused load never reported its start; starts=%v", starts)
+	}
+
+	fixture.load(filepath.Join(t.TempDir(), "missing.mp4"), 0, 3)
+	if !pumpUntil(t, endWait, func() bool { return fixture.engine.FailedGeneration(3) }) {
+		t.Fatal("loading a missing file never failed")
+	}
+	fltkWaitFor(2 * time.Second)
+	want := []start{{1, fltkengine.StartFileLoaded}, {1, fltkengine.StartPlaying}, {2, fltkengine.StartFileLoaded}, {2, fltkengine.StartPlaying}}
+	if !slices.Equal(starts, want) {
+		t.Fatalf("starts = %v, want %v", starts, want)
+	}
+}
+
 func TestEnginePausedLoadWaitsAtItsStartAndTheNextLoadPlays(t *testing.T) {
 	fixture := newEndFixture(t)
 	const start = 10 * time.Second

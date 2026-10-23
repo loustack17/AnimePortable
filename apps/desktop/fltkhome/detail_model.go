@@ -12,6 +12,8 @@ type detailModel struct {
 	history  map[string]backend.History
 	selected int
 	page     int
+	// refreshed is set once Anime1's list arrived (or failed) for this anime.
+	refreshed bool
 }
 
 func (model *detailModel) open(animeID string) {
@@ -20,6 +22,28 @@ func (model *detailModel) open(animeID string) {
 	model.history = nil
 	model.selected = 0
 	model.page = 0
+	model.refreshed = false
+}
+
+// applyStored shows the stored list while Anime1's answer is still on its way. It reports
+// whether the list changed; it never replaces a list Anime1 already gave.
+func (model *detailModel) applyStored(episodes []backend.Episode) bool {
+	if model.refreshed || len(episodes) == 0 {
+		return false
+	}
+	model.setEpisodes(episodes)
+	return true
+}
+
+// applyRefresh takes Anime1's answer. It reports whether the page has no list to offer: a
+// failed refresh keeps a stored list shown, because its episodes still play.
+func (model *detailModel) applyRefresh(episodes []backend.Episode, err error) (failed bool) {
+	model.refreshed = true
+	if err != nil {
+		return len(model.episodes) == 0
+	}
+	model.setEpisodes(episodes)
+	return false
 }
 
 func (model *detailModel) close() {

@@ -59,9 +59,10 @@ type Player struct {
 
 // NewPlayer builds a Player. onUpstreamFailure (nil allowed) receives the upstream HTTP
 // status (0 when unknown) of every response the playback proxy rejects; it must return quickly.
+// onStream (nil allowed) receives every playback proxy stream event; it must return quickly.
 // forwardProxy (nil allowed) names the forward proxy for the player's upstream requests.
-func NewPlayer(factory Factory, onUpstreamFailure func(status int), forwardProxy func() string) *Player {
-	config := proxy.Config{OnUpstreamFailure: onUpstreamFailure, Proxy: forwardProxy}
+func NewPlayer(factory Factory, onUpstreamFailure func(status int), onStream func(proxy.StreamEvent), forwardProxy func() string) *Player {
+	config := proxy.Config{OnUpstreamFailure: onUpstreamFailure, OnStream: onStream, Proxy: forwardProxy}
 	return &Player{factory: factory, newProxy: func() (proxyService, error) {
 		server, err := proxy.New(config)
 		if err != nil {

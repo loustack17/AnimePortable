@@ -154,7 +154,7 @@ func normalizeMetadataSeason(value string) (string, bool) {
 }
 
 func normalizeMetadataText(value string) string {
-	value = foldToSimplified(strings.ToLower(value))
+	value = FoldToSimplified(strings.ToLower(value))
 	var normalized strings.Builder
 	space := false
 	for _, character := range value {

@@ -169,6 +169,30 @@ func TestPlayerFailureIsAttributedToRecentProxyRejection(t *testing.T) {
 	}
 }
 
+func TestStartTimeoutCarriesARecentProxyRejection(t *testing.T) {
+	directory := t.TempDir()
+	log := NewFailureLog(directory)
+	now := time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC)
+	log.now = func() time.Time { return now }
+	log.StartTimedOut() // nothing rejected
+	log.UpstreamRejected(502)
+	log.StartTimedOut() // proxy said 502 during the start
+	log.StartTimedOut() // consumed
+	log.UpstreamRejected(503)
+	now = now.Add(2 * upstreamFailureWindow)
+	log.StartTimedOut() // stale rejection
+	want := []string{"start_timeout - timeout", "start_timeout 502 timeout", "start_timeout - timeout", "start_timeout - timeout"}
+	lines := readFailureLines(t, directory)
+	if len(lines) != len(want) {
+		t.Fatalf("lines = %q", lines)
+	}
+	for index := range want {
+		if !strings.HasSuffix(lines[index], " "+want[index]) {
+			t.Errorf("line %d = %q want suffix %q", index, lines[index], want[index])
+		}
+	}
+}
+
 func TestNilFailureLogIsNoOp(t *testing.T) {
 	var log *FailureLog
 	log.record(stageOther, 0, categoryUnknown)
@@ -176,11 +200,12 @@ func TestNilFailureLogIsNoOp(t *testing.T) {
 	log.beginAttempt()
 	log.UpstreamRejected(502)
 	log.PlayerFailed()
+	log.StartTimedOut()
 }
 
 func TestStageSourceTagsResolveErrors(t *testing.T) {
 	cause := &securehttp.Error{Kind: securehttp.KindStatus, Status: 502}
-	source := stageSource{failingSource{err: cause}}
+	source := stageSource{AnimeSource: failingSource{err: cause}}
 	_, err := source.Resolve(context.Background(), core.EpisodeRef{})
 	var tagged *stageError
 	if !errors.As(err, &tagged) || tagged.stage != stageResolve || !errors.Is(err, cause) {

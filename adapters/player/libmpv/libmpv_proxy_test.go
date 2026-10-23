@@ -20,7 +20,7 @@ const proxySessionLimit = 64
 func TestEpisodeSwitchesDoNotLeakProxySessions(t *testing.T) {
 	baseline := runtime.NumGoroutine()
 	bridge := newFakeBridge()
-	player := NewPlayer(func(context.Context) (Bridge, Renderer, error) { return bridge, &fakeRenderer{}, nil }, nil, nil)
+	player := NewPlayer(func(context.Context) (Bridge, Renderer, error) { return bridge, &fakeRenderer{}, nil }, nil, nil, nil)
 	ctx := context.Background()
 	// The proxy accepts any https source; nothing is fetched until the bridge opens the URL.
 	request := func(index int) core.PlayRequest {

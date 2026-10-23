@@ -8,6 +8,16 @@ type SourceAnime struct {
 	Ref         SourceRef
 	Title       string
 	NativeTitle string
+	Catalog     CatalogInfo
+}
+
+// CatalogInfo is what the source catalog says about when an anime aired and how long it is.
+// Each field is zero when the catalog leaves it unknown or unclear.
+type CatalogInfo struct {
+	Year int
+	// AiringSeason is the season it began airing: "winter", "spring", "summer" or "fall".
+	AiringSeason string
+	EpisodeCount int
 }
 
 type SourceEpisode struct {

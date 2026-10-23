@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -621,6 +622,39 @@ func TestEpisodesFallsBackToTheNextPersistedSourceRef(t *testing.T) {
 	mappings := store.mappings["anime"]
 	if len(mappings) != 1 || mappings[0].Ref.Anime != second {
 		t.Fatalf("episode mapping = %#v, want fallback source", mappings)
+	}
+}
+
+func TestStoredEpisodesComeFromLocalDataInOrder(t *testing.T) {
+	store := newFakeStore()
+	store.anime["anime"] = core.Anime{ID: "anime", Title: "Anime"}
+	ref := core.SourceRef{Provider: "anime1", ID: "1"}
+	store.refs["anime"] = []core.SourceRef{ref}
+	for _, mapping := range []core.EpisodeMapping{
+		{AnimeID: "anime", EpisodeID: "episode:b", Ref: core.EpisodeRef{Anime: ref, ID: "2"}, Number: "10"},
+		{AnimeID: "anime", EpisodeID: "episode:a", Ref: core.EpisodeRef{Anime: ref, ID: "1"}, Number: "02"},
+		// Stored before numbers were kept: left out until a refresh fills it.
+		{AnimeID: "anime", EpisodeID: "episode:c", Ref: core.EpisodeRef{Anime: ref, ID: "3"}},
+	} {
+		store.mappings["anime"] = append(store.mappings["anime"], mapping)
+	}
+	// Any source call fails the test: the stored list must never wait on Anime1.
+	source := &fallbackEpisodeSource{first: core.SourceRef{Provider: "unused"}, second: core.SourceRef{Provider: "unused"}}
+	service := newWithDependencies(dependencies{store: store, source: source})
+	t.Cleanup(func() { _ = service.Close() })
+	episodes, err := service.StoredEpisodes(context.Background(), "anime")
+	want := []Episode{{ID: "episode:a", AnimeID: "anime", Number: "02"}, {ID: "episode:b", AnimeID: "anime", Number: "10"}}
+	if err != nil || !reflect.DeepEqual(episodes, want) {
+		t.Fatalf("stored episodes = %#v, %v; want %#v", episodes, err, want)
+	}
+	if source.firstCalls != 0 || source.secondCalls != 0 {
+		t.Fatalf("source calls = %d, %d; want none", source.firstCalls, source.secondCalls)
+	}
+	if episodes, err := service.StoredEpisodes(context.Background(), "never-loaded"); err != nil || len(episodes) != 0 {
+		t.Fatalf("anime without a stored list = %#v, %v", episodes, err)
+	}
+	if _, err := service.StoredEpisodes(context.Background(), ""); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty id = %v", err)
 	}
 }
 
