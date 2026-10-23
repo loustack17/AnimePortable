@@ -1,0 +1,2 @@
+// The executable's icon; Explorer and the taskbar use the first icon group.
+1 ICON "icon.ico"

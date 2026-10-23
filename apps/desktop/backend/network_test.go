@@ -5,6 +5,8 @@ package backend
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 	"testing"
 
 	"animeportable/adapters/network/forwardproxy"
@@ -28,16 +30,37 @@ func updateService(source releaseSource) *Service {
 	return newWithDependencies(dependencies{store: newFakeStore(), source: &fakeSource{}, updates: source})
 }
 
+// raisedVersion is this build's version with the minor (part 1) or patch (part 2) number raised,
+// so the newer cases stay newer after every release bump.
+func raisedVersion(t *testing.T, part int) string {
+	t.Helper()
+	numbers, stage, hasStage := strings.Cut(release.Version, "-")
+	parts := strings.Split(numbers, ".")
+	value, err := strconv.Atoi(parts[part])
+	if len(parts) != 3 || err != nil {
+		t.Fatalf("version %q", release.Version)
+	}
+	parts[part] = strconv.Itoa(value + 1)
+	if part == 1 {
+		parts[2] = "0"
+	}
+	if hasStage {
+		return strings.Join(parts, ".") + "-" + stage
+	}
+	return strings.Join(parts, ".")
+}
+
 func TestCheckForUpdateComparesWithThisBuild(t *testing.T) {
 	page := "https://github.com/loustack17/AnimePortable/releases/tag/"
+	newerMinor, newerPatch := raisedVersion(t, 1), raisedVersion(t, 2)
 	tests := []struct {
 		name  string
 		fake  fakeReleases
 		want  UpdateInfo
 		wantE error
 	}{
-		{"newer minor", fakeReleases{release: github.Release{Tag: "v0.4.0-alpha", URL: page + "v0.4.0-alpha"}, found: true}, UpdateInfo{Current: release.Version, Latest: "0.4.0-alpha", Newer: true, URL: page + "v0.4.0-alpha"}, nil},
-		{"newer patch", fakeReleases{release: github.Release{Tag: "v0.3.1-alpha"}, found: true}, UpdateInfo{Current: release.Version, Latest: "0.3.1-alpha", Newer: true}, nil},
+		{"newer minor", fakeReleases{release: github.Release{Tag: "v" + newerMinor, URL: page + "v" + newerMinor}, found: true}, UpdateInfo{Current: release.Version, Latest: newerMinor, Newer: true, URL: page + "v" + newerMinor}, nil},
+		{"newer patch", fakeReleases{release: github.Release{Tag: "v" + newerPatch}, found: true}, UpdateInfo{Current: release.Version, Latest: newerPatch, Newer: true}, nil},
 		{"same", fakeReleases{release: github.Release{Tag: "v" + release.Version, URL: page + "v" + release.Version}, found: true}, UpdateInfo{Current: release.Version, Latest: release.Version, URL: page + "v" + release.Version}, nil},
 		{"older", fakeReleases{release: github.Release{Tag: "v0.1.0-alpha.2"}, found: true}, UpdateInfo{Current: release.Version, Latest: "0.1.0-alpha.2"}, nil},
 		{"none published", fakeReleases{}, UpdateInfo{Current: release.Version}, nil},

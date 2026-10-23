@@ -60,3 +60,9 @@ Detecting openings from audio; endings, recaps and previews; submitting timestam
 - Console check: `objdump -p` reads subsystem 2 (Windows GUI) for a `-H windowsgui` build and 3 (console) without it, so the new CI check catches both.
 - Test build 1: `artifacts/test-build/AnimePortable.exe` (EXE SHA-256 `AE649369…2059`, Windows GUI subsystem; libmpv DLL matches the pin; data backed up to `artifacts/evidence/loop37c/data-backup-before-build-1/`).
 - Owner check 1 (2026-10-22, test build 1): "Owner check 1 passed：跳過片頭和沒有黑色視窗都正常。" TypeSafe owner-report HUMAN_PASS (conf 1.00, `owner-report-1.json`).
+
+## Release v0.4.0-beta (owner, 2026-10-22)
+
+- Release commit d81b995 failed CI 39879500545: `TestCheckForUpdateComparesWithThisBuild` hard-coded tags newer than 0.3.0-alpha, so the bump to 0.4.0-beta made them older (only `internal/release` was run locally before the push). The test now raises the current version's minor and patch, so it stays valid after every bump; the checks are unchanged.
+- Owner, before tagging: beta needs an icon (Explorer showed a default one); the owner supplied the image. `apps/desktop/appicon`: the white background removed, squared; `icon.ico` (16-256) linked into the exe through `rsrc_windows_amd64.syso` (`make_syso.ps1`, MinGW windres); 16/32/48 px PNGs set on the Home, player and dialog windows (`Window.SetIcons`). Test checks every size loads. Windows extracts the icon from test build 2.
+- Test build 2: EXE SHA-256 `C627BC70…9977` (Windows GUI, `.rsrc` present); data backed up to `data-backup-before-build-2/`. Owner: "Test build 2 圖示正常。" Full native suite and ``-race`` green (``native-suite-3.txt``, ``race-2.txt``); simplify: no change.

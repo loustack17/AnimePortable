@@ -10,6 +10,7 @@ import (
 	"time"
 	"unsafe"
 
+	"animeportable/apps/desktop/appicon"
 	"animeportable/apps/desktop/uitext"
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -125,6 +126,7 @@ func NewWindow(callbacks Callbacks) *View {
 	// After the fonts: the 跳過片頭 width is measured in the bold one.
 	view.updateLabelBuffers()
 	view.window = fltk.NewWindow(1000, 618, "AnimePortable")
+	appicon.Set(view.window)
 	// Narrower, the speed button would meet the time label.
 	view.window.SetSizeRange(playerMinWidth, playerMinHeight, 0, 0, 0, 0, false)
 	view.window.Begin()

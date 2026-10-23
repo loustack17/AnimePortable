@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"animeportable/apps/desktop/appicon"
 	"animeportable/apps/desktop/uitext"
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -183,6 +184,7 @@ func newDialog(parent *fltk.Window, title, message string, dark bool, labels ...
 	y := max(workY, min(workY+workH-d.height, centerY-d.height/2))
 	leaveOpenGroups(parent)
 	d.window = fltk.NewWindowWithPosition(x, y, d.width, d.height, title)
+	appicon.Set(d.window)
 	d.window.SetColor(d.colors().background)
 	d.window.Begin()
 	d.card = fltk.NewBox(fltk.NO_BOX, 0, 0, d.width, d.height, "")
