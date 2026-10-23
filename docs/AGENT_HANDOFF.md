@@ -7,13 +7,13 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: OWNER_CHECK
+status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  Loop 37d (owner request 2026-10-22; docs/loops/LOOP37D.md) built, uncommitted in worktree dazzling-swanson-161792; waiting for the owner check of artifacts/test-build (EXE C1184A88…B501). Then: owner approval to commit and push, CI, close the loop.
-  Delivered: detail page shows the stored episode list at once (backend action StoredEpisodes, owner-approved 2026-10-23); Anime1 page requests 5 s + one retry with client timeouts; 20 s start watch; start timeline (ANIMEPORTABLE_START_TIMELINE=1); migration 0011 (anime catalog year/season/count); synopsis matching: Simplified Bangumi search, season browse fallback (shared per season), year/count hints, three narrow name rules. Eval 193 hits / 0 wrong / 3 misses over the owner's 228 anime (135 before).
-  Checks: gofmt, vet, full suite and -race pass (window tests owner-approved 2026-10-23; one settings-scroll window test flaked once, passes alone: artifacts/evidence/loop37d/flaky-settings-scroll.txt). Oracle review: 1 MUST_FIX fixed, re-review no MUST_FIX.  Never drive the owner's desktop to investigate (owner 2026-10-22); reproduce headlessly.
+  None. Loop 37d (Reliable starts and more synopses) passed on 2026-10-23 (docs/loops/LOOP37D.md; de3c9ed; CI 39917415783 green): stored episode list first (backend action StoredEpisodes), Anime1 page timeout + retry, 20 s start check, migration 0011, synopsis matching 193/228 with 0 wrong.
+  Release v0.4.1-beta (patch, owner request 2026-10-23) in progress: release commit pushed to main; tag after its CI is green; then check the published ZIP.
+  Loop 37c (Skip the opening) passed 2026-10-22; v0.4.0-beta published 2026-10-22. Next loop: 38 (hardening and release, v1.0.0); needs owner approval to start.  Never drive the owner's desktop to investigate (owner 2026-10-22); reproduce headlessly.
   Loop 37c (Skip the opening) passed on 2026-10-22 (docs/loops/LOOP37C.md; af53275; CI 39877272016 green): AniSkip 跳過片頭, new action OpeningTimes, builds with -H windowsgui (no console window).
   Pre-release v0.4.0-beta published 2026-10-22 (tag on 2caceaa; CI 39880655456; release job 39880999897): 37b, 37c, app icon (apps/desktop/appicon, rsrc_windows_amd64.syso), no console. Owner to try it.
   Loop 37b (Language) passed on 2026-10-22 (docs/loops/LOOP37B.md; 17d13be; CI 39845099717 green): live switch, uitext table, migration 0010.
@@ -22,7 +22,7 @@ active_work: >
   Next loop: 38 (hardening and release, v1.0.0); needs owner approval to start.
 active_acceptance: none
 next_actions:
-  - Migrations 0007-0010 are applied to the owner's test data; never edit them.
+  - Migrations 0007-0011 are applied to the owner's test data; never edit them.
   - New UI text goes into apps/desktop/uitext (all three languages); a fixed label uses labelled, a status a localText, so a live language switch reaches it.
   - A new FLTK window outside fltkhome newDialog must close leaked groups at the source (see LOOP37 final review).
   - Build exes with -ldflags "-H windowsgui" (test builds too); CI fails on a console-subsystem exe.

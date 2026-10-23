@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-37, 37b and 37c are complete. Loops 37d and 38 remain. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-37, 37b, 37c and 37d are complete. Loop 38 remains. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux, then macOS (see "After the MVP").
 
@@ -53,10 +53,11 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 | 37 | Settings: a 設定 page (theme 跟隨系統/暗色/明亮, 自動下一集, 自動播放, resume, hardware decoding, proxy with 測試連線, 檢查更新 and GitHub link, data folder location with restart), a remembered speed button in the player, app-styled dialogs. |
 | 37b | Language: 語言 繁體中文 / English / 日本語 switches every screen at once and is saved; one string table for all UI text. |
 | 37c | Skip the opening: 跳過片頭 (and S) only during the opening, times from AniSkip by MyAnimeList id (AniList, kept in memory); builds open no console window. |
+| 37d | Reliable starts and more synopses: the detail page shows the stored episode list at once; Anime1 page timeout and retry; a 20 s start check; Simplified Bangumi search, Anime1 year and episode count as hints, season lists and narrow name rules (193 of the owner's 228 anime matched, 0 wrong). |
 
 ## Remaining loops
 
-Two loops remain, run in this order. The owner changed the plan on 2026-10-14:
+One loop remains. The owner changed the plan on 2026-10-14:
 
 - Following and History now come before Schedule, because they build on the finished detail and playback work.
 - The former Loops 38 to 42 (security, resources, cross-platform, release, final acceptance) are now one Windows loop, Loop 38.
@@ -66,12 +67,6 @@ On 2026-10-22 the owner split autoplay into two settings (自動下一集, 自�
 On 2026-10-22, after trying v0.4.0-beta, the owner added a reliability loop before Loop 38: Loop 37d.
 
 Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.md) true.
-
-### Loop 37d - Reliable starts and more synopses
-
-- Goal: Episodes start quickly and never hang silently; more anime get a correct synopsis, with no wrong one.
-- In scope: a debug-only start timeline and 25+ measured starts, a 20 s start watchdog, small fixes chosen from that evidence (bounded upstream retry, stream-slot wait, mpv timeouts, resolver retry); Anime1 year, season and episode count fed into metadata matching, an offline evaluation set, then season browse and normalization only where the set shows no wrong match. Plan and done-when: [loops/LOOP37D.md](loops/LOOP37D.md).
-- Out of scope: matcher thresholds, settings or UI changes, Loop 38 hardening.
 
 ### Loop 38 - Hardening and release (Windows MVP)
 

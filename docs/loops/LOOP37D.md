@@ -2,7 +2,7 @@
 
 # Loop 37d: Reliable starts and more synopses
 
-Status: OWNER CHECK PASSED 2026-10-23 (owner: "all owner-check steps pass"; TypeSafe owner-report HUMAN_PASS 0.97). Awaiting commit and push approval, then CI. Owner request 2026-10-22, before Loop 38. Plan approved by the owner 2026-10-22 as written, including migration 0011 and the bounded upstream retry if the evidence supports it. Named 37d because Loop 37c (Skip the opening) is already PASS.
+Status: PASS (owner accepted 2026-10-23: "all owner-check steps pass"; TypeSafe owner-report HUMAN_PASS 0.97). Commit de3c9ed; GitHub Windows CI 39917415783 green. Owner request 2026-10-22, before Loop 38. Plan approved by the owner 2026-10-22 as written, including migration 0011 and the bounded upstream retry if the evidence supports it. Named 37d because Loop 37c (Skip the opening) is already PASS.
 
 ## Goal
 
