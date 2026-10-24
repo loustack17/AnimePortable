@@ -107,6 +107,18 @@ func TestOpenDoesNotLoadOnHashMismatch(t *testing.T) {
 	}
 }
 
+func TestOpenDoesNotLoadAMissingLibrary(t *testing.T) {
+	path, digest := tempDLL(t)
+	missing := filepath.Join(filepath.Dir(path), "missing.dll")
+	loader := &fakeModuleLoader{}
+	if _, err := openLibrary(missing, digest, loader); !errors.Is(err, ErrInvalidLibrary) || strings.Contains(err.Error(), missing) {
+		t.Fatalf("missing library returned %v", err)
+	}
+	if loader.loadCount != 0 {
+		t.Fatalf("missing library reached the loader %d times", loader.loadCount)
+	}
+}
+
 func TestOpenKeepsVerifiedFileLockedDuringLoad(t *testing.T) {
 	path, digest := tempDLL(t)
 	loader := &fakeModuleLoader{missing: "mpv_render_context_free"}

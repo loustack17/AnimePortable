@@ -1,0 +1,184 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
+# Loop 38: Hardening and release (Windows MVP)
+
+Status: 38a committed (not pushed); 38b not started. Owner approved starting Loop 38 on 2026-10-23 and asked for it to be split into stages; stage plan approved 2026-10-23 ("I approve the Loop 38 stage plan as written. Start stage 38a."; TypeSafe owner-report HUMAN_PASS 0.42, adjudicated: explicit approval). Base: origin/main 9e68e48.
+
+## Goal
+
+Publish v1.0.0 as a full GitHub Release: a CI-built ZIP that runs after extraction, after a security pass and a resource pass with no open MUST_FIX finding (roadmap Loop 38).
+
+## Scope
+
+Three stages, in order:
+
+- 38a: check the 20 boundaries in the 38a table against 03_SECURITY.md; fix MUST_FIX findings.
+- 38b: measure goroutines, Go heap and private bytes over 200 cycles of five scenarios; fix leaks.
+- 38c: release notes, version 1.0.0, READMEs, release-job flag, tag and publish, ZIP check.
+
+Out of scope: new features, new settings, screens or backend actions, installers, Linux, macOS, the 2.0 plan (Loops 39-46), the deferred OneAnime resource comparison (ADR-023), libmpv licensing (ADR-023).
+
+Each stage ends with a report to the owner. The next stage starts only after the owner approves. Every stage ends with a handoff checkpoint.
+
+## Common checks (every stage that changes code)
+
+- Every fix has a test that fails without it.
+- `gofmt -l .` empty; `go mod verify`; `go vet ./...`.
+- `go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...` (the version CI pins in `.github/workflows/ci.yml`).
+- Full native suite with an msvcrt MinGW gcc on PATH: `CGO_ENABLED=1 go test -count=1 ./...`, then `CGO_ENABLED=1 go test -race -count=1 ./...`. Window and real-libmpv tests run only after the owner says the PC is free.
+- simplify pass over every changed file, tests rerun.
+- Independent read-only oracle review with no open MUST_FIX; triage with TypeSafe `review-triage.json`.
+- Test build only in `artifacts/test-build/` (exe built with `-ldflags "-H windowsgui"`, pinned DLL, notice, existing `data/` kept).
+- Commit and push only after owner approval; confirm GitHub Windows CI for the pushed commit.
+
+## 38a: Security pass
+
+### Boundaries checked
+
+Each row is checked against its rule in [03_SECURITY.md](../03_SECURITY.md) with a named test or code reference, recorded in the result table below. Rows 7-20 were added after the original six-row table.
+
+| # | Boundary | Rules to verify |
+| --- | --- | --- |
+| 1 | Internet -> Go backend (`adapters/network/securehttp`) | one client; HTTPS only, scheme allowlist; TLS verify, no `InsecureSkipVerify`; timeouts; bounded bodies; bodies closed; no unmanaged `http.Client` or `http.DefaultClient` anywhere outside it |
+| 2 | Go backend -> FLTK UI (`apps/desktop/backend`, `fltkhome`) | typed actions only (fixed allowlist in `main_test.go`); no URLs, tokens, cookies, raw HTML or stack traces in results |
+| 3 | Backend -> loopback proxy (`adapters/playback/proxy`) | loopback bind only; token entropy; session invalidated on close/switch; stream caps; no credentials in errors |
+| 4 | Proxy -> libmpv | libmpv gets only the loopback session URL; no headers or cookies passed; empty `http_proxy`; `config=no`; mpv `log-file` off |
+| 5 | libmpv DLL pin and loader (`internal/runtimepin`, `adapters/player/libmpv`, `fltkengine`) | absolute path; hash verified on a held, non-write-shareable handle; reparse points and non-regular files rejected; dependency search limited; override pair `ANIMEPORTABLE_LIBMPV_OVERRIDE`/`_SHA256` gets the same checks; missing or altered DLL leaves Home usable |
+| 6 | SQLite (`adapters/persistence/sqlite`) | absolute path; regular file, `nofollow`; no secrets in any table; migration checksums |
+| 7 | Anime1 resolver and cookies (`adapters/source/anime1`) | origin allowlist; cookies and signed URLs in memory only; parser-only HTML extraction; page timeout and retry bounded |
+| 8 | Playback CDN origins | HTTPS, public IP, redirect revalidation, expected media response, fail closed |
+| 9 | Redirects | every hop rechecked (scheme, host, resolve, SSRF); sensitive headers not forwarded across origins |
+| 10 | SSRF and DNS rebinding | dial-time IP check of the connected address; blocked ranges as listed |
+| 11 | Forward proxy (`adapters/network/forwardproxy`) | CONNECT only; TLS to the original host; manual address syntax; only that host:port exempt; WinINet read-only parse; proxy address never logged |
+| 12 | Metadata providers (AniList, Bangumi) | origin allowlist; bounded plain text; cached metadata rechecked on read |
+| 13 | AniSkip (`adapters/metadata/aniskip`) | only MAL id, episode, length sent; 64 KiB / 20 results; value checks; nothing logged; no response text in UI |
+| 14 | GitHub update check (`adapters/update/github`) | user-triggered only; GitHub API origin; bounded body; never downloads or runs; release page opened only from a fixed origin/path pattern |
+| 15 | Cover images (`adapters/metadata/cover`) | fixed origins; status 200; JPEG/PNG with agreeing MIME, signature, decoder; 4 MiB; pixel limits before decode; 4 concurrent |
+| 16 | Failure log and start timeline (`apps/desktop/backend/failurelog.go`, `timeline.go`) | fixed vocabulary; no URLs, tokens, cookies, titles, ids, proxy address; timeline off unless `ANIMEPORTABLE_START_TIMELINE=1`; size bound |
+| 17 | Portable data folder and its relocation setting | `<folder>/data` default; relocation never silently moves or deletes data; path validation; no elevated rights |
+| 18 | Other environment variables read by the shipped exe | every `ANIMEPORTABLE_*` variable read outside `_test.go` listed, and each one either harmless or covered above |
+| 19 | `-H windowsgui` build and process | GUI subsystem enforced by CI; no admin manifest; no console; restart path does not pass secrets on the command line |
+| 20 | Supply chain | `go mod verify`; govulncheck clean or each finding classified; libmpv archive SHA-256 pinned in the release job; `THIRD_PARTY_NOTICES.md` current |
+
+### Method
+
+1. Explorer agents map each row to its code and existing tests (read-only).
+2. Root agent checks each rule with a test name or `file:line`. A rule with no test and no clear code evidence gets a test.
+3. govulncheck and `go mod verify`, output saved to `artifacts/evidence/loop38/38a/`.
+4. Independent review: an oracle agent and a security-auditor agent, read-only, each given the boundary table and the whole tree. Their findings are merged and triaged with TypeSafe.
+5. Classification: MUST_FIX (a rule in 03_SECURITY.md is broken or a secret can leak), SHOULD_FIX (defence weaker than the doc says but no rule broken), NOTE (stale doc, residual risk already accepted). MUST_FIX gets the smallest causal fix and a test. SHOULD_FIX is fixed in 38a only if small and inside scope; otherwise listed for the owner. A fix that would change security policy goes to the owner first.
+6. 03_SECURITY.md updated where it is stale (for example the six-row boundary table), with no change of meaning unless the owner approves.
+
+### Done when
+
+- Every row above has a recorded verdict with evidence.
+- govulncheck shows no reachable vulnerability (or each is classified and accepted by the owner).
+- No open MUST_FIX; reviewers' findings and their dispositions recorded below.
+- Common checks pass. Commit after owner approval.
+
+## 38b: Resource pass
+
+### Harness
+
+A repeatable Go test harness (build tag `resourcepass`, so the normal suite is unchanged), run headless: no FLTK window, no screenshots, no video on screen, no network. Upstreams are local TLS test servers; the media is a local test fixture.
+
+Per scenario, after a warm-up of 20 cycles, 200 cycles, sampled every 20 cycles:
+
+- goroutines: `runtime.NumGoroutine()`;
+- Go heap: `HeapInuse` after `runtime.GC()` (forced GC is used only to detect leaks here, never to meet the idle target);
+- process private bytes: Windows `GetProcessMemoryInfo` `PrivateUsage`.
+
+Scenarios:
+
+1. Player open/close through the real backend, proxy and `core` playback session with a fake player.
+2. The same with real in-process libmpv using `vo=null`, `ao=null` and a local fixture through the proxy, if libmpv runs without a window. If it needs a window, the owner is asked before it runs.
+3. Episode switches, manual and autoplay (end-of-file to next episode).
+4. Cancelled searches (cancel before response, during body, after response) with fake Anime1 and metadata servers.
+5. Proxy-session churn: create, stream partially, abort mid-body, invalidate, including the per-session (4) and global (16) caps.
+
+Thresholds (no steady growth):
+
+- goroutines at the end equal the warm-up baseline within ±2, and are back to baseline after the scenario closes;
+- heap after GC: the mean of the last five samples is at most 1 MiB above the mean of the first five, and the samples do not rise monotonically;
+- private bytes: at most 8 MiB growth from the first to the last sample after warm-up (libmpv and the C heap do not return memory at once; any growth above this is investigated with a heap profile before it is called noise).
+
+A breach is a finding: diagnose with `pprof` goroutine and heap profiles, fix causally with a test, rerun the scenario.
+
+### Idle memory target
+
+ADR-023's goal: private working set under 100 MiB after 15 minutes minimized. This needs the real app window, so it runs only when the owner says the PC is free: the test build is started with a copy of the owner's data, minimized, and sampled every minute for 15 minutes by a PowerShell script reading the process counters; no clicks. Results recorded below. No working-set trimming.
+
+### Done when
+
+- All five scenarios meet the thresholds; numbers in the table below and raw CSV in `artifacts/evidence/loop38/38b/`.
+- Idle target measured (or the owner defers it in writing).
+- Every leak found is fixed with a test. Common checks pass. Commit after owner approval.
+
+## 38c: Release v1.0.0
+
+1. Release notes `docs/releases/v1.0.0.md` (Traditional Chinese, for users; no AI attribution): what works, how to run it, known limits.
+2. `internal/release.Version` set to `1.0.0` (versioning rule in [05_WORKFLOW.md section 11](../05_WORKFLOW.md)); tests derive versions from it.
+3. README.md (Chinese, default) and README.en.md updated for v1.0.
+4. Release job: it always passes `--prerelease` today. v1.0.0 must be a full release, so `.github/workflows/ci.yml` needs a small change (no `--prerelease` when the tag has no `-` stage suffix). This is a workflow edit: owner approval first. Section 11 asks to test a changed job with a pre-release tag first; the owner decides whether to do that (for example `v1.0.0-rc`) or accept the one-flag difference untested.
+5. Push the release commit after approval; CI green on it.
+6. Before asking to tag: remind the owner of the open question recorded 2026-10-23, whether to keep the Anime1 source in a publicly distributed release (Taiwan Copyright Act art. 87(1)(8) and 80-2, GitHub DMCA). The owner decides; the agent gives no legal advice.
+7. Tag `v1.0.0` and publish only on explicit owner approval at that moment.
+8. Verify the published ZIP in a new empty folder: file list (exe, `libmpv-2.dll`, LICENSE, THIRD_PARTY_NOTICES.md, `licenses/libmpv.txt`, the libmpv disclosure notice); DLL SHA-256 equals `internal/runtimepin`; exe is GUI subsystem and reports 1.0.0; no `data/`, logs or personal files; it starts after extraction and creates its database (process start and file check only, with the owner's OK for the window).
+
+### Done when
+
+- CI-built ZIP published as a full GitHub Release v1.0.0 and checked as above.
+- Owner check passes.
+
+## Owner check (after 38c)
+
+1. 從 GitHub Release v1.0.0 下載 ZIP。
+2. 解壓縮到一個新資料夾，雙擊 AnimePortable.exe：應直接開啟，不需安裝，沒有黑色主控台視窗。
+3. 搜尋一部動畫、點開、播放一集、切換下一集、關閉播放器、回首頁：都應正常。
+4. 關掉 App 再開：剛才的觀看紀錄與進度應還在。
+
+## Results
+
+### 38a (2026-10-23)
+
+Evidence: `artifacts/evidence/loop38/38a/` (govulncheck, mpv probe, TypeSafe triage, test runs).
+
+Checks: `go mod verify` all modules verified; `go vet` clean; `gofmt -l` empty; govulncheck v1.1.4: 0 reachable vulnerabilities, 6 in required modules not called (x/text GO-2026-6629; x/net HTTP/2 server GO-2026-6603, 6610, 6611, 6612, 6617).
+
+Boundaries: rows 1-3 and 5-20 OK with tests named in the evidence map. Row 4 (proxy -> libmpv) broken, fixed below. Secret scan of tracked files: no keys or tokens (the Bitwarden secret ID in `tools/typesafe-judge/run.ps1` is a lookup ID, not a credential).
+
+Findings (two explorer maps, an oracle review and a security-auditor review; triage with TypeSafe `review-triage`, adjudicated):
+
+| ID | Class | Finding | Disposition |
+| --- | --- | --- | --- |
+| M1 | MUST_FIX | libmpv detected the stream format itself. A body labelled `video/mp4` that is really an m3u, PLS, EDL or HLS playlist made libmpv fetch the listed address directly, past the proxy, origin allowlist and SSRF checks. Confirmed headless on the pinned DLL (1 fetch each). | Fixed: `demuxer=lavf`, `demuxer-lavf-format=mp4` in `InitOptions`; 0 fetches, real MP4 plays. Test `TestEngineOpensOnlyMP4BodiesNeverListedAddresses` (fails without). |
+| S2 | MUST_FIX | Libraries loaded by name after startup (by libmpv, FFmpeg, `opengl32` and `comctl32` lazy loads) used the full search order including the current folder and PATH. | Fixed: `SetDefaultDllDirectories(APPLICATION_DIR, SYSTEM32)` first in `main`. Test `TestRestrictDLLSearchStopsLoadsFromTheCurrentFolder`. |
+| A1 | MUST_FIX | Resolver JSON scan had no depth limit: a 1 MiB `[[[[` answer recursed about a million times per Play. | Fixed: depth 16. Test `TestResolverJSONNestingExactLimit` (fails without). |
+| T1 | MUST_FIX (TypeSafe 0.69) | Debug timeline capped events per start but not starts per run. | Fixed: 100 starts per run. Test `TestStartTimelineStopsAfterMaxAttempts` (fails without). |
+| S1 | NOTE | mpv `ytdl_hook` could start `yt-dlp` by search path. Pinned DLL has no `ytdl`/`osc` option (no scripting), so only an override DLL built with scripting is affected; `ytdl=no` cannot be set because the pinned DLL rejects unknown options. | Recorded in 03_SECURITY.md. (`load-scripts=no` was tried and removed: it only covers the scripts folder, which `config=no` already skips.) |
+| N2 | NOTE (TypeSafe said MUST_FIX 0.73; adjudicated) | Failure log and timeline writes follow a link planted in the data folder. Needs same-user write access to the portable folder, the accepted local residual risk. | Listed for the owner. |
+| N1 | NOTE | Redirect header stripping compares each hop with the previous one, not the first; not reachable today. | Listed. |
+| N3 | NOTE | SQLite `nofollow` is Unix-only; `Lstat` is the Windows guard. | 03_SECURITY.md corrected. |
+| N4 | NOTE | Override DLL path accepts UNC; needs same user, hash checked on a held handle. | Listed. |
+| N8 | NOTE | Playback close destroys the player before invalidating the proxy session; 03_SECURITY.md lists the reverse. | Owner decision: which order the doc should state. |
+| U1 | NOTE | Remote titles drawn with `fltk.Draw` without escaping `@` (display only). | Listed. |
+| C1, C2, V1, D1 | NOTE | Notices not diffed in CI (generated at release); Actions `checkout`/`setup-go` by tag; unreachable module vulnerabilities; dev-tool HTTP client. | Listed. |
+| Test gap | - | No test for a missing DLL. | Added `TestOpenDoesNotLoadAMissingLibrary`. |
+
+Final review (oracle, read-only): no MUST_FIX. SHOULD_FIX: the `load-scripts` comment overstated it (removed, above); no automated test runs the window, GL or hardware-decoding paths with the DLL search restriction, so the owner's test build (hardware decoding on and off) is the check. NIT: the JSON depth counts the root as 0 (pinned by the test). It agreed N2 is a NOTE.
+
+03_SECURITY.md updated: boundary table rows 7-11, DLL search order, built-in scripts, MP4-only demuxer, override variable names, SQLite guard on Windows, diagnostic files, `tools/` not shipped.
+
+Test build: `artifacts/test-build/AnimePortable.exe` (38a worktree build 2026-10-23 with the 硬體解碼 notice, EXE SHA-256 `4211E2C0…33D4`; the owner check below ran on the previous build `C2B7E676…EDAA`; Windows GUI; libmpv DLL matches the pin; existing `data/` kept).
+
+38a owner check (the DLL search restriction is only exercised by a real run):
+
+1. 開啟 App，到「設定」把「硬體解碼」關閉，關掉 App 再開。點開一部動畫播放一集：應正常播放，畫面與聲音正常。
+2. 回「設定」把「硬體解碼」打開，關掉 App 再開，播放一集：應正常播放。
+3. 播放中按下一集：應切換並開始播放。
+
+Owner check 2026-10-23: "全部正常" (all three steps pass; TypeSafe owner-report HUMAN_PASS 0.39, adjudicated: explicit pass). New owner request in the same reply: the 硬體解碼 switch should tell the user it needs a restart, or offer to restart after switching. Fact: no app restart is needed; the engine reads the setting each time the player opens (`main_fltk_windows.go`, engine factory), and the row's hint already says 下次開啟播放器時生效; the check steps asked for a restart only to be safe. Owner choice 2026-10-23: "Add a short notice after toggling 硬體解碼 (下次開啟播放器時生效) in 38a, in all three languages, then commit 38a." Built: after a change is saved, a dialog titled 硬體解碼 says 已變更硬體解碼，下次開啟播放器時生效，不需要重新開啟程式。 (English and Japanese too); no notice when nothing is saved (failed settings load, data move). Test `TestNativeSettingsHardwareDecodingToggleSaves` (fails without); the failed-load and data-move tests check that no notice appears. Review (oracle): no MUST_FIX; its two test gaps were closed; open NIT: holding Space past the key repeat delay can close the notice at once (the change is still saved). Whether focus returns to the switch after the notice closes is for the owner to see.
+
+Status: 38a committed 2026-10-23 with owner approval (not pushed). Next: push on owner approval, then 38b after owner approval.
+
+Test runs: full suite and `-race` pass for every package. The window packages (`fltkhome`, `fltkplayer`, `fltkengine/...`) ran on 2026-10-23 with the owner's OK: suite pass; `-race` failed once in `TestNativeLanguageSwitchesEveryShownTextAtOnceAndIsSaved` ("ja: focus left the language control"; no fltkhome file changed), then passed alone and as the whole fltkhome package with `-race` (TypeSafe failure-class FLAKY_OR_NONDETERMINISTIC 0.97). Logs in the evidence folder.

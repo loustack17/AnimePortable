@@ -123,6 +123,7 @@ type Strings struct {
 	AutoPlay, AutoPlayHint, AutoPlayDisabled         string
 	Resume, ResumeHint                               string
 	HardwareDecoding, HardwareDecodingHint           string
+	HardwareDecodingNotice                           string
 	Proxy, ProxyHint                                 string
 	ProxyNone, ProxySystem, ProxyManual              string
 	ProxyAddress, ProxyAddressHint                   string

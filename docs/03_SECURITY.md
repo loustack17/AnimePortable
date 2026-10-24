@@ -14,6 +14,13 @@ Treat all remote data as untrusted, including data from services we normally tru
 | 4 | Loopback proxy -> libmpv | libmpv gets only a random loopback session URL. |
 | 5 | libmpv DLL loading | Absolute path, SHA-256 pinned, loaded only when playback starts. |
 | 6 | Local persistence (SQLite) | Local file, no secrets stored. |
+| 7 | Anime1 resolver -> playback CDN | Cookies and signed URLs in memory only; CDN host under `v.anime1.me`, HTTPS, `video/mp4`. |
+| 8 | Backend -> forward proxy | CONNECT only, TLS to the original host; see Forward proxy. |
+| 9 | Metadata, AniSkip, GitHub, cover origins | Fixed origin allowlists, bounded bodies, plain text or validated images only. |
+| 10 | Backend -> files in the data folder | Database, failure log and debug timeline; fixed vocabulary, no secrets. |
+| 11 | Portable folder and environment | Pinned DLL, data folder location file, `ANIMEPORTABLE_*` variables. |
+
+Loop 38 checked every row against the sections below (docs/loops/LOOP38.md, 38a).
 
 Hard rules:
 
@@ -52,10 +59,11 @@ There is no MPV process and no IPC endpoint (named pipe or socket). libmpv runs 
 - The packaged `libmpv-2.dll` sits next to the executable. Its expected SHA-256 is the constant in `internal/runtimepin/libmpv.go`.
 - Load by absolute path only, and only when playback starts. Never load by bare name or from the search path.
 - Verify the hash before use. Keep a read-only, non-write-shareable file handle through `LoadLibraryEx` and symbol binding. Reject reparse points and non-regular files.
-- Limit dependency search to the DLL directory and Windows System32.
+- Limit dependency search to the DLL directory and Windows System32. libmpv's own imports load with `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32`; libraries loaded by name later (by libmpv, FFmpeg or the app) search only the app folder and System32, set process-wide at startup with `SetDefaultDllDirectories` (Loop 38).
 - A missing or altered DLL must leave Home usable and show a safe inline playback error.
-- An explicit absolute DLL path plus user-supplied SHA-256 (two environment variables) may replace the bundled DLL. The same checks apply. Never accept a DLL silently from the search path.
-- The player starts with `config=no`. The user's mpv config files and scripts are not loaded.
+- An explicit absolute DLL path plus user-supplied SHA-256 (`ANIMEPORTABLE_LIBMPV_OVERRIDE` and `ANIMEPORTABLE_LIBMPV_OVERRIDE_SHA256`) may replace the bundled DLL. The same checks apply. Never accept a DLL silently from the search path.
+- The player starts with `config=no`. The user's mpv config files and scripts are not loaded. The pinned DLL is built without scripting, so mpv's built-in scripts (for example the one that starts `yt-dlp`) do not exist in it; an override DLL built with scripting would have them.
+- Only FFmpeg's MP4 demuxer may open the stream (`demuxer=lavf`, `demuxer-lavf-format=mp4`). A body labelled `video/mp4` that is really a playlist, EDL or HLS manifest fails to open, so libmpv never fetches an address listed inside it past the proxy (Loop 38).
 - The UI cannot issue arbitrary libmpv commands. It uses typed player callbacks.
 - Playback source detail is shown to the user only as safe, generic errors.
 
@@ -63,7 +71,7 @@ DLL licensing is a settled owner decision (ADR-023). Do not reopen it.
 
 ## External network client
 
-All outbound HTTP uses one controlled secure client (`adapters/network/securehttp`). Adapters must not create unmanaged clients.
+All outbound HTTP in the shipped app uses one controlled secure client (`adapters/network/securehttp`). Adapters must not create unmanaged clients. (Development tools under `tools/` are not shipped.)
 
 - Connect, read and request timeouts.
 - Reusable transport and connection pool.
@@ -162,6 +170,8 @@ The MVP may omit them. If added: never auto-open, show the destination, open in 
 
 Structured logging with central redaction. Never log cookies, Authorization values, tokens, proxy session IDs, signed URL query parameters or full private playback URLs. Prefer provider, host, operation, local episode ID and a sanitized error category.
 
+The app writes two diagnostic files next to the database, both with a fixed vocabulary of stages, statuses and categories (no URLs, titles, ids, error text or proxy address): `playback-failures.log` (newest 50 lines) and, only when `ANIMEPORTABLE_START_TIMELINE=1` is set at launch, `playback-timeline.log` (at most 100 starts of 200 events each per run). `ANIMEPORTABLE_PLAYBACK_DIAGNOSTICS=1` writes playback counters and GPU names next to the exe.
+
 ## Crash handling
 
 No automatic crash upload. If added later: explicit opt-in, and redact paths, usernames, URLs, tokens, cookies and watch history.
@@ -170,7 +180,7 @@ No automatic crash upload. If added later: explicit opt-in, and redact paths, us
 
 SQLite is local only. The caller supplies an absolute path. In the portable build that path is `<extracted folder>/data`.
 
-- The final database path must be a regular file, never a symlink. Open with SQLite `nofollow`.
+- The final database path must be a regular file, never a symlink or other reparse point. On Windows the `Lstat` checks on the path and its folders are the guard; SQLite `nofollow` is also set but only its Unix file layer implements it.
 - A same-user replacement race between check and open remains a known local residual risk.
 - On Windows, files inherit the ACL of their directory. The database lives in the portable folder and inherits that folder's ACL. If the folder is in a shared or world-readable location, other local users can read the watch history (residual risk).
 - No database encryption in the MVP.

@@ -25,6 +25,10 @@ import (
 
 func main() {
 	runtime.LockOSThread()
+	if restrictDLLSearch() != nil {
+		showNativeError(uitext.T().StartFailed)
+		os.Exit(1)
+	}
 	// FLTK only wakes the event loop for Fl::awake calls from other threads (libmpv frame
 	// notifications, backend results) after the main thread has called Fl::lock once.
 	// Without it those callbacks wait for an unrelated event, and video stutters.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -91,6 +92,36 @@ func TestStartTimelineStartsAFreshFileEachRun(t *testing.T) {
 	timeline.Begin()
 	if got := waitForTimelineLines(t, path, " click"); len(got) != 1 {
 		t.Fatalf("timeline = %q", got)
+	}
+}
+
+func TestStartTimelineStopsAfterMaxAttempts(t *testing.T) {
+	directory := t.TempDir()
+	timeline := NewStartTimeline(directory, true)
+	for range startTimelineMaxAttempts + 1 {
+		timeline.Begin()
+		timeline.TimedOut()
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		timeline.mu.Lock()
+		idle := !timeline.flushing && len(timeline.pending) == 0
+		timeline.mu.Unlock()
+		if idle {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timeline writer never finished")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	data, err := os.ReadFile(filepath.Join(directory, startTimelineName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2*startTimelineMaxAttempts || strings.Contains(string(data), "#"+strconv.Itoa(startTimelineMaxAttempts+1)+" ") {
+		t.Fatalf("timeline has %d lines, want %d and no attempt past the limit", len(lines), 2*startTimelineMaxAttempts)
 	}
 }
 

@@ -279,21 +279,23 @@ func resolveDark(appearance string) bool {
 // changeSettings applies change to the settings the UI holds, saves all of them and shows
 // the new state. Saving the whole value keeps a theme save and another toggle from
 // overwriting each other. It does nothing while the startup load failed: the UI then holds
-// defaults, and saving them would overwrite the stored choices.
-func (ui *view) changeSettings(change func(*backend.Settings)) {
+// defaults, and saving them would overwrite the stored choices. It reports whether the change
+// was made.
+func (ui *view) changeSettings(change func(*backend.Settings)) bool {
 	if ui.closing || ui.settingsLoadFailed {
-		return
+		return false
 	}
 	if ui.tasks.dataMoving {
 		// Writes are refused while the data moves; show the saved values again.
 		ui.syncSettings()
-		return
+		return false
 	}
 	change(&ui.settings)
 	if ui.settingsWriter != nil {
 		ui.settingsWriter.save(ui.settings)
 	}
 	ui.syncSettings()
+	return true
 }
 
 // settingsSaveFailed and settingsSaved run on the writer's goroutine; the message changes on
@@ -361,10 +363,14 @@ func (ui *view) toggleResumePlayback() {
 	})
 }
 
+// toggleHardwareDecoding says when the change applies: mpv reads it only as the player opens,
+// and without the notice users expected to restart the app (owner check, Loop 38a).
 func (ui *view) toggleHardwareDecoding() {
-	ui.changeSettings(func(settings *backend.Settings) {
+	if ui.changeSettings(func(settings *backend.Settings) {
 		settings.HardwareDecoding = toggleName(!settingOn(settings.HardwareDecoding))
-	})
+	}) {
+		ui.tasks.notice(uitext.T().HardwareDecoding, uitext.T().HardwareDecodingNotice)
+	}
 }
 
 // syncSettings enables each row by its dependency, lays the rows out again (the proxy address

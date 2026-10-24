@@ -340,6 +340,25 @@ func TestResolverSourceCountExactLimit(t *testing.T) {
 	}
 }
 
+func TestResolverJSONNestingExactLimit(t *testing.T) {
+	nested := func(levels int) []byte {
+		return []byte(`{"x":` + strings.Repeat("[", levels) + strings.Repeat("]", levels) + `,"s":[{"src":"https://cdn.v.anime1.me/video.mp4","type":"video/mp4"}]}`)
+	}
+	if _, err := parseResolverAPI(context.Background(), nested(maxResolverJSONDepth)); err != nil {
+		t.Fatalf("exact nesting depth rejected: %v", err)
+	}
+	if _, err := parseResolverAPI(context.Background(), nested(maxResolverJSONDepth+1)); !errors.Is(err, errResolverMalformed) {
+		t.Fatalf("nesting depth +1 error = %v", err)
+	}
+	deep := nested((maxResolverBodyBytes - 200) / 2)
+	if len(deep) > maxResolverBodyBytes {
+		t.Fatalf("deep body is %d bytes, over the body limit", len(deep))
+	}
+	if _, err := parseResolverAPI(context.Background(), deep); !errors.Is(err, errResolverMalformed) {
+		t.Fatalf("deeply nested body error = %v", err)
+	}
+}
+
 func TestResolverCookiesExactLimitsAndFailures(t *testing.T) {
 	exact := strings.Repeat("a", maxResolverCookieBytes)
 	header := http.Header{"Set-Cookie": {"e=" + exact, "h=" + exact, "p=" + exact, "ignored=value"}}

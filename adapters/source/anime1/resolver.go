@@ -33,6 +33,9 @@ const (
 	maxResolverURLBytes    = 8 << 10
 	maxResolverCookieBytes = 4 << 10
 	maxResolverHeaderBytes = 13 << 10
+	// The API answer nests three levels; the limit stops a deeply nested body from
+	// recursing once per byte through the scan below.
+	maxResolverJSONDepth = 16
 )
 
 var (
@@ -365,14 +368,17 @@ func parseResolverAPI(ctx context.Context, body []byte) (string, error) {
 func jsonObjectWithoutDuplicateKeys(body []byte) bool {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
-	if err := scanJSONValue(decoder, true); err != nil {
+	if err := scanJSONValue(decoder, true, 0); err != nil {
 		return false
 	}
 	_, err := decoder.Token()
 	return errors.Is(err, io.EOF)
 }
 
-func scanJSONValue(decoder *json.Decoder, requireObject bool) error {
+func scanJSONValue(decoder *json.Decoder, requireObject bool, depth int) error {
+	if depth > maxResolverJSONDepth {
+		return errResolverMalformed
+	}
 	token, err := decoder.Token()
 	if err != nil {
 		return err
@@ -400,7 +406,7 @@ func scanJSONValue(decoder *json.Decoder, requireObject bool) error {
 				return errResolverMalformed
 			}
 			seen[key] = struct{}{}
-			if err := scanJSONValue(decoder, false); err != nil {
+			if err := scanJSONValue(decoder, false, depth+1); err != nil {
 				return err
 			}
 		}
@@ -410,7 +416,7 @@ func scanJSONValue(decoder *json.Decoder, requireObject bool) error {
 		}
 	case '[':
 		for decoder.More() {
-			if err := scanJSONValue(decoder, false); err != nil {
+			if err := scanJSONValue(decoder, false, depth+1); err != nil {
 				return err
 			}
 		}

@@ -95,12 +95,17 @@ var environmentProxyAllowed bool
 // and applies to the local proxy's upstream requests only. Changing the variable from Go at run
 // time is not a reliable alternative: the C runtime inside libmpv takes its own snapshot of the
 // environment.
+//
+// The proxy checks the upstream's content type but not its bytes. Left to detect the format,
+// mpv reads a body that is really a playlist, EDL or HLS manifest and fetches the addresses
+// listed in it itself, past the proxy and its address checks. Only FFmpeg's MP4 demuxer may
+// run, so anything else fails to open.
 func InitOptions(options Options) [][2]string {
 	hwdec := "no"
 	if options.HardwareDecoding {
 		hwdec = "auto"
 	}
-	result := [][2]string{{"config", "no"}, {"vo", "libmpv"}, {"hwdec", hwdec}, {"demuxer-max-bytes", "16MiB"}, {"cache-secs", "5"}}
+	result := [][2]string{{"config", "no"}, {"vo", "libmpv"}, {"hwdec", hwdec}, {"demuxer", "lavf"}, {"demuxer-lavf-format", "mp4"}, {"demuxer-max-bytes", "16MiB"}, {"cache-secs", "5"}}
 	// HLS segment requests go through the demuxer, which stream-lavf-o does not reach; if .m3u8 is
 	// ever accepted (the resolver rejects it today), demuxer-lavf-o needs the same empty http_proxy.
 	if !environmentProxyAllowed {

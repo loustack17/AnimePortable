@@ -22,6 +22,8 @@ const (
 	StartTimelineVariable = "ANIMEPORTABLE_START_TIMELINE"
 	// A start that never plays must not fill the disk with mpv's retries.
 	startTimelineMaxEvents = 200
+	// Nor may a long session of episode starts: past this many the run records nothing more.
+	startTimelineMaxAttempts = 100
 )
 
 type timelineEvent string
@@ -74,6 +76,10 @@ func (timeline *StartTimeline) Begin() {
 	}
 	timeline.mu.Lock()
 	defer timeline.mu.Unlock()
+	if timeline.attempt >= startTimelineMaxAttempts {
+		timeline.open = false
+		return
+	}
 	timeline.attempt++
 	timeline.began = timeline.now()
 	timeline.events = 0

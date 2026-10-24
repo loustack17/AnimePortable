@@ -359,7 +359,7 @@ func openDataPage(t *testing.T, actions *settingsActionsFake) (*view, *dataPageL
 		return 0
 	}
 	// A real notice would block the test, and a real restart would close the window.
-	ui.tasks.notice = func(message string) { log.notices = append(log.notices, message) }
+	ui.tasks.notice = func(_, message string) { log.notices = append(log.notices, message) }
 	ui.tasks.restart = func() { log.restarts++ }
 	return ui, log
 }
@@ -527,17 +527,20 @@ func TestNativeSettingsChangesAreIgnoredWhileTheDataMoves(t *testing.T) {
 	ui, store, _ := openSettingsPageWith(t, settingsOf("light", "enabled", "enabled", "enabled"), actions)
 	pumpSearchEvents(t, func() bool { return ui.tasks.dataKnown })
 	ui.tasks.chooseFolder = func(string) (string, bool) { return chosenTestDataDir, true }
-	ui.tasks.notice = func(string) {}
+	var notices []string
+	ui.tasks.notice = func(_, message string) { notices = append(notices, message) }
 	ui.tasks.restart = func() {}
 	actions.holdUntil()
 	ui.changeDataLocation(false)
 	pumpSearchEvents(t, func() bool { return ui.tasks.dataMoving })
 
-	// The backend refuses writes from the moment the move starts, so the page does not queue any.
+	// The backend refuses writes from the moment the move starts, so the page does not queue any,
+	// and 硬體解碼 does not claim a change.
 	ui.toggleAutoplayNext()
+	ui.toggleHardwareDecoding()
 	pumpFor(100 * time.Millisecond)
-	if saved := store.savedSettings(); len(saved) != 0 || ui.settings.AutoplayNext != "enabled" {
-		t.Fatalf("a change during the move queued %d saves, autoplay next %q", len(saved), ui.settings.AutoplayNext)
+	if saved := store.savedSettings(); len(saved) != 0 || ui.settings.AutoplayNext != "enabled" || ui.settings.HardwareDecoding != "enabled" || len(notices) != 0 {
+		t.Fatalf("a change during the move queued %d saves, autoplay next %q, hardware decoding %q, notices %q", len(saved), ui.settings.AutoplayNext, ui.settings.HardwareDecoding, notices)
 	}
 	actions.release()
 	pumpSearchEvents(t, func() bool { return !ui.tasks.dataMoving })
@@ -642,7 +645,7 @@ func TestNativeSettingsDataDialogsOpenAsTopLevelWindowsFromTheMoveCallback(t *te
 		ui, log := openDataPage(t, actions)
 		probe := &dialogProbe{t: t, ui: ui, answers: want.answers}
 		ui.tasks.choice = func(message string, options ...string) int { return probe.show(message, options...) }
-		ui.tasks.notice = func(message string) {
+		ui.tasks.notice = func(_, message string) {
 			log.notices = append(log.notices, message)
 			probe.show(message, uitext.T().OK)
 		}

@@ -60,6 +60,8 @@ func openSettingsPageWith(t *testing.T, stored backend.Settings, actions *settin
 	ui := newHomeRefreshFixture(t, settingsPageService{&homeRefreshTestService{}, store, actions})
 	ui.finishStartup(nil, stored, nil)
 	ui.showSection(settingsSection)
+	// A real notice would block the test; a test that expects one replaces this.
+	ui.tasks.notice = func(_, message string) { t.Errorf("unexpected notice %q", message) }
 	return ui, store, actions
 }
 
@@ -195,6 +197,8 @@ func TestNativeSettingsPageShowsDefaultsDisabledAndSavesNothingWhenStoredSetting
 	ui := newHomeRefreshFixture(t, settingsPageService{&homeRefreshTestService{}, store, &settingsActionsFake{}})
 	ui.finishStartup(nil, backend.Settings{}, errors.New("unreadable"))
 	ui.showSection(settingsSection)
+	// Nothing is saved, so 硬體解碼 must not claim a change either (a real notice would block).
+	ui.tasks.notice = func(_, message string) { t.Errorf("unexpected notice %q", message) }
 	if got := ui.message.Label(); got != "無法載入設定，暫時使用預設值。" {
 		t.Fatalf("load failure message = %q", got)
 	}
@@ -281,6 +285,8 @@ func TestNativeSettingsHardwareDecodingToggleSaves(t *testing.T) {
 	if toggle.title.String() != "硬體解碼" || !toggle.on() {
 		t.Fatalf("hardware decoding row = %q on %v, want 硬體解碼 on by default", toggle.title.String(), toggle.on())
 	}
+	var notices []string
+	ui.tasks.notice = func(title, message string) { notices = append(notices, title+": "+message) }
 	toggle.button.TakeFocus()
 	pressKey(t, ui.window, vkSpace)
 	saved := waitForSaves(t, store, 1)
@@ -291,6 +297,11 @@ func TestNativeSettingsHardwareDecodingToggleSaves(t *testing.T) {
 	saved = waitForSaves(t, store, 2)
 	if saved[1].HardwareDecoding != "enabled" {
 		t.Fatalf("toggling again saved %#v", saved[1])
+	}
+	// Each change says it applies when the player opens next, so nobody restarts the app for it.
+	want := "硬體解碼: 已變更硬體解碼，下次開啟播放器時生效，不需要重新開啟程式。"
+	if len(notices) != 2 || notices[0] != want || notices[1] != want {
+		t.Fatalf("notices = %q, want %q twice", notices, want)
 	}
 }
 

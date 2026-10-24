@@ -45,8 +45,8 @@ type settingsTasks struct {
 	// choice asks with one button per option and returns the index of the one chosen. The first
 	// option is the safe answer: Esc and closing the dialog return 0.
 	choice func(message string, options ...string) int
-	// notice shows a message with one OK button.
-	notice func(message string)
+	// notice shows a message under title with one OK button.
+	notice func(title, message string)
 	// restart closes the app through the normal shutdown path and asks main to start it again.
 	restart func()
 }
@@ -59,8 +59,8 @@ func (ui *view) useSettingsTaskDefaults() {
 		choice: func(message string, options ...string) int {
 			return showDialog(ui.window, uitext.T().DataDialogTitle, message, ui.dark, options...)
 		},
-		notice: func(message string) {
-			showDialog(ui.window, uitext.T().DataDialogTitle, message, ui.dark, uitext.T().OK)
+		notice: func(title, message string) {
+			showDialog(ui.window, title, message, ui.dark, uitext.T().OK)
 		},
 		restart: ui.restartApp,
 	}
@@ -276,7 +276,7 @@ func (ui *view) moveDataLocation(request backend.MoveDataLocationRequest) {
 			if request.Existing == backend.ExistingUse {
 				notice = uitext.T().DataSwitchedNotice
 			}
-			ui.tasks.notice(notice)
+			ui.tasks.notice(uitext.T().DataDialogTitle, notice)
 			ui.tasks.restart()
 			return
 		}
