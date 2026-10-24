@@ -2,7 +2,7 @@
 
 # Loop 38: Hardening and release (Windows MVP)
 
-Status: 38a committed (not pushed); 38b not started. Owner approved starting Loop 38 on 2026-10-23 and asked for it to be split into stages; stage plan approved 2026-10-23 ("I approve the Loop 38 stage plan as written. Start stage 38a."; TypeSafe owner-report HUMAN_PASS 0.42, adjudicated: explicit approval). Base: origin/main 9e68e48.
+Status: 38a PASS (66f8730, CI 40054548137 green); 38b done, all scenarios and the idle target pass, uncommitted, waiting for commit approval. Owner approved starting Loop 38 on 2026-10-23 and asked for it to be split into stages; stage plan approved 2026-10-23 ("I approve the Loop 38 stage plan as written. Start stage 38a."; TypeSafe owner-report HUMAN_PASS 0.42, adjudicated: explicit approval). Base: origin/main 9e68e48.
 
 ## Goal
 
@@ -179,6 +179,36 @@ Test build: `artifacts/test-build/AnimePortable.exe` (38a worktree build 2026-10
 
 Owner check 2026-10-23: "全部正常" (all three steps pass; TypeSafe owner-report HUMAN_PASS 0.39, adjudicated: explicit pass). New owner request in the same reply: the 硬體解碼 switch should tell the user it needs a restart, or offer to restart after switching. Fact: no app restart is needed; the engine reads the setting each time the player opens (`main_fltk_windows.go`, engine factory), and the row's hint already says 下次開啟播放器時生效; the check steps asked for a restart only to be safe. Owner choice 2026-10-23: "Add a short notice after toggling 硬體解碼 (下次開啟播放器時生效) in 38a, in all three languages, then commit 38a." Built: after a change is saved, a dialog titled 硬體解碼 says 已變更硬體解碼，下次開啟播放器時生效，不需要重新開啟程式。 (English and Japanese too); no notice when nothing is saved (failed settings load, data move). Test `TestNativeSettingsHardwareDecodingToggleSaves` (fails without); the failed-load and data-move tests check that no notice appears. Review (oracle): no MUST_FIX; its two test gaps were closed; open NIT: holding Space past the key repeat delay can close the notice at once (the change is still saved). Whether focus returns to the switch after the notice closes is for the owner to see.
 
-Status: 38a committed 2026-10-23 with owner approval (not pushed). Next: push on owner approval, then 38b after owner approval.
+38a PASS: commit 66f8730 pushed to main with owner approval; GitHub Windows CI 40054548137 green.
 
-Test runs: full suite and `-race` pass for every package. The window packages (`fltkhome`, `fltkplayer`, `fltkengine/...`) ran on 2026-10-23 with the owner's OK: suite pass; `-race` failed once in `TestNativeLanguageSwitchesEveryShownTextAtOnceAndIsSaved` ("ja: focus left the language control"; no fltkhome file changed), then passed alone and as the whole fltkhome package with `-race` (TypeSafe failure-class FLAKY_OR_NONDETERMINISTIC 0.97). Logs in the evidence folder.
+### 38b (2026-10-24)
+
+Owner approved starting 38b 2026-10-24 ("Start stage 38b (resource pass) as planned in LOOP38.md.").
+
+Harness: `internal/resourcepass` (sampler and limits, Windows only) and one `resourcepass_test.go` per layer, all behind the `resourcepass` build tag, so neither the app nor the normal test run builds them. Run:
+
+```
+CGO_ENABLED=1 RESOURCEPASS_OUT=<folder> go test -tags resourcepass -count=1 -run TestResourcePass -v -timeout 40m ./adapters/network/securehttp ./adapters/playback/proxy ./apps/desktop/backend ./apps/desktop ./apps/desktop/fltkengine
+```
+
+No window, no screen, no network: upstreams are local servers, the media is the test fixture. Each scenario: 20 warm-up cycles, then 200 cycles (real libmpv: 2000), a sample every 20 (goroutines; Go heap in use after GC; Windows private bytes). Limits: goroutines within 2 of the post-warm-up count and back to the count before setup after teardown; heap and private bytes compared as the mean of the last five samples minus the mean of the first five, at most 1 MiB and 8 MiB; heap not rising at every sample. (The private-bytes comparison of five-sample means replaces the plan's single first and last samples, which a swing of 40 MiB in libmpv made powerless; it is stricter.)
+
+| Scenario | What a cycle does | Goroutines (after warm-up -> end; before setup -> after teardown) | Heap growth | Private growth (first five -> last five means) |
+| --- | --- | --- | --- | --- |
+| player-open-close | backend Play then StopPlayback: real SQLite, core tracking, libmpv adapter, a new playback proxy and session; fake engine | 3 -> 3; 2 -> 2 | +51 KiB | +0.8 MiB (57.0 -> 57.7) |
+| episode-switches | backend Play of the next episode; every other one after an end of file taken in by the session (autoplay), some paused | 7 -> 7; 2 -> 2 | +18 KiB | +0.1 MiB |
+| player-helpers | main's start watch (real timer), opening lookup (every other one cancelled when the episode is left) and autoplay, on a simulated UI thread | 3 -> 3; 2 -> 2 | -2 KiB | +0.6 MiB |
+| cancelled-searches | backend Search cancelled while the source waits, cancelled before it starts, and one that completes | 3 -> 3; 2 -> 2 | +3 KiB | -0.1 MiB |
+| cancelled-requests | secure client against a local TLS server: cancelled before the answer, mid-body, before start, abandoned stream, one complete | 6 -> 6; 2 -> 2 | +88 KiB | +1.0 MiB |
+| proxy-session-churn | proxy session: three range requests read in part; every 10th cycle six at once (at least 2 refused, cap 4); every 20th twenty on five sessions (at least 4 refused, cap 16); every 5th closed mid-stream (stream cut) | 3 -> 3; 2 -> 2 | +122 KiB | +1.2 MiB |
+| real-libmpv-open-switch-close | pinned DLL loaded, mpv created with the app's options (video and audio output null), two episodes to the first frame, mpv destroyed, DLL unloaded | 3 -> 3; 2 -> 2 | +86 KiB | +3.4 MiB (169.5 -> 172.9) over 2000 cycles |
+
+All scenarios pass. Raw CSV, logs and `summary.csv` in `artifacts/evidence/loop38/38b/` (real libmpv in `long2000/`).
+
+Real libmpv in detail: at 200 cycles the stricter check failed (+18.3 MiB; samples 152 142 149 150 151 then 169 168 167 166 167 168 MiB: one step around cycle 90, flat after; log `run-200-stricter-libmpv-fail.txt`). The 2000-cycle run levels off: means of 400-cycle blocks 168.6, 171.7, 170.4, 170.8, 174.2 MiB, about 3.5 KiB per cycle and within noise of ±7 MiB; goroutines flat, Go heap +86 KiB. A diagnostic run keeping the DLL loaded rose about 20 KiB per mpv session, so what growth there is lies inside libmpv/FFmpeg, not in Go, the proxy or the binding (which frees every string mpv returns); the pinned DLL is fixed (ADR-023). NOTE, nothing to fix here (TypeSafe review-triage ADVISORY 0.61). The scenario now runs 2000 cycles (about 18 minutes) by default, so a step is not read as a trend.
+
+Idle memory (owner approved the run 2026-10-24): test build `4211E2C0…33D4` started minimized from a copy of its folder and data, no clicks, sampled each minute (`artifacts/evidence/loop38/38b/idle/idle-memory.csv`, script `idle-memory.ps1` in the worktree's `artifacts/evidence/loop38/38b/`). Private working set 12.3 MiB at start, 10.3 MiB after 15 minutes (target under 100 MiB, ADR-023); working set 32.1 MiB; private bytes (commit) 111.9 MiB, steady. Minimizing lets Windows trim the working set, as in the Fyne measurement the target came from; the app does not trim itself. Target met.
+
+Harness review (oracle, read-only): no MUST_FIX. Addressed: the end of file before an autoplay switch is now taken in before the switch (unbuffered events); the proxy churn checks refusals at both caps and that closing a session cuts its stream; a private-bytes read failure fails the test; private bytes use five-sample means; at least 200 cycles; waits have timeouts; the libmpv test fails if it could not replace the video output. Not done, recorded as limits: real libmpv reads the fixture from a local server, not through the playback proxy, and the cancelled-search scenario uses a fake source, not the Anime1 adapter: both would need a test-only hook in production code (the proxy and secure client allow only public HTTPS upstreams). Proxy traffic is covered by the churn scenario and the secure client by the cancelled-requests scenario.
+
+Not covered: the engine's OpenGL render context and the FLTK windows (they need a window).
