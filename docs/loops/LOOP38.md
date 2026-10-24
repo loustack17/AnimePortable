@@ -2,7 +2,7 @@
 
 # Loop 38: Hardening and release (Windows MVP)
 
-Status: 38a PASS (66f8730, CI 40054548137 green); 38b PASS (35a6729, CI 40061188113 green); 38c waiting for owner approval. Owner approved starting Loop 38 on 2026-10-23 and asked for it to be split into stages; stage plan approved 2026-10-23 ("I approve the Loop 38 stage plan as written. Start stage 38a."; TypeSafe owner-report HUMAN_PASS 0.42, adjudicated: explicit approval). Base: origin/main 9e68e48.
+Status: PASS (owner accepted 2026-10-24: "Owner check of v1.0.0: downloaded the release ZIP, unzipped, ran it and used it for a normal session; everything works."; TypeSafe owner-report HUMAN_PASS 0.82). 38a PASS (66f8730, CI 40054548137); 38b PASS (35a6729, CI 40061188113); 38c PASS: v1.0.0 published 2026-10-24 (tag on 5d9c068, CI 40069127213, release job 40069518830). Owner approved starting Loop 38 on 2026-10-23 and asked for it to be split into stages; stage plan approved 2026-10-23 ("I approve the Loop 38 stage plan as written. Start stage 38a."; TypeSafe owner-report HUMAN_PASS 0.42, adjudicated: explicit approval). Base: origin/main 9e68e48.
 
 ## Goal
 
@@ -224,3 +224,11 @@ Changes: `docs/releases/v1.0.0.md` (user notes, Traditional Chinese; TypeSafe do
 Checks: full suite and `-race` pass for every package; `go vet` clean; govulncheck v1.1.4 no vulnerabilities affecting the code. Window packages: one failure without `-race` in `TestNativeRowListArrowsScrollAndLeaveToNavigation` ("FLTK event did not reach the expected Search state"; no fltkhome file changed), passed on rerun alone and as the whole package (TypeSafe failure-class FLAKY_OR_NONDETERMINISTIC 1.00). This is the second window-test flake in Loop 38 (38a: language focus); both are focus or event timing on the owner's desktop.
 
 Review (oracle, read-only): no MUST_FIX. Fixed: the handoff, two wording points in the notes (the hardware-decoding notice is the one change in function; the 10 MB figure is what Task Manager shows), the file name in the owner check. Owner decision: the update check offers the newest release, pre-releases included, so a later `v1.1.0-beta` would show 有新版本 to someone on 1.0.0 (`adapters/update/github`). NIT kept: `--latest` would also mark a later patch of an older line as latest; post-1.0 numbering is undecided.
+
+Release commit 5d9c068 pushed to main with owner approval 2026-10-24 ("Commit the v1.0.0 release commit, push to main and confirm CI. Do not tag yet."); GitHub Windows CI 40069127213 green. Not tagged yet.
+
+Release v1.0.0 published 2026-10-24 with owner approval. Before tagging, the owner was reminded of the open legal question of 2026-10-23 and decided: "I have considered the open legal question and decide to keep the Anime1 source. Tag v1.0.0 on 5d9c068 and publish it, then check the ZIP." Annotated tag v1.0.0 on 5d9c068; release job 40069518830 green; GitHub release v1.0.0 is a full release (not a pre-release, not a draft) and the repository's latest.
+
+ZIP check (`artifacts/evidence/loop38/38c/release-check/`): `AnimePortable-v1.0.0-windows-amd64.zip`, 31,419,486 bytes, SHA-256 `98D9B277…F048`. Contents: `animeportable.exe` (SHA-256 `93A0C830…FF52`, Windows GUI subsystem, contains 1.0.0, built with `-trimpath`), `LICENSE`, `THIRD_PARTY_NOTICES.md`, `libmpv-2.dll` (SHA-256 equals the pin in `internal/runtimepin`), `licenses/libmpv.txt` (the libmpv disclosure notice). No `data/`, logs or database; no user or build-machine paths in any file. Unzipped to a new folder and started minimized: the window opened (title AnimePortable), `data/animeportable.db` was created, and the app closed normally (exit code 0).
+
+Owner check 2026-10-24: "Owner check of v1.0.0: downloaded the release ZIP, unzipped, ran it and used it for a normal session; everything works." (TypeSafe owner-report HUMAN_PASS 0.82, no new issue). Loop 38 PASS.

@@ -7,21 +7,15 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: IN_PROGRESS
+status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  Loop 38 (hardening and release, v1.0.0): stages 38a security, 38b resources, 38c release (docs/loops/LOOP38.md); plan approved 2026-10-23; each stage stops for owner approval. Evidence: artifacts/evidence/loop38/.
-  38a PASS: 66f8730 on main, CI 40054548137 green (this doc update uncommitted; goes with 38b). Contents: MP4-only mpv demuxer (playlist bypass), SetDefaultDllDirectories in main, resolver JSON depth 16, timeline 100 starts/run, 硬體解碼 notice after toggling (owner request); 03_SECURITY.md updated. Full suite+race pass incl. window packages; reviews no MUST_FIX; owner check passed. 38b PASS 2026-10-24: 35a6729 on main, CI 40061188113 green (this doc update uncommitted; goes with 38c): harness (tag resourcepass; internal/resourcepass + 6 package tests; real libmpv runs 2000 cycles) all 7 scenarios pass; idle 10.3 MiB private working set after 15 min minimized; review no MUST_FIX (fixed). 38c started 2026-10-24 (owner approved), uncommitted: docs/releases/v1.0.0.md, release.Version 1.0.0, READMEs, STATUS. Release-job change applied (owner approved 2026-10-24, no rc tag); suites incl. window tests pass (one flake, rerun pass); review no MUST_FIX. Next: commit/push approval, CI, legal reminder, tag approval, ZIP check. Owner decisions open: update check offers pre-releases to 1.0.0 users; N8 close order. Open owner decision: N8 close order in 03_SECURITY.md.
-  Loop 37d (Reliable starts and more synopses) passed on 2026-10-23 (docs/loops/LOOP37D.md; de3c9ed; CI 39917415783 green): stored episode list first (backend action StoredEpisodes), Anime1 page timeout + retry, 20 s start check, migration 0011, synopsis matching 193/228 with 0 wrong.
-  Pre-release v0.4.1-beta published 2026-10-23 (tag on f2c3483; CI 39917947428; release job 39918270994; ZIP checked, DLL matches the pin). Owner to try it.
-  Loop 37c (Skip the opening) passed 2026-10-22; v0.4.0-beta published 2026-10-22. Next loop: 38 (hardening and release, v1.0.0); needs owner approval to start.  Never drive the owner's desktop to investigate (owner 2026-10-22); reproduce headlessly.
-  Loop 37c (Skip the opening) passed on 2026-10-22 (docs/loops/LOOP37C.md; af53275; CI 39877272016 green): AniSkip 跳過片頭, new action OpeningTimes, builds with -H windowsgui (no console window).
-  Pre-release v0.4.0-beta published 2026-10-22 (tag on 2caceaa; CI 39880655456; release job 39880999897): 37b, 37c, app icon (apps/desktop/appicon, rsrc_windows_amd64.syso), no console. Owner to try it.
-  Loop 37b (Language) passed on 2026-10-22 (docs/loops/LOOP37B.md; 17d13be; CI 39845099717 green): live switch, uitext table, migration 0010.
-  Loop 37 (Settings) passed on 2026-10-22 (docs/loops/LOOP37.md; f582da8 + fixes 1966449, f2c4f51; CI 39734539484 green).
-  Pre-release v0.3.0-alpha published 2026-10-22 (tag on b005d3a; release job 39738301609 reused the CI-tested exe; DLL hash matches the pin).
-active_acceptance: docs/loops/LOOP38.md
+  None. Loop 38 (hardening and release) PASSED 2026-10-24 after the owner check of the published ZIP (docs/loops/LOOP38.md; evidence artifacts/evidence/loop38/): 38a security (66f8730, CI 40054548137), 38b resources (35a6729, CI 40061188113), 38c v1.0.0 published as full release + latest (owner kept Anime1 after the legal reminder; tag on 5d9c068, CI 40069127213, release job 40069518830). Closeout doc updates since 5d9c068 uncommitted (docs commit needs owner approval).
+  Next: version 2.0 (Loops 39-46, docs/04_ROADMAP.md) needs owner approval to start.
+  Open owner decisions: update check offers pre-releases to users on 1.0.0; 03_SECURITY close order (N8); numbering of versions after 1.0.0.
+  Loop 37d passed 2026-10-23 (LOOP37D.md); v0.4.1-beta published 2026-10-23. Never drive the owner's desktop to investigate; reproduce headlessly.
+active_acceptance: none
 next_actions:
   - Migrations 0007-0011 are applied to the owner's test data; never edit them.
   - New UI text goes into apps/desktop/uitext (all three languages); a fixed label uses labelled, a status a localText, so a live language switch reaches it.

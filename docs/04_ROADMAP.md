@@ -2,7 +2,7 @@
 
 # Roadmap
 
-Loops 1-37, 37b, 37c and 37d are complete. Loop 38 remains. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-38, 37b, 37c and 37d are complete; v1.0.0, the first full release, was published on 2026-10-24. Version 2.0 (Loops 39-46, below) is next and needs owner approval to start. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux in 2.0, then macOS in 3.0 (see "Version 2.0").
 
@@ -54,10 +54,11 @@ Loops 11 and 12 describe the original external-player design, which Loop 28 repl
 | 37b | Language: 語言 繁體中文 / English / 日本語 switches every screen at once and is saved; one string table for all UI text. |
 | 37c | Skip the opening: 跳過片頭 (and S) only during the opening, times from AniSkip by MyAnimeList id (AniList, kept in memory); builds open no console window. |
 | 37d | Reliable starts and more synopses: the detail page shows the stored episode list at once; Anime1 page timeout and retry; a 20 s start check; Simplified Bangumi search, Anime1 year and episode count as hints, season lists and narrow name rules (193 of the owner's 228 anime matched, 0 wrong). |
+| 38 | Hardening and release: security pass over 20 trust boundaries (mpv opens only MP4, DLLs load only from the app folder and System32, bounded resolver JSON and debug timeline), resource pass with a headless harness (no steady growth in seven scenarios; idle private working set 10.3 MiB after 15 minutes minimized), v1.0.0 published as the first full release. |
 
 ## Remaining loops
 
-One loop remains. The owner changed the plan on 2026-10-14:
+Loop 38 passed on 2026-10-24 ([loops/LOOP38.md](loops/LOOP38.md)); the history below is kept for reference. The owner changed the plan on 2026-10-14:
 
 - Following and History now come before Schedule, because they build on the finished detail and playback work.
 - The former Loops 38 to 42 (security, resources, cross-platform, release, final acceptance) are now one Windows loop, Loop 38.
