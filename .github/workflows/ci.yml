@@ -128,7 +128,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   release:
-    # Publishes a pre-release ZIP for v* tags from the executable built and tested when the tagged
+    # Publishes a ZIP for v* tags (a pre-release when the tag has a stage such as -beta, a full
+    # release otherwise) from the executable built and tested when the tagged
     # commit was pushed to main, so nothing is built or tested twice and only a tested build ships.
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
@@ -173,12 +174,14 @@ jobs:
           & ./build/windows/package.ps1 -Arch amd64 -Binary (Join-Path $env:RUNNER_TEMP 'release-bin\animeportable.exe') -Output $zip
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "RELEASE_ZIP=$zip"
-      - name: Publish pre-release
+      - name: Publish release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $notes = "docs/releases/$env:GITHUB_REF_NAME.md"
           if (-not (Test-Path -LiteralPath $notes)) { throw "Release notes missing: $notes" }
-          gh release create $env:GITHUB_REF_NAME $env:RELEASE_ZIP --prerelease --verify-tag --title $env:GITHUB_REF_NAME --notes-file $notes
+          # A tag with a stage (v0.4.1-beta) is a pre-release; one without (v1.0.0) is a full release.
+          $kind = if ($env:GITHUB_REF_NAME.Contains('-')) { '--prerelease' } else { '--latest' }
+          gh release create $env:GITHUB_REF_NAME $env:RELEASE_ZIP $kind --verify-tag --title $env:GITHUB_REF_NAME --notes-file $notes
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

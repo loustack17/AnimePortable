@@ -2,7 +2,7 @@
 
 # Loop 38: Hardening and release (Windows MVP)
 
-Status: 38a PASS (66f8730, CI 40054548137 green); 38b done, all scenarios and the idle target pass, uncommitted, waiting for commit approval. Owner approved starting Loop 38 on 2026-10-23 and asked for it to be split into stages; stage plan approved 2026-10-23 ("I approve the Loop 38 stage plan as written. Start stage 38a."; TypeSafe owner-report HUMAN_PASS 0.42, adjudicated: explicit approval). Base: origin/main 9e68e48.
+Status: 38a PASS (66f8730, CI 40054548137 green); 38b PASS (35a6729, CI 40061188113 green); 38c waiting for owner approval. Owner approved starting Loop 38 on 2026-10-23 and asked for it to be split into stages; stage plan approved 2026-10-23 ("I approve the Loop 38 stage plan as written. Start stage 38a."; TypeSafe owner-report HUMAN_PASS 0.42, adjudicated: explicit approval). Base: origin/main 9e68e48.
 
 ## Goal
 
@@ -123,7 +123,7 @@ ADR-023's goal: private working set under 100 MiB after 15 minutes minimized. Th
 5. Push the release commit after approval; CI green on it.
 6. Before asking to tag: remind the owner of the open question recorded 2026-10-23, whether to keep the Anime1 source in a publicly distributed release (Taiwan Copyright Act art. 87(1)(8) and 80-2, GitHub DMCA). The owner decides; the agent gives no legal advice.
 7. Tag `v1.0.0` and publish only on explicit owner approval at that moment.
-8. Verify the published ZIP in a new empty folder: file list (exe, `libmpv-2.dll`, LICENSE, THIRD_PARTY_NOTICES.md, `licenses/libmpv.txt`, the libmpv disclosure notice); DLL SHA-256 equals `internal/runtimepin`; exe is GUI subsystem and reports 1.0.0; no `data/`, logs or personal files; it starts after extraction and creates its database (process start and file check only, with the owner's OK for the window).
+8. Verify the published ZIP in a new empty folder: file list (exe, `libmpv-2.dll`, LICENSE, THIRD_PARTY_NOTICES.md, `licenses/libmpv.txt`, which is the libmpv disclosure notice); DLL SHA-256 equals `internal/runtimepin`; exe is GUI subsystem and reports 1.0.0; no `data/`, logs or personal files; it starts after extraction and creates its database (process start and file check only, with the owner's OK for the window).
 
 ### Done when
 
@@ -133,7 +133,7 @@ ADR-023's goal: private working set under 100 MiB after 15 minutes minimized. Th
 ## Owner check (after 38c)
 
 1. 從 GitHub Release v1.0.0 下載 ZIP。
-2. 解壓縮到一個新資料夾，雙擊 AnimePortable.exe：應直接開啟，不需安裝，沒有黑色主控台視窗。
+2. 解壓縮到一個新資料夾，雙擊 animeportable.exe：應直接開啟，不需安裝，沒有黑色主控台視窗。
 3. 搜尋一部動畫、點開、播放一集、切換下一集、關閉播放器、回首頁：都應正常。
 4. 關掉 App 再開：剛才的觀看紀錄與進度應還在。
 
@@ -212,3 +212,15 @@ Idle memory (owner approved the run 2026-10-24): test build `4211E2C0…33D4` st
 Harness review (oracle, read-only): no MUST_FIX. Addressed: the end of file before an autoplay switch is now taken in before the switch (unbuffered events); the proxy churn checks refusals at both caps and that closing a session cuts its stream; a private-bytes read failure fails the test; private bytes use five-sample means; at least 200 cycles; waits have timeouts; the libmpv test fails if it could not replace the video output. Not done, recorded as limits: real libmpv reads the fixture from a local server, not through the playback proxy, and the cancelled-search scenario uses a fake source, not the Anime1 adapter: both would need a test-only hook in production code (the proxy and secure client allow only public HTTPS upstreams). Proxy traffic is covered by the churn scenario and the secure client by the cancelled-requests scenario.
 
 Not covered: the engine's OpenGL render context and the FLTK windows (they need a window).
+
+38b PASS: commit 35a6729 pushed to main with owner approval; GitHub Windows CI 40061188113 green.
+
+### 38c (2026-10-24)
+
+Owner approved starting 38c 2026-10-24 ("Start stage 38c (release v1.0.0) as planned in LOOP38.md."). Release-job change approved 2026-10-24 ("Approved: apply the ci.yml release-job change as shown (full release when the tag has no stage) and update 05_WORKFLOW section 11; no pre-release test tag. The window tests may run now.").
+
+Changes: `docs/releases/v1.0.0.md` (user notes, Traditional Chinese; TypeSafe doc-quality clarity 1.75-1.97, intro filler 1.14 kept as the one-line summary earlier notes also have); `internal/release.Version` = `1.0.0`; README.md and README.en.md describe the finished features and v1.0.0 (build command with `-H windowsgui`, file name `animeportable.exe` as in the ZIP); STATUS.md; the release job publishes a tag with a stage as a pre-release and one without as a full release marked latest (`.github/workflows/ci.yml`, 05_WORKFLOW.md section 11). Not decided: how versions after v1.0.0 are numbered.
+
+Checks: full suite and `-race` pass for every package; `go vet` clean; govulncheck v1.1.4 no vulnerabilities affecting the code. Window packages: one failure without `-race` in `TestNativeRowListArrowsScrollAndLeaveToNavigation` ("FLTK event did not reach the expected Search state"; no fltkhome file changed), passed on rerun alone and as the whole package (TypeSafe failure-class FLAKY_OR_NONDETERMINISTIC 1.00). This is the second window-test flake in Loop 38 (38a: language focus); both are focus or event timing on the owner's desktop.
+
+Review (oracle, read-only): no MUST_FIX. Fixed: the handoff, two wording points in the notes (the hardware-decoding notice is the one change in function; the 10 MB figure is what Task Manager shows), the file name in the owner check. Owner decision: the update check offers the newest release, pre-releases included, so a later `v1.1.0-beta` would show 有新版本 to someone on 1.0.0 (`adapters/update/github`). NIT kept: `--latest` would also mark a later patch of an older line as latest; post-1.0 numbering is undecided.
