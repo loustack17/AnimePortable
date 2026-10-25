@@ -637,7 +637,7 @@ func normalizeSensitiveHeaders(headers []string) ([]string, bool) {
 	result := make([]string, 0, len(headers))
 	seen := make(map[string]struct{}, len(headers))
 	for _, header := range headers {
-		if !validHeaderName(header) {
+		if !ValidHeaderName(header) {
 			return nil, false
 		}
 		header = http.CanonicalHeaderKey(header)
@@ -649,7 +649,9 @@ func normalizeSensitiveHeaders(headers []string) ([]string, bool) {
 	return result, true
 }
 
-func validHeaderName(value string) bool {
+// ValidHeaderName reports whether value is a non-empty HTTP header field name made only of
+// RFC 9110 token characters.
+func ValidHeaderName(value string) bool {
 	if value == "" {
 		return false
 	}

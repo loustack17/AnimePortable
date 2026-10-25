@@ -29,7 +29,7 @@ const (
 	apiOrigin            = "https://api.bgm.tv"
 	searchURL            = apiOrigin + "/v0/search/subjects?limit=10&offset=0"
 	userAgent            = "loustack17/AnimePortable/0.0.1 (https://github.com/loustack17/AnimePortable)"
-	coverHost            = "lain.bgm.tv"
+	coverHost            = metadatapolicy.BangumiCoverHost
 	providerID           = "bangumi"
 	maxSearchResults     = 10
 	maxResponseBodyBytes = 1 << 20
@@ -543,9 +543,9 @@ func mapCoverURL(images *subjectImages) string {
 // Bangumi's large cover is the full-size original (often around 2000x2800), which is over the
 // cover loader's pixel limit. Bangumi's own resize path serves the same image 400 px wide.
 func resizedCoverURL(value string) string {
-	const original = "https://lain.bgm.tv/pic/cover/l/"
+	const original = "https://" + coverHost + "/pic/cover/l/"
 	if strings.HasPrefix(value, original) {
-		return "https://lain.bgm.tv/r/400/pic/cover/l/" + strings.TrimPrefix(value, original)
+		return "https://" + coverHost + "/r/400/pic/cover/l/" + strings.TrimPrefix(value, original)
 	}
 	return value
 }

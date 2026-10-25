@@ -312,7 +312,7 @@ func sourceHeaders(source http.Header) (http.Header, bool) {
 	totalBytes := 0
 	for name, values := range source {
 		canonical := http.CanonicalHeaderKey(name)
-		if canonical != name || !validHeaderName(name) {
+		if canonical != name || !securehttp.ValidHeaderName(name) {
 			return nil, false
 		}
 		if _, ok := allowed[canonical]; !ok || isHopHeader(canonical) || canonical == "Host" || canonical == "Range" {
@@ -333,18 +333,6 @@ func sourceHeaders(source http.Header) (http.Header, bool) {
 		}
 	}
 	return result, true
-}
-
-func validHeaderName(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, r := range value {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("!#$%&'*+-.^_`|~", r)) {
-			return false
-		}
-	}
-	return true
 }
 
 func validHeaderValue(value string) bool {

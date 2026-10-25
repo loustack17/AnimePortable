@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	anilistOrigin      = "https://s4.anilist.co"
-	bangumiOrigin      = "https://lain.bgm.tv"
+	anilistOrigin      = "https://" + metadatapolicy.AniListCoverHost
+	bangumiOrigin      = "https://" + metadatapolicy.BangumiCoverHost
 	maxResponseBytes   = 4 << 20
 	maxDimension       = 4096
 	maxPixels          = 4_194_304
@@ -117,7 +117,7 @@ func validatedURL(rawURL string) (*url.URL, error) {
 		return nil, ErrInvalidURL
 	}
 	host := strings.TrimSuffix(strings.ToLower(value.Hostname()), ".")
-	if host != "s4.anilist.co" && host != "lain.bgm.tv" {
+	if host != metadatapolicy.AniListCoverHost && host != metadatapolicy.BangumiCoverHost {
 		return nil, ErrInvalidURL
 	}
 	return value, nil

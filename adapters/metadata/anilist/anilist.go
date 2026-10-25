@@ -23,7 +23,7 @@ import (
 
 const (
 	graphqlURL           = "https://graphql.anilist.co"
-	coverHost            = "s4.anilist.co"
+	coverHost            = metadatapolicy.AniListCoverHost
 	providerID           = "anilist"
 	maxSearchResults     = 10
 	maxResponseBodyBytes = 1 << 20

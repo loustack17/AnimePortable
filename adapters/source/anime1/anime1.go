@@ -806,16 +806,27 @@ func episodeNumberResult(title string) (string, bool, bool) {
 	return number, true, false
 }
 
-func validEpisodeLink(pageURL *url.URL, href, postID string) bool {
-	if pageURL == nil {
-		return false
+// resolveSiteReference resolves an href found on an Anime1 page against base and accepts it
+// only when the reference has a valid path and both it and the result stay a plain
+// https://anime1.me path: no credentials, query, fragment, port or opaque form.
+func resolveSiteReference(base *url.URL, href string) (*url.URL, bool) {
+	if base == nil {
+		return nil, false
 	}
 	reference, err := url.Parse(href)
 	if err != nil || reference == nil || reference.User != nil || reference.Fragment != "" || reference.RawQuery != "" || reference.ForceQuery || reference.Opaque != "" || !validReferencePath(reference.EscapedPath()) {
-		return false
+		return nil, false
 	}
-	target := pageURL.ResolveReference(reference)
+	target := base.ResolveReference(reference)
 	if target == nil || target.Scheme != "https" || target.Host != "anime1.me" || target.Port() != "" || target.User != nil || target.Fragment != "" || target.RawQuery != "" || target.ForceQuery || target.Opaque != "" {
+		return nil, false
+	}
+	return target, true
+}
+
+func validEpisodeLink(pageURL *url.URL, href, postID string) bool {
+	target, ok := resolveSiteReference(pageURL, href)
+	if !ok {
 		return false
 	}
 	expectedPath := "/" + postID
@@ -860,15 +871,8 @@ func mergeEpisodePaginationTargets(currentURL *url.URL, hrefs []string) (*url.UR
 }
 
 func normalizeEpisodePaginationTarget(currentURL *url.URL, href string) (*url.URL, bool) {
-	if currentURL == nil {
-		return nil, false
-	}
-	reference, err := url.Parse(href)
-	if err != nil || reference == nil || reference.User != nil || reference.Fragment != "" || reference.RawQuery != "" || reference.ForceQuery || reference.Opaque != "" || !validReferencePath(reference.EscapedPath()) {
-		return nil, false
-	}
-	target := currentURL.ResolveReference(reference)
-	if target == nil || target.Scheme != "https" || target.Host != "anime1.me" || target.Port() != "" || target.User != nil || target.Fragment != "" || target.RawQuery != "" || target.ForceQuery || target.Opaque != "" {
+	target, ok := resolveSiteReference(currentURL, href)
+	if !ok {
 		return nil, false
 	}
 	if _, _, _, ok := parsePaginationPath(target); !ok {

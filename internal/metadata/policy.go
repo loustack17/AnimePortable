@@ -23,6 +23,10 @@ const (
 	MaxStudioTextBytes      = 1 << 10
 	MaxStudioTextRunes      = 1024
 	MaxCoverURLBytes        = 8 << 10
+
+	// AniListCoverHost and BangumiCoverHost are the only image hosts covers are loaded from.
+	AniListCoverHost = "s4.anilist.co"
+	BangumiCoverHost = "lain.bgm.tv"
 )
 
 type PlainTextLimits struct {
