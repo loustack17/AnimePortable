@@ -13,8 +13,6 @@ const (
 	maxIdentityBytes    = 1024
 	maxTitleBytes       = 65536
 	maxDescriptionBytes = 1048576
-	maxCoverURLBytes    = 8192
-	maxSeasonBytes      = 128
 )
 
 func validText(value string, maximum int) bool {

@@ -97,10 +97,6 @@ type Service struct {
 	timeline *StartTimeline
 }
 
-func New() *Service {
-	return NewAt("")
-}
-
 func NewAt(databasePath string) *Service {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	return &Service{operationSlots: make(chan struct{}, 16), shutdownDone: make(chan struct{}), lifecycleCtx: lifecycleCtx, lifecycleCancel: lifecycleCancel, newPlayer: func() (core.Player, error) { return nil, ErrUnavailable }, databasePath: databasePath, proxy: forwardproxy.New()}
@@ -128,24 +124,6 @@ func NewAtWithPlan(plan PortablePlan, proxy *forwardproxy.Source, failures *Fail
 	service := NewAtWithPlayback(plan.DatabasePath, proxy, failures, factory)
 	service.plan = plan
 	service.timeline = timeline
-	return service
-}
-
-func newWithDependencies(deps dependencies) *Service {
-	service := New()
-	service.store = service.guardedStore(deps.store)
-	service.source = stageSource{AnimeSource: deps.source, timeline: service.timeline}
-	service.cover = deps.cover
-	service.metadata = deps.metadata
-	service.schedule = deps.schedule
-	service.updates = deps.updates
-	service.myAnimeList = deps.myAnimeList
-	service.openings = deps.openings
-	service.closeDeps = deps.close
-	if deps.newPlayer != nil {
-		service.newPlayer = deps.newPlayer
-	}
-	service.app = core.NewApp(service.source, nil, service.store)
 	return service
 }
 
@@ -505,14 +483,6 @@ func formatOptionalTime(value time.Time) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339Nano)
-}
-
-func parseTime(value string) (time.Time, error) {
-	parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(value))
-	if err != nil {
-		return time.Time{}, ErrInvalidInput
-	}
-	return parsed, nil
 }
 
 func validMillis(value int64) bool {

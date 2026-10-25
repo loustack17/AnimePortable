@@ -29,9 +29,6 @@ const (
 	maxResponseBodyBytes = 1 << 20
 	maxTitleTextBytes    = metadatapolicy.MaxTitleTextBytes
 	maxTitleTextRunes    = metadatapolicy.MaxTitleTextRunes
-	maxDescriptionBytes  = metadatapolicy.MaxDescriptionTextBytes
-	maxDescriptionRunes  = metadatapolicy.MaxDescriptionTextRunes
-	maxCoverURLBytes     = metadatapolicy.MaxCoverURLBytes
 	maxMetadataIDDigits  = 10
 	maxStudioTextBytes   = metadatapolicy.MaxStudioTextBytes
 	maxJSONNestingDepth  = 64

@@ -590,3 +590,23 @@ func TestDefaultSettingsAreWhatThePlayerStartsWith(t *testing.T) {
 		t.Fatalf("DefaultSettings() = %+v", got)
 	}
 }
+
+// newWithDependencies builds a Service around test doubles instead of opening the
+// production adapters.
+func newWithDependencies(deps dependencies) *Service {
+	service := NewAt("")
+	service.store = service.guardedStore(deps.store)
+	service.source = stageSource{AnimeSource: deps.source, timeline: service.timeline}
+	service.cover = deps.cover
+	service.metadata = deps.metadata
+	service.schedule = deps.schedule
+	service.updates = deps.updates
+	service.myAnimeList = deps.myAnimeList
+	service.openings = deps.openings
+	service.closeDeps = deps.close
+	if deps.newPlayer != nil {
+		service.newPlayer = deps.newPlayer
+	}
+	service.app = core.NewApp(service.source, nil, service.store)
+	return service
+}

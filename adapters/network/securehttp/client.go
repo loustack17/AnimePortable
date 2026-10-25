@@ -38,22 +38,6 @@ const (
 	KindProxyRefused Kind = "proxy_refused"
 )
 
-const (
-	InvalidConfig   = KindConfig
-	InvalidURL      = KindURL
-	InvalidOrigin   = KindOrigin
-	InvalidAddress  = KindAddress
-	Redirect        = KindRedirect
-	Network         = KindNetwork
-	Timeout         = KindTimeout
-	Canceled        = KindCanceled
-	InvalidResponse = KindResponse
-	BodyTooLarge    = KindBodyTooLarge
-	Status          = KindStatus
-	ProxyFailed     = KindProxy
-	ProxyRefused    = KindProxyRefused
-)
-
 type Error struct {
 	Kind Kind
 	// Status is the HTTP status code for KindStatus errors, otherwise zero.
@@ -647,32 +631,6 @@ func networkError(ctx context.Context) error {
 		return sanitizeError(ctx.Err())
 	}
 	return &Error{Kind: KindNetwork}
-}
-
-func RedactURL(value *url.URL) *url.URL {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	clone.User = nil
-	clone.Path = ""
-	clone.RawPath = ""
-	clone.RawQuery = ""
-	clone.ForceQuery = false
-	clone.Fragment = ""
-	clone.RawFragment = ""
-	return &clone
-}
-
-func RedactHeaders(headers http.Header, extraSensitiveHeaders ...string) http.Header {
-	clone := headers.Clone()
-	stripSensitiveHeaders(clone, normalizeHeaders(extraSensitiveHeaders))
-	return clone
-}
-
-func normalizeHeaders(headers []string) []string {
-	result, _ := normalizeSensitiveHeaders(headers)
-	return result
 }
 
 func normalizeSensitiveHeaders(headers []string) ([]string, bool) {

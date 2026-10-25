@@ -58,8 +58,6 @@ type Client struct {
 	do responseClient
 }
 
-type Source = Client
-
 func New(client *securehttp.Client) *Client {
 	return newWithDo(client)
 }

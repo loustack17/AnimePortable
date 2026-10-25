@@ -145,9 +145,6 @@ type playbackSession struct {
 	stopEvents     chan struct{}
 	workerDone     chan struct{}
 	events         chan core.PlaybackEvent
-	position       time.Duration
-	duration       time.Duration
-	paused         bool
 	cleanupErr     error
 	generation     uint64
 	nextGeneration uint64
@@ -227,9 +224,6 @@ func (session *playbackSession) load(ctx context.Context, request core.PlayReque
 	session.current = request
 	session.currentProxy = candidate
 	session.generation = generation
-	session.position = request.StartAt
-	session.duration = 0
-	session.paused = request.Paused
 	session.mu.Unlock()
 	if !initial && old != nil {
 		if err := old.Close(); err != nil {
@@ -300,13 +294,6 @@ func (session *playbackSession) Snapshot(ctx context.Context) (core.PlaybackSnap
 	if snapshot.Position < 0 || snapshot.Duration < 0 {
 		return core.PlaybackSnapshot{}, ErrPlayerFailed
 	}
-	session.mu.Lock()
-	if !session.closed {
-		session.position = snapshot.Position
-		session.duration = snapshot.Duration
-		session.paused = snapshot.Paused
-	}
-	session.mu.Unlock()
 	return snapshot, nil
 }
 
@@ -333,12 +320,6 @@ func (session *playbackSession) forwardEvent(event Event) {
 		return
 	}
 	request := session.current
-	switch event.Kind {
-	case EventProgress, EventPaused:
-		session.position = event.Position
-		session.duration = event.Duration
-		session.paused = event.Kind == EventPaused
-	}
 	session.mu.Unlock()
 	kind := core.PlaybackEventUnknown
 	switch event.Kind {

@@ -36,8 +36,6 @@ const (
 	maxTitleTextBytes    = metadatapolicy.MaxTitleTextBytes
 	maxTitleTextRunes    = metadatapolicy.MaxTitleTextRunes
 	maxDescriptionBytes  = metadatapolicy.MaxDescriptionTextBytes
-	maxDescriptionRunes  = metadatapolicy.MaxDescriptionTextRunes
-	maxCoverURLBytes     = metadatapolicy.MaxCoverURLBytes
 	maxJSONNestingDepth  = 64
 	maxEpisodeCount      = 100000
 	maxYear              = 3000

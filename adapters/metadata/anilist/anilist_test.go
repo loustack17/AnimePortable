@@ -16,6 +16,7 @@ import (
 
 	"animeportable/adapters/network/securehttp"
 	"animeportable/core"
+	metadatapolicy "animeportable/internal/metadata"
 	"animeportable/tests/contract"
 )
 
@@ -525,7 +526,7 @@ func TestAniListRejectsExcessiveJSONNesting(t *testing.T) {
 
 func TestAniListDescriptionWithManyOpenBracketsIsBounded(t *testing.T) {
 	media := validMedia()
-	media["description"] = strings.Repeat("[", maxDescriptionRunes)
+	media["description"] = strings.Repeat("[", metadatapolicy.MaxDescriptionTextRunes)
 	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
 	if err != nil {
 		t.Fatal(err)

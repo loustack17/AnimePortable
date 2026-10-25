@@ -659,7 +659,7 @@ func TestStoredEpisodesComeFromLocalDataInOrder(t *testing.T) {
 }
 
 func TestCanceledStartupDoesNotLeavePartiallyInitializedService(t *testing.T) {
-	service := New()
+	service := NewAt("")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := service.Start(ctx); !errors.Is(err, context.Canceled) {

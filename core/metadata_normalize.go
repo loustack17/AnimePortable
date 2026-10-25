@@ -10,15 +10,6 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-func NormalizeMetadataTitle(value string) string {
-	base, _, ok := metadataTitleParts(value)
-	if !ok {
-		return ""
-	}
-	main, _, _ := strings.Cut(base, metadataSubtitleSeparator)
-	return main
-}
-
 // metadataSubtitleSeparator joins a title's main part and its ～subtitle～ in the normalized
 // form, so matching can compare them separately (see metadataNameMatch).
 const metadataSubtitleSeparator = "\x1f"

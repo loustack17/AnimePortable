@@ -8,6 +8,17 @@ import (
 	"testing"
 )
 
+// normalizeMetadataTitle exposes the main-title part of metadataTitleParts, so the
+// normalization rules can be tested apart from matching.
+func normalizeMetadataTitle(value string) string {
+	base, _, ok := metadataTitleParts(value)
+	if !ok {
+		return ""
+	}
+	main, _, _ := strings.Cut(base, metadataSubtitleSeparator)
+	return main
+}
+
 func TestNormalizeMetadataTitle(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -27,8 +38,8 @@ func TestNormalizeMetadataTitle(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := NormalizeMetadataTitle(test.input); got != test.want {
-				t.Fatalf("NormalizeMetadataTitle(%q) = %q, want %q", test.input, got, test.want)
+			if got := normalizeMetadataTitle(test.input); got != test.want {
+				t.Fatalf("normalizeMetadataTitle(%q) = %q, want %q", test.input, got, test.want)
 			}
 		})
 	}

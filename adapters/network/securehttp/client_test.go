@@ -542,22 +542,6 @@ func TestCloseIdleConnectionsDelegatesToTransport(t *testing.T) {
 	}
 }
 
-func TestRedactionClonesAndRemovesSecrets(t *testing.T) {
-	originalURL, err := url.Parse("https://user:pass@example.com/path-token?query-secret=yes#fragment-secret")
-	if err != nil {
-		t.Fatal(err)
-	}
-	redacted := RedactURL(originalURL)
-	if redacted == originalURL || redacted.User != nil || redacted.Path != "" || redacted.RawQuery != "" || redacted.Fragment != "" || originalURL.Path != "/path-token" {
-		t.Fatal(redacted)
-	}
-	originalHeaders := http.Header{"Authorization": {"auth-secret"}, "Cookie": {"cookie-secret"}, "X-Token": {"extra-secret"}, "Accept": {"application/json"}}
-	redactedHeaders := RedactHeaders(originalHeaders, "X-Token")
-	if redactedHeaders.Get("Authorization") != "" || redactedHeaders.Get("Cookie") != "" || redactedHeaders.Get("X-Token") != "" || redactedHeaders.Get("Accept") == "" || originalHeaders.Get("Authorization") == "" {
-		t.Fatal(redactedHeaders)
-	}
-}
-
 func newTestClient(t *testing.T, origins []string, resolver func(context.Context, string) ([]netip.Addr, error), dialer func(context.Context, string, string) (net.Conn, error)) *Client {
 	t.Helper()
 	c, err := newClient(Config{AllowedOrigins: origins}, resolver, dialer)

@@ -7,12 +7,13 @@ Recovery index only. Git, CI, tests and the linked docs override it. Rules for t
 ```yaml
 schema_version: 2
 instruction_version: "3.1"
-status: PASS
+status: IN_PROGRESS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  None. Loop 38 (hardening and release) PASSED 2026-10-24 after the owner check of the published ZIP (docs/loops/LOOP38.md; evidence artifacts/evidence/loop38/): 38a security (66f8730, CI 40054548137), 38b resources (35a6729, CI 40061188113), 38c v1.0.0 published as full release + latest (owner kept Anime1 after the legal reminder; tag on 5d9c068, CI 40069127213, release job 40069518830). Closeout doc updates since 5d9c068 uncommitted (docs commit needs owner approval).
-  Next: version 2.0 (Loops 39-46, docs/04_ROADMAP.md) needs owner approval to start.
+  Loop 38R (cleanup before 2.0, owner request 2026-10-25): audit done, plan in docs/loops/LOOP38R.md (slices S1-S11, owner decisions O1-O8), oracle-checked, TypeSafe doc-quality in artifacts/evidence/loop38r/ of worktree relaxed-montalcini-e848e2. Slice list approved 2026-10-25. S1 (dead code, adapters and core) done and checked, uncommitted, waiting for owner approval to commit and push; next S2. One slice per commit, owner approval before each commit and push.
+  Loop 38 (hardening and release) PASSED 2026-10-24 (docs/loops/LOOP38.md; v1.0.0 published, tag on 5d9c068).
+  Next after 38R: version 2.0 (Loops 39-46, docs/04_ROADMAP.md) needs owner approval to start.
   Open owner decisions: update check offers pre-releases to users on 1.0.0; 03_SECURITY close order (N8); numbering of versions after 1.0.0.
   Loop 37d passed 2026-10-23 (LOOP37D.md); v0.4.1-beta published 2026-10-23. Never drive the owner's desktop to investigate; reproduce headlessly.
 active_acceptance: none
@@ -54,6 +55,7 @@ boundaries:
   - Keep .codex/, artifacts/ and portable data untouched.
   - Commit, push, workflow and release need owner approval.
 references:
+  - docs/loops/LOOP38R.md
   - docs/loops/LOOP38.md
   - docs/loops/LOOP37D.md
   - docs/loops/LOOP37C.md

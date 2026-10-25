@@ -27,8 +27,8 @@ func TestMatchMetadataReadsAnUnclosedTildeAsASubtitle(t *testing.T) {
 	if got := acceptedID(MatchMetadata(MetadataMatchRequest{Query: query, Candidates: []MetadataCandidate{right}})); got != "" {
 		t.Fatalf("other year accepted %q", got)
 	}
-	if got := NormalizeMetadataTitle("作品名 ～副標題"); got != "作品名" {
-		t.Fatalf("NormalizeMetadataTitle = %q, want the main title only", got)
+	if got := normalizeMetadataTitle("作品名 ～副標題"); got != "作品名" {
+		t.Fatalf("normalizeMetadataTitle = %q, want the main title only", got)
 	}
 }
 

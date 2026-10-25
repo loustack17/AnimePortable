@@ -83,16 +83,6 @@ func (player *fakePlayer) Start(ctx context.Context, request PlayRequest) (Playb
 	return player.session, player.err
 }
 
-type fakeMetadataProvider struct{}
-
-func (*fakeMetadataProvider) Search(context.Context, MetadataQuery) ([]MetadataCandidate, error) {
-	return nil, nil
-}
-
-func (*fakeMetadataProvider) Get(context.Context, MetadataRef) (AnimeMetadata, error) {
-	return AnimeMetadata{}, nil
-}
-
 type fakeSession struct {
 	events   chan PlaybackEvent
 	context  context.Context
@@ -320,11 +310,10 @@ func (store *fakeStore) Settings(context.Context) (Settings, error) {
 }
 
 var (
-	_ AnimeSource      = (*fakeSource)(nil)
-	_ MetadataProvider = (*fakeMetadataProvider)(nil)
-	_ Player           = (*fakePlayer)(nil)
-	_ PlaybackSession  = (*fakeSession)(nil)
-	_ Store            = (*fakeStore)(nil)
+	_ AnimeSource     = (*fakeSource)(nil)
+	_ Player          = (*fakePlayer)(nil)
+	_ PlaybackSession = (*fakeSession)(nil)
+	_ Store           = (*fakeStore)(nil)
 )
 
 func TestAppSearchUsesSource(t *testing.T) {

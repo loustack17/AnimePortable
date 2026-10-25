@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"animeportable/core"
+	metadatapolicy "animeportable/internal/metadata"
 )
 
 func TestLibraryStatePersistsAcrossAnimeUpdatesAndReopen(t *testing.T) {
@@ -141,8 +142,8 @@ func TestLibraryReferenceValidationBounds(t *testing.T) {
 	tooLargeIdentity := strings.Repeat("x", maxIdentityBytes+1)
 	tooLargeTitle := strings.Repeat("x", maxTitleBytes+1)
 	tooLargeDescription := strings.Repeat("x", maxDescriptionBytes+1)
-	tooLargeCoverURL := strings.Repeat("x", maxCoverURLBytes+1)
-	tooLargeSeason := strings.Repeat("x", maxSeasonBytes+1)
+	tooLargeCoverURL := strings.Repeat("x", metadatapolicy.MaxCoverURLBytes+1)
+	tooLargeSeason := strings.Repeat("x", metadatapolicy.MaxSeasonTextBytes+1)
 	for name, save := range map[string]func() error{
 		"source empty provider": func() error { return store.SaveSourceRef(ctx, "anime", core.SourceRef{ID: "id"}) },
 		"source empty ID":       func() error { return store.SaveSourceRef(ctx, "anime", core.SourceRef{Provider: "provider"}) },
