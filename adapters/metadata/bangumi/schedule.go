@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	metadatainternal "animeportable/adapters/metadata/internal"
 	"animeportable/core"
 	metadatapolicy "animeportable/internal/metadata"
 )
@@ -32,7 +33,7 @@ func (client *Client) Schedule(ctx context.Context) ([]core.ScheduleEntry, error
 		return nil, errMetadataMalformed
 	}
 	var calendar calendarResponse
-	if err := decodeResponse(wrapped, &calendar); err != nil {
+	if err := responseRules.Decode(wrapped, &calendar); err != nil {
 		return nil, err
 	}
 	type scheduleKey struct {
@@ -64,7 +65,7 @@ func (client *Client) Schedule(ctx context.Context) ([]core.ScheduleEntry, error
 	return entries, nil
 }
 
-// wrapCalendar puts the calendar's top-level array in an object, because decodeResponse
+// wrapCalendar puts the calendar's top-level array in an object, because responseRules.Decode
 // (duplicate-key and nesting checks included) only accepts objects. It reports false for a
 // body that is not an array.
 func wrapCalendar(body []byte) ([]byte, bool) {
@@ -80,7 +81,7 @@ func mapScheduleItem(raw json.RawMessage) (core.ScheduleEntry, bool) {
 	if json.Unmarshal(raw, &item) != nil {
 		return core.ScheduleEntry{}, false
 	}
-	id, _, ok := parseJSONMetadataID(item.ID)
+	id, _, ok := metadatainternal.ParseJSONID(item.ID)
 	if !ok || item.Type == nil || *item.Type != 2 {
 		return core.ScheduleEntry{}, false
 	}

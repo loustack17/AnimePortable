@@ -7,13 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"mime"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	metadatainternal "animeportable/adapters/metadata/internal"
 	"animeportable/adapters/network/securehttp"
@@ -27,10 +22,6 @@ const (
 	providerID           = "anilist"
 	maxSearchResults     = 10
 	maxResponseBodyBytes = 1 << 20
-	maxTitleTextBytes    = metadatapolicy.MaxTitleTextBytes
-	maxTitleTextRunes    = metadatapolicy.MaxTitleTextRunes
-	maxMetadataIDDigits  = 10
-	maxStudioTextBytes   = metadatapolicy.MaxStudioTextBytes
 	maxJSONNestingDepth  = 64
 	maxSeasonYear        = 3000
 	maxEpisodeCount      = 100000
@@ -47,6 +38,15 @@ var (
 	errMetadataInvalidRef   = errors.New("anilist: invalid metadata reference")
 	errMetadataProvider     = errors.New("anilist: provider error")
 )
+
+// responseRules are the answer limits and errors shared with the other metadata provider's
+// checks in adapters/metadata/internal.
+var responseRules = metadatainternal.Rules{
+	MaxBodyBytes:    maxResponseBodyBytes,
+	MaxNestingDepth: maxJSONNestingDepth,
+	Unavailable:     errMetadataUnavailable,
+	Malformed:       errMetadataMalformed,
+}
 
 type responseClient interface {
 	Do(*http.Request) (*securehttp.Response, error)
@@ -76,7 +76,7 @@ func (client *Client) Search(ctx context.Context, query core.MetadataQuery) ([]c
 	if search == "" {
 		search = strings.TrimSpace(query.NativeTitle)
 	}
-	if !validSearchQuery(search) {
+	if !metadatainternal.ValidSearchQuery(search) {
 		return nil, errMetadataInvalidQuery
 	}
 	response, err := client.doRequest(ctx, searchDocument, struct {
@@ -86,7 +86,7 @@ func (client *Client) Search(ctx context.Context, query core.MetadataQuery) ([]c
 		return nil, err
 	}
 	var payload searchResponse
-	if err := decodeResponse(response.Body, &payload); err != nil {
+	if err := responseRules.Decode(response.Body, &payload); err != nil {
 		return nil, err
 	}
 	if len(payload.Errors) > 0 {
@@ -122,7 +122,7 @@ func (client *Client) Get(ctx context.Context, ref core.MetadataRef) (core.Anime
 	if ref.Provider != providerID {
 		return core.AnimeMetadata{}, errMetadataInvalidRef
 	}
-	id, numericID, ok := parseMetadataID(ref.ID)
+	id, numericID, ok := metadatainternal.ParseID(ref.ID)
 	if !ok {
 		return core.AnimeMetadata{}, errMetadataInvalidRef
 	}
@@ -133,7 +133,7 @@ func (client *Client) Get(ctx context.Context, ref core.MetadataRef) (core.Anime
 		return core.AnimeMetadata{}, err
 	}
 	var payload getResponse
-	if err := decodeResponse(response.Body, &payload); err != nil {
+	if err := responseRules.Decode(response.Body, &payload); err != nil {
 		return core.AnimeMetadata{}, err
 	}
 	if len(payload.Errors) > 0 {
@@ -161,7 +161,7 @@ func (client *Client) MyAnimeListID(ctx context.Context, ref core.MetadataRef) (
 	if ref.Provider != providerID {
 		return 0, errMetadataInvalidRef
 	}
-	id, numericID, ok := parseMetadataID(ref.ID)
+	id, numericID, ok := metadatainternal.ParseID(ref.ID)
 	if !ok {
 		return 0, errMetadataInvalidRef
 	}
@@ -172,7 +172,7 @@ func (client *Client) MyAnimeListID(ctx context.Context, ref core.MetadataRef) (
 		return 0, err
 	}
 	var payload malResponse
-	if err := decodeResponse(response.Body, &payload); err != nil {
+	if err := responseRules.Decode(response.Body, &payload); err != nil {
 		return 0, err
 	}
 	if len(payload.Errors) > 0 {
@@ -182,7 +182,7 @@ func (client *Client) MyAnimeListID(ctx context.Context, ref core.MetadataRef) (
 		return 0, core.ErrNotFound
 	}
 	media := payload.Data.Media
-	if mediaID, _, ok := parseJSONMetadataID(media.ID); !ok || mediaID != id {
+	if mediaID, _, ok := metadatainternal.ParseJSONID(media.ID); !ok || mediaID != id {
 		return 0, errMetadataMalformed
 	}
 	if media.MyAnimeListID == nil {
@@ -215,29 +215,11 @@ func (client *Client) doRequest(ctx context.Context, document string, variables 
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json")
 	response, err := client.do.Do(request)
-	if err != nil {
-		return nil, sanitizeRequestError(err)
-	}
-	if response == nil {
-		return nil, errMetadataUnavailable
-	}
-	if err := checkContext(ctx); err != nil {
-		return nil, err
-	}
-	if response.StatusCode == http.StatusNotFound && notFoundIsMissing {
-		return nil, core.ErrNotFound
-	}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, errMetadataUnavailable
-	}
-	if len(response.Body) > maxResponseBodyBytes || !isJSONResponse(response.Header.Get("Content-Type")) {
-		return nil, errMetadataMalformed
-	}
-	return response, nil
+	return responseRules.CheckResponse(ctx, response, err, notFoundIsMissing)
 }
 
 func mapCandidate(media mediaResponse) (core.MetadataCandidate, bool) {
-	id, _, ok := parseJSONMetadataID(media.ID)
+	id, _, ok := metadatainternal.ParseJSONID(media.ID)
 	if !ok {
 		return core.MetadataCandidate{}, false
 	}
@@ -256,7 +238,7 @@ func mapCandidate(media mediaResponse) (core.MetadataCandidate, bool) {
 }
 
 func mapMetadata(media mediaResponse) (core.AnimeMetadata, bool) {
-	id, _, ok := parseJSONMetadataID(media.ID)
+	id, _, ok := metadatainternal.ParseJSONID(media.ID)
 	if !ok {
 		return core.AnimeMetadata{}, false
 	}
@@ -296,11 +278,11 @@ func mapTitles(title *mediaTitle) (string, string, bool) {
 	if title == nil {
 		return "", "", true
 	}
-	romaji, ok := boundedText(title.Romaji, maxTitleTextBytes, maxTitleTextRunes)
+	romaji, ok := metadatainternal.BoundedText(title.Romaji, metadatapolicy.TitleLimits())
 	if !ok {
 		return "", "", false
 	}
-	native, ok := boundedText(title.Native, maxTitleTextBytes, maxTitleTextRunes)
+	native, ok := metadatainternal.BoundedText(title.Native, metadatapolicy.TitleLimits())
 	if !ok {
 		return "", "", false
 	}
@@ -319,7 +301,7 @@ func mapCoverURL(image coverImage) string {
 		if value == nil || *value == "" {
 			continue
 		}
-		if validCoverURL(*value) {
+		if metadatainternal.ValidCoverURL(*value, coverHost) {
 			return *value
 		}
 		return ""
@@ -332,7 +314,7 @@ func mapStudio(studios studioConnection) string {
 		if !studio.IsAnimationStudio || studio.Name == nil {
 			continue
 		}
-		name, ok := boundedText(studio.Name, maxStudioTextBytes, metadatapolicy.MaxStudioTextRunes)
+		name, ok := metadatainternal.BoundedText(studio.Name, metadatapolicy.StudioLimits())
 		if ok && name != "" {
 			return name
 		}
@@ -349,17 +331,6 @@ func validSeason(season string) bool {
 	}
 }
 
-func boundedText(value *string, maxBytes, maxRunes int) (string, bool) {
-	if value == nil {
-		return "", true
-	}
-	return metadatapolicy.NormalizePlainText(*value, metadatapolicy.PlainTextLimits{MaxInputBytes: maxBytes, MaxOutputBytes: maxBytes, MaxOutputRunes: maxRunes})
-}
-
-func validSearchQuery(value string) bool {
-	return value != "" && len(value) <= maxTitleTextBytes && utf8.RuneCountInString(value) <= maxTitleTextRunes && utf8.ValidString(value) && !containsDisallowedControl(value)
-}
-
 func validOptionalNumber(value *int, maximum int) bool {
 	return value == nil || *value >= 0 && *value <= maximum
 }
@@ -371,83 +342,11 @@ func numericValue(value *int) int {
 	return *value
 }
 
-func parseMetadataID(value string) (string, int, bool) {
-	if len(value) == 0 || len(value) > maxMetadataIDDigits || value[0] == '0' {
-		return "", 0, false
-	}
-	for _, digit := range value {
-		if digit < '0' || digit > '9' {
-			return "", 0, false
-		}
-	}
-	numeric, err := strconv.ParseInt(value, 10, 32)
-	if err != nil || numeric <= 0 {
-		return "", 0, false
-	}
-	return value, int(numeric), true
-}
-
-func parseJSONMetadataID(value json.RawMessage) (string, int, bool) {
-	if len(value) == 0 {
-		return "", 0, false
-	}
-	return parseMetadataID(string(value))
-}
-
-func validCoverURL(value string) bool {
-	if value == "" || !metadatapolicy.IsSafeCoverURL(value) {
-		return false
-	}
-	target, err := url.Parse(value)
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(target.Hostname(), coverHost)
-}
-
-func containsDisallowedControl(value string) bool {
-	for _, character := range value {
-		if unicode.IsControl(character) && character != '\n' && character != '\r' && character != '\t' {
-			return true
-		}
-	}
-	return false
-}
-
-func isJSONResponse(contentType string) bool {
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	return err == nil && strings.EqualFold(mediaType, "application/json")
-}
-
 func checkContext(ctx context.Context) error {
 	if ctx == nil {
 		return errMetadataUnavailable
 	}
 	return ctx.Err()
-}
-
-func sanitizeRequestError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
-	}
-	var secureError *securehttp.Error
-	if errors.As(err, &secureError) {
-		return secureError
-	}
-	return errMetadataUnavailable
-}
-
-func decodeResponse(body []byte, value any) error {
-	if !metadatainternal.DecodeObject(body, value, metadatainternal.JSONLimits{
-		MaxBytes:        maxResponseBodyBytes,
-		MaxNestingDepth: maxJSONNestingDepth,
-	}) {
-		return errMetadataMalformed
-	}
-	return nil
 }
 
 type graphqlErrors struct {

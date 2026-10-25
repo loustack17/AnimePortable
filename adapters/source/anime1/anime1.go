@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -50,6 +49,9 @@ var (
 	errEpisodesMalformed   = errors.New("anime1: malformed episodes")
 )
 
+// htmlMediaTypes are the Content-Type values accepted for Anime1 HTML pages.
+var htmlMediaTypes = []string{"text/html", "application/xhtml+xml"}
+
 type responseClient interface {
 	Do(*http.Request) (*securehttp.Response, error)
 }
@@ -79,7 +81,7 @@ func (client *Client) Catalog(ctx context.Context) ([]core.SourceAnime, error) {
 	}
 	response, err := client.do.Do(request)
 	if err != nil {
-		return nil, sanitizeRequestError(err)
+		return nil, securehttp.SafeError(err, errCatalogUnavailable)
 	}
 	if response == nil {
 		return nil, errCatalogUnavailable
@@ -90,7 +92,7 @@ func (client *Client) Catalog(ctx context.Context) ([]core.SourceAnime, error) {
 	if err := checkContext(ctx); err != nil {
 		return nil, err
 	}
-	if !isJSONResponse(response.Header.Get("Content-Type")) {
+	if !securehttp.HasMediaType(response.Header.Get("Content-Type"), "application/json") {
 		return nil, errCatalogMalformed
 	}
 	return parseCatalog(ctx, response.Body)
@@ -334,35 +336,7 @@ func normalizeTitle(ctx context.Context, fragment string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	parts := make([]string, 0)
-	var walk func(*html.Node) error
-	walk = func(node *html.Node) error {
-		if err := checkContext(ctx); err != nil {
-			return err
-		}
-		if node.Type == html.ElementNode && excludedElement(node.Data) {
-			return nil
-		}
-		if node.Type == html.TextNode {
-			parts = append(parts, node.Data)
-		}
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			if err := walk(child); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	for _, node := range nodes {
-		if err := walk(node); err != nil {
-			return "", err
-		}
-	}
-	normalized := strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
-	if len(normalized) > maxTitleTextBytes || utf8.RuneCountInString(normalized) > maxTitleTextRunes {
-		return "", errCatalogMalformed
-	}
-	return normalized, nil
+	return visibleText(ctx, nodes, maxTitleTextBytes, maxTitleTextRunes, errCatalogMalformed)
 }
 
 func excludedElement(name string) bool {
@@ -374,30 +348,11 @@ func excludedElement(name string) bool {
 	}
 }
 
-func isJSONResponse(contentType string) bool {
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	return err == nil && strings.EqualFold(mediaType, "application/json")
-}
-
 func checkContext(ctx context.Context) error {
 	if ctx == nil {
 		return errCatalogUnavailable
 	}
 	return ctx.Err()
-}
-
-func sanitizeRequestError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
-	}
-	var secureError *securehttp.Error
-	if errors.As(err, &secureError) {
-		return secureError
-	}
-	return errCatalogUnavailable
 }
 
 // Anime1 sometimes leaves a page request without an answer, then answers the same request at
@@ -440,7 +395,7 @@ func (client *Client) fetchEpisodePage(ctx context.Context, pageURL *url.URL) ([
 		return nil, errEpisodesUnavailable
 	}
 	if err != nil {
-		return nil, sanitizeEpisodeRequestError(err)
+		return nil, securehttp.SafeError(err, errEpisodesUnavailable)
 	}
 	if response == nil {
 		return nil, errEpisodesUnavailable
@@ -454,7 +409,7 @@ func (client *Client) fetchEpisodePage(ctx context.Context, pageURL *url.URL) ([
 	if err := checkContext(ctx); err != nil {
 		return nil, err
 	}
-	if !isHTMLResponse(response.Header.Get("Content-Type")) {
+	if !securehttp.HasMediaType(response.Header.Get("Content-Type"), htmlMediaTypes...) {
 		return nil, errEpisodesMalformed
 	}
 	return response.Body, nil
@@ -477,25 +432,6 @@ func parseBoundedPositiveDecimal(value string, maxDigits int) (string, bool) {
 		}
 	}
 	return value, true
-}
-
-func isHTMLResponse(contentType string) bool {
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	return err == nil && (strings.EqualFold(mediaType, "text/html") || strings.EqualFold(mediaType, "application/xhtml+xml"))
-}
-
-func sanitizeEpisodeRequestError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
-	}
-	var secureError *securehttp.Error
-	if errors.As(err, &secureError) {
-		return secureError
-	}
-	return errEpisodesUnavailable
 }
 
 type episodePage struct {
@@ -758,8 +694,19 @@ func findEntryTitleAnchors(ctx context.Context, article *html.Node) ([]*html.Nod
 }
 
 func normalizeEpisodeText(ctx context.Context, root *html.Node) (string, error) {
+	return visibleText(ctx, []*html.Node{root}, maxEpisodeTitleBytes, maxEpisodeTitleRunes, errEpisodesMalformed)
+}
+
+// visibleText joins the text under roots, in document order, that a reader would see: text
+// inside script, style and similar elements is skipped, and runs of white space become one
+// space. A result over the limits is malformed. It walks with an explicit stack, so a deeply
+// nested page cannot exhaust the goroutine stack.
+func visibleText(ctx context.Context, roots []*html.Node, maxBytes, maxRunes int, malformed error) (string, error) {
 	parts := make([]string, 0)
-	stack := []*html.Node{root}
+	stack := make([]*html.Node, 0, len(roots))
+	for index := len(roots) - 1; index >= 0; index-- {
+		stack = append(stack, roots[index])
+	}
 	for len(stack) > 0 {
 		last := len(stack) - 1
 		node := stack[last]
@@ -781,8 +728,8 @@ func normalizeEpisodeText(ctx context.Context, root *html.Node) (string, error) 
 		}
 	}
 	normalized := strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
-	if len(normalized) > maxEpisodeTitleBytes || utf8.RuneCountInString(normalized) > maxEpisodeTitleRunes {
-		return "", errEpisodesMalformed
+	if len(normalized) > maxBytes || utf8.RuneCountInString(normalized) > maxRunes {
+		return "", malformed
 	}
 	return normalized, nil
 }

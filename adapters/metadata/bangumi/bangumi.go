@@ -8,16 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"mime"
 	"net/http"
-	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	metadatainternal "animeportable/adapters/metadata/internal"
 	"animeportable/adapters/network/securehttp"
@@ -34,12 +30,10 @@ const (
 	maxSearchResults     = 10
 	maxResponseBodyBytes = 1 << 20
 	maxTitleTextBytes    = metadatapolicy.MaxTitleTextBytes
-	maxTitleTextRunes    = metadatapolicy.MaxTitleTextRunes
 	maxDescriptionBytes  = metadatapolicy.MaxDescriptionTextBytes
 	maxJSONNestingDepth  = 64
 	maxEpisodeCount      = 100000
 	maxYear              = 3000
-	maxMetadataIDDigits  = 10
 	maxAliases           = 16
 	browsePageSize       = 50
 	// A season holds about 130-150 anime; the bound keeps a broken listing from paging forever.
@@ -57,6 +51,15 @@ var (
 	errMetadataInvalidQuery = errors.New("bangumi: invalid metadata query")
 	errMetadataInvalidRef   = errors.New("bangumi: invalid metadata reference")
 )
+
+// responseRules are the answer limits and errors shared with the other metadata provider's
+// checks in adapters/metadata/internal.
+var responseRules = metadatainternal.Rules{
+	MaxBodyBytes:    maxResponseBodyBytes,
+	MaxNestingDepth: maxJSONNestingDepth,
+	Unavailable:     errMetadataUnavailable,
+	Malformed:       errMetadataMalformed,
+}
 
 type responseClient interface {
 	Do(*http.Request) (*securehttp.Response, error)
@@ -95,7 +98,7 @@ func (client *Client) Search(ctx context.Context, query core.MetadataQuery) ([]c
 	if keyword == "" {
 		keyword = strings.TrimSpace(query.NativeTitle)
 	}
-	if !validSearchQuery(keyword) {
+	if !metadatainternal.ValidSearchQuery(keyword) {
 		return nil, errMetadataInvalidQuery
 	}
 	payload := struct {
@@ -111,7 +114,7 @@ func (client *Client) Search(ctx context.Context, query core.MetadataQuery) ([]c
 		return nil, err
 	}
 	var result searchResponse
-	if err := decodeResponse(response.Body, &result); err != nil {
+	if err := responseRules.Decode(response.Body, &result); err != nil {
 		return nil, err
 	}
 	if len(result.Data) > maxSearchResults {
@@ -261,7 +264,7 @@ func (client *Client) browsePages(ctx context.Context, year, month, first, count
 				return
 			}
 			var page browseResponse
-			if err := decodeResponse(response.Body, &page); err != nil {
+			if err := responseRules.Decode(response.Body, &page); err != nil {
 				fail(err)
 				return
 			}
@@ -286,7 +289,7 @@ func (client *Client) Get(ctx context.Context, ref core.MetadataRef) (core.Anime
 	if ref.Provider != providerID {
 		return core.AnimeMetadata{}, errMetadataInvalidRef
 	}
-	id, _, ok := parseMetadataID(ref.ID)
+	id, _, ok := metadatainternal.ParseID(ref.ID)
 	if !ok {
 		return core.AnimeMetadata{}, errMetadataInvalidRef
 	}
@@ -295,7 +298,7 @@ func (client *Client) Get(ctx context.Context, ref core.MetadataRef) (core.Anime
 		return core.AnimeMetadata{}, err
 	}
 	var subject subjectResponse
-	if err := decodeResponse(response.Body, &subject); err != nil {
+	if err := responseRules.Decode(response.Body, &subject); err != nil {
 		return core.AnimeMetadata{}, err
 	}
 	metadata, ok := mapMetadata(subject)
@@ -332,25 +335,7 @@ func (client *Client) doRequest(ctx context.Context, method, target string, body
 		request.Header.Set("Content-Type", "application/json")
 	}
 	response, err := client.do.Do(request)
-	if err != nil {
-		return nil, sanitizeRequestError(err)
-	}
-	if response == nil {
-		return nil, errMetadataUnavailable
-	}
-	if err := checkContext(ctx); err != nil {
-		return nil, err
-	}
-	if response.StatusCode == http.StatusNotFound && notFoundIsMissing {
-		return nil, core.ErrNotFound
-	}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, errMetadataUnavailable
-	}
-	if len(response.Body) > maxResponseBodyBytes || !isJSONResponse(response.Header.Get("Content-Type")) {
-		return nil, errMetadataMalformed
-	}
-	return response, nil
+	return responseRules.CheckResponse(ctx, response, err, notFoundIsMissing)
 }
 
 func mapCandidate(subject subjectResponse) (core.MetadataCandidate, bool) {
@@ -397,7 +382,7 @@ type mappedSubject struct {
 }
 
 func mapSubject(subject subjectResponse) (mappedSubject, bool) {
-	id, _, ok := parseJSONMetadataID(subject.ID)
+	id, _, ok := metadatainternal.ParseJSONID(subject.ID)
 	if !ok || subject.Type == nil || *subject.Type != 2 {
 		return mappedSubject{}, false
 	}
@@ -447,7 +432,7 @@ func subjectAliases(raw json.RawMessage) []string {
 			}
 		}
 		for _, value := range values {
-			alias, ok := boundedText(&value, maxTitleTextBytes, maxTitleTextRunes)
+			alias, ok := metadatainternal.BoundedText(&value, metadatapolicy.TitleLimits())
 			if !ok || alias == "" || len(aliases) >= maxAliases {
 				continue
 			}
@@ -473,11 +458,11 @@ func mapTitles(nameCN, name *string) (string, string, bool) {
 		}
 		nameCN = &converted
 	}
-	chinese, ok := boundedText(nameCN, maxTitleTextBytes, maxTitleTextRunes)
+	chinese, ok := metadatainternal.BoundedText(nameCN, metadatapolicy.TitleLimits())
 	if !ok {
 		return "", "", false
 	}
-	native, ok := boundedText(name, maxTitleTextBytes, maxTitleTextRunes)
+	native, ok := metadatainternal.BoundedText(name, metadatapolicy.TitleLimits())
 	if !ok || chinese == "" && native == "" {
 		return "", "", false
 	}
@@ -532,7 +517,7 @@ func mapCoverURL(images *subjectImages) string {
 		if value == nil || *value == "" {
 			continue
 		}
-		if validCoverURL(*value) {
+		if metadatainternal.ValidCoverURL(*value, coverHost) {
 			return resizedCoverURL(*value)
 		}
 		return ""
@@ -548,17 +533,6 @@ func resizedCoverURL(value string) string {
 		return "https://" + coverHost + "/r/400/pic/cover/l/" + strings.TrimPrefix(value, original)
 	}
 	return value
-}
-
-func boundedText(value *string, maxBytes, maxRunes int) (string, bool) {
-	if value == nil {
-		return "", true
-	}
-	return metadatapolicy.NormalizePlainText(*value, metadatapolicy.PlainTextLimits{MaxInputBytes: maxBytes, MaxOutputBytes: maxBytes, MaxOutputRunes: maxRunes})
-}
-
-func validSearchQuery(value string) bool {
-	return value != "" && len(value) <= maxTitleTextBytes && utf8.RuneCountInString(value) <= maxTitleTextRunes && utf8.ValidString(value) && !containsDisallowedControl(value)
 }
 
 func validEpisodeCount(value *int) bool {
@@ -589,83 +563,11 @@ func mapDate(value *string) (int, bool) {
 	return parsed.Year(), true
 }
 
-func parseMetadataID(value string) (string, int, bool) {
-	if len(value) == 0 || len(value) > maxMetadataIDDigits || value[0] == '0' {
-		return "", 0, false
-	}
-	for _, digit := range value {
-		if digit < '0' || digit > '9' {
-			return "", 0, false
-		}
-	}
-	numeric, err := strconv.ParseInt(value, 10, 32)
-	if err != nil || numeric <= 0 {
-		return "", 0, false
-	}
-	return value, int(numeric), true
-}
-
-func parseJSONMetadataID(value json.RawMessage) (string, int, bool) {
-	if len(value) == 0 {
-		return "", 0, false
-	}
-	return parseMetadataID(string(value))
-}
-
-func validCoverURL(value string) bool {
-	if value == "" || !metadatapolicy.IsSafeCoverURL(value) {
-		return false
-	}
-	target, err := url.Parse(value)
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(target.Hostname(), coverHost)
-}
-
-func containsDisallowedControl(value string) bool {
-	for _, character := range value {
-		if unicode.IsControl(character) && character != '\n' && character != '\r' && character != '\t' {
-			return true
-		}
-	}
-	return false
-}
-
-func isJSONResponse(contentType string) bool {
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	return err == nil && strings.EqualFold(mediaType, "application/json")
-}
-
 func checkContext(ctx context.Context) error {
 	if ctx == nil {
 		return errMetadataUnavailable
 	}
 	return ctx.Err()
-}
-
-func sanitizeRequestError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
-	}
-	var secureError *securehttp.Error
-	if errors.As(err, &secureError) {
-		return secureError
-	}
-	return errMetadataUnavailable
-}
-
-func decodeResponse(body []byte, value any) error {
-	if !metadatainternal.DecodeObject(body, value, metadatainternal.JSONLimits{
-		MaxBytes:        maxResponseBodyBytes,
-		MaxNestingDepth: maxJSONNestingDepth,
-	}) {
-		return errMetadataMalformed
-	}
-	return nil
 }
 
 type searchResponse struct {

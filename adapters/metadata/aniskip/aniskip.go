@@ -9,9 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"mime"
 	"net/http"
-	"strings"
 	"time"
 
 	metadatainternal "animeportable/adapters/metadata/internal"
@@ -94,7 +92,7 @@ func (client *Client) Openings(ctx context.Context, myAnimeListID, episode int, 
 	if err := response.RequireSuccess(); err != nil {
 		return nil, err
 	}
-	if !isJSON(response.Header.Get("Content-Type")) {
+	if !securehttp.HasMediaType(response.Header.Get("Content-Type"), "application/json") {
 		return nil, errUnavailable
 	}
 	var payload skipTimes
@@ -133,11 +131,6 @@ func seconds(value *float64) (time.Duration, bool) {
 		return 0, false
 	}
 	return time.Duration(*value * float64(time.Second)), true
-}
-
-func isJSON(contentType string) bool {
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	return err == nil && strings.EqualFold(mediaType, "application/json")
 }
 
 var _ core.OpeningSource = (*Client)(nil)

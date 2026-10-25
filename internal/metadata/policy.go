@@ -59,7 +59,7 @@ func NormalizePlainText(value string, limits PlainTextLimits) (string, bool) {
 	plain = stripHTML(plain)
 	plain = strings.NewReplacer("<", " ", ">", " ").Replace(plain)
 	plain = strings.TrimSpace(stripMarkdown(plain))
-	if len(plain) > limits.MaxOutputBytes || utf8.RuneCountInString(plain) > limits.MaxOutputRunes || containsDisallowedControl(plain) {
+	if len(plain) > limits.MaxOutputBytes || utf8.RuneCountInString(plain) > limits.MaxOutputRunes || ContainsDisallowedControl(plain) {
 		return "", false
 	}
 	return strings.Join(strings.Fields(plain), " "), true
@@ -144,7 +144,9 @@ func stripMarkdown(value string) string {
 	return result.String()
 }
 
-func containsDisallowedControl(value string) bool {
+// ContainsDisallowedControl reports whether value has a control character other than newline,
+// carriage return or tab.
+func ContainsDisallowedControl(value string) bool {
 	for _, character := range value {
 		if unicode.IsControl(character) && character != '\n' && character != '\r' && character != '\t' {
 			return true

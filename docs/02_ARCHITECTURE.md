@@ -14,7 +14,8 @@ The Windows UI is FLTK. It calls typed Go application actions. Playback is in-pr
 | `adapters/source/anime1/` | Anime1 `AnimeSource`. Parser-only HTML extraction (`html_policy.go`). |
 | `adapters/metadata/anilist/`, `adapters/metadata/bangumi/` | `MetadataProvider` implementations; Bangumi is also the `ScheduleProvider` (weekly calendar). |
 | `adapters/metadata/cover/` | Validated cover loader (fixed origins, size and format limits). |
-| `adapters/metadata/internal/` | Helpers shared by the two metadata adapters only. |
+| `adapters/metadata/internal/` | Answer checks, JSON decoding, IDs and text bounds shared by the metadata adapters (AniList, Bangumi, AniSkip). |
+| `adapters/internal/jsonscan/` | Duplicate-key and nesting check for untrusted JSON objects, used by Anime1 and the metadata adapters. |
 | `adapters/persistence/sqlite/` | `Store` implementation, embedded migrations in `migrations/`. |
 | `adapters/network/securehttp/` | The single controlled outbound HTTP client. |
 | `adapters/playback/proxy/` | Loopback playback proxy. |

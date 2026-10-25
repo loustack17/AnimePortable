@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"animeportable/adapters/internal/jsonscan"
 	"animeportable/adapters/network/securehttp"
 	"animeportable/core"
 	"golang.org/x/net/html"
@@ -34,7 +35,7 @@ const (
 	maxResolverCookieBytes = 4 << 10
 	maxResolverHeaderBytes = 13 << 10
 	// The API answer nests three levels; the limit stops a deeply nested body from
-	// recursing once per byte through the scan below.
+	// recursing once per byte through the jsonscan check.
 	maxResolverJSONDepth = 16
 )
 
@@ -66,7 +67,7 @@ func (client *Client) Resolve(ctx context.Context, ref core.EpisodeRef) (core.Pl
 	if err != nil {
 		return core.PlaybackSource{}, err
 	}
-	if !isHTMLResponse(page.Header.Get("Content-Type")) {
+	if !securehttp.HasMediaType(page.Header.Get("Content-Type"), htmlMediaTypes...) {
 		return core.PlaybackSource{}, errResolverMalformed
 	}
 	token, err := parseResolverToken(ctx, page.Body, ref)
@@ -77,7 +78,7 @@ func (client *Client) Resolve(ctx context.Context, ref core.EpisodeRef) (core.Pl
 	if err != nil {
 		return core.PlaybackSource{}, err
 	}
-	if !isJSONResponse(api.Header.Get("Content-Type")) {
+	if !securehttp.HasMediaType(api.Header.Get("Content-Type"), "application/json") {
 		return core.PlaybackSource{}, errResolverMalformed
 	}
 	streamURL, err := parseResolverAPI(ctx, api.Body)
@@ -133,7 +134,7 @@ func (client *Client) fetchResolver(ctx context.Context, method, target, body, c
 		if errors.Is(err, errPageRequest) {
 			return nil, errResolverUnavailable
 		}
-		return nil, sanitizeResolverError(err)
+		return nil, securehttp.SafeError(err, errResolverUnavailable)
 	}
 	if response == nil {
 		return nil, errResolverUnavailable
@@ -148,20 +149,6 @@ func (client *Client) fetchResolver(ctx context.Context, method, target, body, c
 		return nil, err
 	}
 	return response, nil
-}
-
-func sanitizeResolverError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return context.Canceled
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return context.DeadlineExceeded
-	}
-	var secureError *securehttp.Error
-	if errors.As(err, &secureError) {
-		return secureError
-	}
-	return errResolverUnavailable
 }
 
 func parseResolverToken(ctx context.Context, body []byte, ref core.EpisodeRef) (string, error) {
@@ -368,66 +355,7 @@ func parseResolverAPI(ctx context.Context, body []byte) (string, error) {
 func jsonObjectWithoutDuplicateKeys(body []byte) bool {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
-	if err := scanJSONValue(decoder, true, 0); err != nil {
-		return false
-	}
-	_, err := decoder.Token()
-	return errors.Is(err, io.EOF)
-}
-
-func scanJSONValue(decoder *json.Decoder, requireObject bool, depth int) error {
-	if depth > maxResolverJSONDepth {
-		return errResolverMalformed
-	}
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, isDelimiter := token.(json.Delim)
-	if requireObject && (!isDelimiter || delimiter != '{') {
-		return errResolverMalformed
-	}
-	if !isDelimiter {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		seen := make(map[string]struct{})
-		for decoder.More() {
-			keyToken, err := decoder.Token()
-			if err != nil {
-				return err
-			}
-			key, ok := keyToken.(string)
-			if !ok {
-				return errResolverMalformed
-			}
-			if _, exists := seen[key]; exists {
-				return errResolverMalformed
-			}
-			seen[key] = struct{}{}
-			if err := scanJSONValue(decoder, false, depth+1); err != nil {
-				return err
-			}
-		}
-		closing, err := decoder.Token()
-		if err != nil || closing != json.Delim('}') {
-			return errResolverMalformed
-		}
-	case '[':
-		for decoder.More() {
-			if err := scanJSONValue(decoder, false, depth+1); err != nil {
-				return err
-			}
-		}
-		closing, err := decoder.Token()
-		if err != nil || closing != json.Delim(']') {
-			return errResolverMalformed
-		}
-	default:
-		return errResolverMalformed
-	}
-	return nil
+	return jsonscan.Object(decoder, maxResolverJSONDepth)
 }
 
 func normalizeResolverURL(raw string) (string, bool) {

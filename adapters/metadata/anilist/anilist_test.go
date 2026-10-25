@@ -412,7 +412,7 @@ func TestAniListGetDropsInvalidCoverAndNonAnimationStudios(t *testing.T) {
 func TestAniListGetDropsOversizedStudio(t *testing.T) {
 	media := validMedia()
 	media["studios"] = map[string]any{"nodes": []any{
-		map[string]any{"name": strings.Repeat("x", maxStudioTextBytes+1), "isAnimationStudio": true},
+		map[string]any{"name": strings.Repeat("x", metadatapolicy.MaxStudioTextBytes+1), "isAnimationStudio": true},
 	}}
 	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
 	if err != nil {
@@ -452,7 +452,7 @@ func TestAniListGetRejectsInvalidValuesAtomically(t *testing.T) {
 
 func TestAniListGetRejectsOversizedTitleAtomically(t *testing.T) {
 	media := validMedia()
-	media["title"] = map[string]any{"romaji": strings.Repeat("x", maxTitleTextBytes+1)}
+	media["title"] = map[string]any{"romaji": strings.Repeat("x", metadatapolicy.MaxTitleTextBytes+1)}
 	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
 	if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
 		t.Fatalf("metadata = %#v, error = %v", metadata, err)
