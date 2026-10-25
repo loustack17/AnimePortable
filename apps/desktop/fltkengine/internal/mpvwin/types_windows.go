@@ -43,7 +43,6 @@ const (
 
 type Event struct {
 	EventID       EventID
-	Error         error
 	ReplyUserdata uint64
 	Data          unsafe.Pointer
 	// Property is set for EventPropertyChange only.
@@ -107,19 +106,14 @@ type rawEndFile struct {
 
 type EndFileEvent struct {
 	Reason EndFileReason
-	Error  error
 }
 
 func (event *Event) EndFile() EndFileEvent {
 	if event == nil || event.Data == nil {
-		return EndFileEvent{Error: ErrPlayerFailed}
+		return EndFileEvent{}
 	}
 	data := (*rawEndFile)(event.Data)
-	result := EndFileEvent{Reason: EndFileReason(data.Reason)}
-	if data.Error < 0 {
-		result.Error = ErrPlayerFailed
-	}
-	return result
+	return EndFileEvent{Reason: EndFileReason(data.Reason)}
 }
 
 func resultError(code int32) error {

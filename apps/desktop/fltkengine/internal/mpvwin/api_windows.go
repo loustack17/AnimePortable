@@ -24,12 +24,10 @@ type api struct {
 	getPropertyString        func(uintptr, string) unsafe.Pointer
 	waitEvent                func(uintptr, float64) unsafe.Pointer
 	observeProperty          func(uintptr, uint64, string, int32) int32
-	wakeup                   func(uintptr)
 	free                     func(unsafe.Pointer)
 	renderContextCreate      func(*uintptr, uintptr, unsafe.Pointer) int32
 	renderContextRender      func(uintptr, unsafe.Pointer) int32
 	renderContextUpdate      func(uintptr) uint64
-	renderContextReportSwap  func(uintptr)
 	renderContextSetUpdateCB func(uintptr, uintptr, uintptr)
 	renderContextFree        func(uintptr)
 }
@@ -44,12 +42,10 @@ var requiredSymbols = []string{
 	"mpv_get_property_string",
 	"mpv_wait_event",
 	"mpv_observe_property",
-	"mpv_wakeup",
 	"mpv_free",
 	"mpv_render_context_create",
 	"mpv_render_context_render",
 	"mpv_render_context_update",
-	"mpv_render_context_report_swap",
 	"mpv_render_context_set_update_callback",
 	"mpv_render_context_free",
 }
@@ -77,12 +73,10 @@ func bindAPI(handle uintptr, resolve func(uintptr, string) (uintptr, error)) (ap
 		{"mpv_get_property_string", &bound.getPropertyString},
 		{"mpv_wait_event", &bound.waitEvent},
 		{"mpv_observe_property", &bound.observeProperty},
-		{"mpv_wakeup", &bound.wakeup},
 		{"mpv_free", &bound.free},
 		{"mpv_render_context_create", &bound.renderContextCreate},
 		{"mpv_render_context_render", &bound.renderContextRender},
 		{"mpv_render_context_update", &bound.renderContextUpdate},
-		{"mpv_render_context_report_swap", &bound.renderContextReportSwap},
 		{"mpv_render_context_set_update_callback", &bound.renderContextSetUpdateCB},
 		{"mpv_render_context_free", &bound.renderContextFree},
 	}
@@ -244,9 +238,6 @@ func (mpv *Mpv) WaitEvent(timeout float64) *Event {
 	}
 	raw := (*rawEvent)(pointer)
 	event := &Event{EventID: EventID(raw.EventID), ReplyUserdata: raw.ReplyUserdata, Data: raw.Data}
-	if raw.Error < 0 {
-		event.Error = ErrPlayerFailed
-	}
 	if event.EventID == EventPropertyChange {
 		// The payload is only valid until the next wait, so copy it now.
 		event.Property = parsePropertyChange(raw.Data)
@@ -265,12 +256,6 @@ func (mpv *Mpv) ObserveProperty(reply uint64, name string, format Format) error 
 		return ErrPlayerFailed
 	}
 	return resultError(mpv.library.api.observeProperty(mpv.handle, reply, name, int32(format)))
-}
-
-func (mpv *Mpv) Wakeup() {
-	if mpv != nil && !mpv.isClosed() {
-		mpv.library.api.wakeup(mpv.handle)
-	}
 }
 
 func (mpv *Mpv) TerminateDestroy() error {

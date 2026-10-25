@@ -142,11 +142,6 @@ func (model *detailModel) continueRequest() (backend.PlayRequest, bool) {
 	return backend.PlayRequest{AnimeID: model.animeID, EpisodeID: selected.EpisodeID, StartAt: selected.Position}, true
 }
 
-func (model *detailModel) episodeHistory(episode backend.Episode) (backend.History, bool) {
-	history, ok := model.historyEntry(episode)
-	return history, ok && episode.ID != "" && !history.Completed && history.Position > 0
-}
-
 func (model *detailModel) historyEntry(episode backend.Episode) (backend.History, bool) {
 	history, ok := model.history[episode.ID]
 	return history, ok && episode.ID != "" && history.AnimeID == model.animeID

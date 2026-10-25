@@ -417,19 +417,11 @@ func (ui *view) renderPreview() {
 	metadata := ""
 	status := ""
 	if ui.searchModel.phase == searchPhaseLoading {
-		if ui.searchModel.active.kind == searchRequestPlayback {
-			status = uitext.T().PreparingPlayback
-		} else {
-			status = uitext.T().LoadingAnime
-		}
+		status = uitext.T().LoadingAnime
 	} else if ui.searchModel.requestActive {
 		status = uitext.T().CancellingForPreview + "\n\n"
 	} else if ui.searchModel.phase == searchPhaseFailed {
-		if ui.searchModel.playbackFailed {
-			status = uitext.T().NoPlayableEpisodes
-		} else {
-			status = uitext.T().AnimeLoadFailedBack
-		}
+		status = uitext.T().AnimeLoadFailedBack
 	} else if detail := ui.searchModel.preview; detail != nil {
 		if strings.TrimSpace(detail.Anime.Title) != "" {
 			title = detail.Anime.Title

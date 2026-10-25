@@ -74,9 +74,6 @@ func TestDetailModelContinueMatchesAnimeAndEpisodeAndRejectsCompleted(t *testing
 	if !ok || request.AnimeID != "wanted" || request.EpisodeID != "resume" || request.StartAt != 42750 {
 		t.Fatalf("continue request = %#v, accepted %v", request, ok)
 	}
-	if _, resumable := model.episodeHistory(model.episodes[0]); resumable {
-		t.Fatal("completed history was exposed as resumable")
-	}
 	model.setHistory([]backend.History{{AnimeID: "wanted", EpisodeID: "completed", Position: 24000, Completed: true}})
 	if _, ok := model.continueRequest(); ok {
 		t.Fatal("completed history was treated as resumable")

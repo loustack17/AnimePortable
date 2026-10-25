@@ -46,15 +46,15 @@ func TestSearchModelPagesStayBoundedAndSelectionReachesEveryResult(t *testing.T)
 	for range len(items) - 1 {
 		model.moveSelection(1)
 	}
-	selected, ok := model.selectedItem()
-	if !ok || selected.ID != "id-16" || model.pageNumber() != 3 {
-		t.Fatalf("last selection = %#v, ok %v, page %d", selected, ok, model.pageNumber())
+	selected := model.results[model.selected]
+	if selected.ID != "id-16" || model.pageNumber() != 3 {
+		t.Fatalf("last selection = %#v, page %d", selected, model.pageNumber())
 	}
 	if got := len(model.visibleResults()); got != 1 {
 		t.Fatalf("last page result count = %d, want 1", got)
 	}
 	model.moveSelection(1)
-	selected, _ = model.selectedItem()
+	selected = model.results[model.selected]
 	if selected.ID != "id-16" {
 		t.Fatalf("selection moved past end: %#v", selected)
 	}
@@ -118,6 +118,21 @@ func TestSearchModelEditCancelsAndRejectsStaleCompletion(t *testing.T) {
 	}
 	if _, _, ok := model.beginSearch(); !ok {
 		t.Fatal("current query could not submit after canceled request finished")
+	}
+}
+
+func TestSearchModelDetailCompletionShowsPreviewAndFreesTheRequest(t *testing.T) {
+	model := searchModel{}
+	item := backend.Anime{ID: "work", Title: "Work"}
+	request, _, ok := model.beginDetail(item)
+	if !ok {
+		t.Fatal("detail request did not begin")
+	}
+	if !model.finishDetail(request, backend.Detail{Anime: item}, nil) {
+		t.Fatal("current detail completion was rejected")
+	}
+	if model.preview == nil || model.preview.Anime.ID != item.ID || model.phase != searchPhaseIdle || model.requestActive {
+		t.Fatalf("after detail: preview %#v, phase %v, active %v", model.preview, model.phase, model.requestActive)
 	}
 }
 

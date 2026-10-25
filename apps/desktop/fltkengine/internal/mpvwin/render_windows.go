@@ -85,12 +85,6 @@ func (context *RenderContext) RenderGL(fbo, width, height int, flipY bool) error
 	return err
 }
 
-func (context *RenderContext) ReportSwap() {
-	if context != nil && !context.isClosing() {
-		context.mpv.library.api.renderContextReportSwap(context.handle)
-	}
-}
-
 func (context *RenderContext) Free() error {
 	if context == nil {
 		return nil
