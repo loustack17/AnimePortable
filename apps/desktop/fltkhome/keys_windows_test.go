@@ -6,7 +6,6 @@ package fltkhome
 
 import (
 	"fmt"
-	"syscall"
 	"testing"
 	"time"
 
@@ -47,7 +46,7 @@ func TestClassifyKey(t *testing.T) {
 	}
 }
 
-var sendMessage = syscall.NewLazyDLL("user32.dll").NewProc("SendMessageW")
+var sendMessage = user32.NewProc("SendMessageW")
 
 // Windows virtual-key codes for the keys the tests press.
 const (

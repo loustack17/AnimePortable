@@ -154,6 +154,7 @@ func newHomeRefreshFixture(t *testing.T, service Service) *view {
 		fltk.Unlock()
 		runtime.UnlockOSThread()
 	})
+	keepFocusFromOtherThreads(t, window)
 	return ui
 }
 
