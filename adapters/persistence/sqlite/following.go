@@ -34,28 +34,14 @@ func (store *Store) SetFollowing(ctx context.Context, animeID core.AnimeID, foll
 }
 
 func (store *Store) Following(ctx context.Context) ([]core.FollowedAnime, error) {
-	items := make([]core.FollowedAnime, 0)
-	err := store.withDB(ctx, func(db *sql.DB) error {
-		rows, err := db.QueryContext(ctx, `SELECT anime_id, followed_at FROM following ORDER BY anime_id`)
-		if err != nil {
-			return err
+	return queryAll(ctx, store, func(rows *sql.Rows) (core.FollowedAnime, error) {
+		var item core.FollowedAnime
+		var followedAt string
+		if err := rows.Scan(&item.AnimeID, &followedAt); err != nil {
+			return item, err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var item core.FollowedAnime
-			var followedAt string
-			if err := rows.Scan(&item.AnimeID, &followedAt); err != nil {
-				return err
-			}
-			if item.FollowedAt, err = decodeStoredTime(followedAt); err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		return []core.FollowedAnime{}, err
-	}
-	return items, nil
+		var err error
+		item.FollowedAt, err = decodeStoredTime(followedAt)
+		return item, err
+	}, `SELECT anime_id, followed_at FROM following ORDER BY anime_id`)
 }

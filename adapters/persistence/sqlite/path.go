@@ -12,10 +12,10 @@ import (
 )
 
 func databasePath(raw string) (string, error) {
-	if raw == "" || strings.IndexByte(raw, 0) >= 0 || !filepath.IsAbs(raw) || isRemoteOrDevicePath(raw) {
-		return "", ErrInvalidInput
+	path, err := absoluteLocalPath(raw)
+	if err != nil {
+		return "", err
 	}
-	path := filepath.Clean(raw)
 	if err := ValidatePortablePath(path); err != nil {
 		return "", ErrInvalidInput
 	}
@@ -30,6 +30,15 @@ func databasePath(raw string) (string, error) {
 		return "", ErrStorage
 	}
 	return path, nil
+}
+
+// absoluteLocalPath accepts only an absolute path on a local drive, without NUL bytes, and
+// returns it cleaned.
+func absoluteLocalPath(raw string) (string, error) {
+	if raw == "" || strings.IndexByte(raw, 0) >= 0 || isRemoteOrDevicePath(raw) || !filepath.IsAbs(raw) {
+		return "", ErrInvalidInput
+	}
+	return filepath.Clean(raw), nil
 }
 
 func isRemoteOrDevicePath(path string) bool {
@@ -99,17 +108,27 @@ func secureDatabaseArtifacts(path string) error {
 }
 
 func databaseDSN(path string) string {
+	return sqliteFileDSN(path, url.Values{"_foreign_keys": {"on"}, "_journal_mode": {"WAL"}})
+}
+
+func readOnlySQLiteDSN(path string) string {
+	return sqliteFileDSN(path, url.Values{"mode": {"ro"}})
+}
+
+func readWriteSQLiteDSN(path string) string {
+	return sqliteFileDSN(path, url.Values{"mode": {"rwc"}})
+}
+
+// sqliteFileDSN builds a file: URI for path with query plus the options every connection
+// needs: nofollow, so SQLite never opens the file through a symbolic link, and a busy timeout.
+func sqliteFileDSN(path string, query url.Values) string {
 	slashPath := filepath.ToSlash(path)
 	if isWindowsDrivePath(slashPath) {
 		slashPath = "/" + slashPath
 	}
-	uri := url.URL{Scheme: "file", Path: slashPath}
-	query := uri.Query()
 	query.Set("_busy_timeout", "5000")
-	query.Set("_foreign_keys", "on")
-	query.Set("_journal_mode", "WAL")
 	query.Set("nofollow", "1")
-	uri.RawQuery = query.Encode()
+	uri := url.URL{Scheme: "file", Path: slashPath, RawQuery: query.Encode()}
 	return uri.String()
 }
 

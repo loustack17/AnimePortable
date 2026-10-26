@@ -111,12 +111,6 @@ func maxStoredTime(current, incoming string) string {
 	return current
 }
 
-func rollbackCheckpoint(conn *sql.Conn) {
-	rollbackContext, cancel := context.WithTimeout(context.Background(), migrationRollbackTimeout)
-	defer cancel()
-	_, _ = conn.ExecContext(rollbackContext, "ROLLBACK")
-}
-
 func savePlaybackCheckpoint(ctx context.Context, db *sql.DB, entry core.HistoryEntry, updatedAt, lastPlayedAt string) error {
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -126,7 +120,7 @@ func savePlaybackCheckpoint(ctx context.Context, db *sql.DB, entry core.HistoryE
 	committed := false
 	defer func() {
 		if began && !committed {
-			rollbackCheckpoint(conn)
+			rollback(conn)
 		}
 		_ = conn.Close()
 	}()
@@ -245,41 +239,25 @@ func (store *Store) AddHistory(ctx context.Context, entry core.HistoryEntry) err
 }
 
 func (store *Store) History(ctx context.Context) ([]core.HistoryEntry, error) {
-	items := make([]core.HistoryEntry, 0)
-	err := store.withDB(ctx, func(db *sql.DB) error {
-		rows, err := db.QueryContext(ctx, `SELECT
+	return queryAll(ctx, store, func(rows *sql.Rows) (core.HistoryEntry, error) {
+		var entry core.HistoryEntry
+		var updatedAt, lastPlayedAt string
+		err := rows.Scan(
+			&entry.Progress.AnimeID, &entry.Progress.EpisodeID, &entry.Progress.Position,
+			&entry.Progress.Duration, &entry.Progress.Completed, &updatedAt, &lastPlayedAt,
+		)
+		if err != nil {
+			return entry, err
+		}
+		if entry.Progress.UpdatedAt, err = decodeStoredTime(updatedAt); err != nil {
+			return entry, err
+		}
+		entry.LastPlayedAt, err = decodeStoredTime(lastPlayedAt)
+		return entry, err
+	}, `SELECT
 			anime_id, episode_id, position_ns, duration_ns, completed, updated_at, last_played_at
 			FROM playback_history
 			ORDER BY last_played_at DESC, anime_id, episode_id`)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var entry core.HistoryEntry
-			var updatedAt, lastPlayedAt string
-			if err := rows.Scan(
-				&entry.Progress.AnimeID, &entry.Progress.EpisodeID, &entry.Progress.Position,
-				&entry.Progress.Duration, &entry.Progress.Completed, &updatedAt, &lastPlayedAt,
-			); err != nil {
-				return err
-			}
-			entry.Progress.UpdatedAt, err = decodeStoredTime(updatedAt)
-			if err != nil {
-				return err
-			}
-			entry.LastPlayedAt, err = decodeStoredTime(lastPlayedAt)
-			if err != nil {
-				return err
-			}
-			items = append(items, entry)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		return []core.HistoryEntry{}, err
-	}
-	return items, nil
 }
 
 // RemoveHistory deletes an anime's history and its saved resume positions together

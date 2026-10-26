@@ -20,7 +20,7 @@ import (
 // is written to a staging file, checked with the same rules as an import, and
 // then moved into place without replacing anything.
 func (store *Store) SnapshotTo(ctx context.Context, target string) error {
-	path, err := importPath(target)
+	path, err := absoluteLocalPath(target)
 	if err != nil {
 		return ErrInvalidInput
 	}
@@ -83,7 +83,7 @@ func ValidateDatabase(ctx context.Context, path string) error {
 	if ctx == nil {
 		return ErrInvalidInput
 	}
-	clean, err := importPath(path)
+	clean, err := absoluteLocalPath(path)
 	if err != nil {
 		return ErrInvalidInput
 	}

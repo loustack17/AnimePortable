@@ -163,6 +163,19 @@ func TestDatabaseDSNUsesNoFollow(t *testing.T) {
 	}
 }
 
+func TestSQLiteDSNsAreExact(t *testing.T) {
+	path := `C:\Data Folder\anime.sqlite`
+	for name, test := range map[string]struct{ got, want string }{
+		"database":   {databaseDSN(path), "file:///C:/Data%20Folder/anime.sqlite?_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL&nofollow=1"},
+		"read-only":  {readOnlySQLiteDSN(path), "file:///C:/Data%20Folder/anime.sqlite?_busy_timeout=5000&mode=ro&nofollow=1"},
+		"read-write": {readWriteSQLiteDSN(path), "file:///C:/Data%20Folder/anime.sqlite?_busy_timeout=5000&mode=rwc&nofollow=1"},
+	} {
+		if test.got != test.want {
+			t.Errorf("%s DSN = %q, want %q", name, test.got, test.want)
+		}
+	}
+}
+
 func TestOpenRejectsMalformedDatabaseWithoutLeakingDetails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "malformed.sqlite")
 	contents := "not a SQLite database: " + path

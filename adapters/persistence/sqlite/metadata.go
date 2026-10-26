@@ -71,26 +71,11 @@ func (store *Store) SourceRefs(ctx context.Context, animeID core.AnimeID) ([]cor
 	if !validIdentity(string(animeID)) {
 		return []core.SourceRef{}, ErrInvalidInput
 	}
-	items := make([]core.SourceRef, 0)
-	err := store.withDB(ctx, func(db *sql.DB) error {
-		rows, err := db.QueryContext(ctx, `SELECT provider, external_id FROM source_refs WHERE anime_id = ? ORDER BY provider, external_id`, animeID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var ref core.SourceRef
-			if err := rows.Scan(&ref.Provider, &ref.ID); err != nil {
-				return err
-			}
-			items = append(items, ref)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		return []core.SourceRef{}, err
-	}
-	return items, nil
+	return queryAll(ctx, store, func(rows *sql.Rows) (core.SourceRef, error) {
+		var ref core.SourceRef
+		err := rows.Scan(&ref.Provider, &ref.ID)
+		return ref, err
+	}, `SELECT provider, external_id FROM source_refs WHERE anime_id = ? ORDER BY provider, external_id`, animeID)
 }
 
 func (store *Store) SaveMetadata(ctx context.Context, animeID core.AnimeID, metadata core.AnimeMetadata) error {

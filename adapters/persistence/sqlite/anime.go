@@ -9,7 +9,7 @@ import (
 	"animeportable/core"
 )
 
-// animeColumns are read into animeFields, in this order.
+// animeColumns is the column order of animeFields and of every anime INSERT.
 const animeColumns = `id, title, native_title, description, catalog_year, catalog_season, catalog_episode_count`
 
 func animeFields(anime *core.Anime) []any {
@@ -21,7 +21,7 @@ func (store *Store) SaveAnime(ctx context.Context, anime core.Anime) error {
 		return ErrInvalidInput
 	}
 	return store.withDB(ctx, func(db *sql.DB) error {
-		_, err := db.ExecContext(ctx, `INSERT INTO anime (id, title, native_title, description, catalog_year, catalog_season, catalog_episode_count)
+		_, err := db.ExecContext(ctx, `INSERT INTO anime (`+animeColumns+`)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET
 				title = excluded.title,
@@ -54,24 +54,9 @@ func (store *Store) Anime(ctx context.Context, id core.AnimeID) (core.Anime, err
 }
 
 func (store *Store) ListAnime(ctx context.Context) ([]core.Anime, error) {
-	items := make([]core.Anime, 0)
-	err := store.withDB(ctx, func(db *sql.DB) error {
-		rows, err := db.QueryContext(ctx, `SELECT `+animeColumns+` FROM anime ORDER BY id`)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var anime core.Anime
-			if err := rows.Scan(animeFields(&anime)...); err != nil {
-				return err
-			}
-			items = append(items, anime)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		return []core.Anime{}, err
-	}
-	return items, nil
+	return queryAll(ctx, store, func(rows *sql.Rows) (core.Anime, error) {
+		var anime core.Anime
+		err := rows.Scan(animeFields(&anime)...)
+		return anime, err
+	}, `SELECT `+animeColumns+` FROM anime ORDER BY id`)
 }

@@ -93,7 +93,7 @@ func migrate(ctx context.Context, db *sql.DB, source migrationSource, created bo
 	began := false
 	fail := func(operationErr error) error {
 		if began {
-			rollbackMigration(conn)
+			rollback(conn)
 		}
 		return sanitizeError(ctx, operationErr, ErrMigration)
 	}
@@ -215,12 +215,6 @@ func readAppliedMigrations(ctx context.Context, conn *sql.Conn, migrations []mig
 		}
 	}
 	return applied, latestSchemaChecksum, nil
-}
-
-func rollbackMigration(conn *sql.Conn) {
-	ctx, cancel := context.WithTimeout(context.Background(), migrationRollbackTimeout)
-	defer cancel()
-	_, _ = conn.ExecContext(ctx, "ROLLBACK")
 }
 
 var migrationBootstrapSQL = `CREATE TABLE IF NOT EXISTS schema_migrations (

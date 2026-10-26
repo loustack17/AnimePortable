@@ -65,34 +65,21 @@ func (store *Store) ReplaceSchedule(ctx context.Context, entries []core.Schedule
 // Schedule lists the stored entries Sunday to Saturday, in source order within a day. A
 // row that no longer validates fails the read instead of being shown.
 func (store *Store) Schedule(ctx context.Context) ([]core.ScheduleEntry, error) {
-	entries := make([]core.ScheduleEntry, 0)
-	err := store.withDB(ctx, func(db *sql.DB) error {
-		rows, err := db.QueryContext(ctx, `SELECT s.provider, s.external_id, s.title, s.native_title, s.weekday, m.anime_id
+	return queryAll(ctx, store, func(rows *sql.Rows) (core.ScheduleEntry, error) {
+		var entry core.ScheduleEntry
+		var weekday int
+		var animeID sql.NullString
+		if err := rows.Scan(&entry.Ref.Provider, &entry.Ref.ID, &entry.Title, &entry.NativeTitle, &weekday, &animeID); err != nil {
+			return entry, err
+		}
+		entry.Weekday = time.Weekday(weekday)
+		entry.AnimeID = core.AnimeID(animeID.String)
+		if !validScheduleEntry(entry) {
+			return entry, ErrStorage
+		}
+		return entry, nil
+	}, `SELECT s.provider, s.external_id, s.title, s.native_title, s.weekday, m.anime_id
 			FROM schedule_entries AS s
 			LEFT JOIN metadata AS m ON m.provider = s.provider AND m.external_id = s.external_id
 			ORDER BY s.weekday, s.position`)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var entry core.ScheduleEntry
-			var weekday int
-			var animeID sql.NullString
-			if err := rows.Scan(&entry.Ref.Provider, &entry.Ref.ID, &entry.Title, &entry.NativeTitle, &weekday, &animeID); err != nil {
-				return err
-			}
-			entry.Weekday = time.Weekday(weekday)
-			entry.AnimeID = core.AnimeID(animeID.String)
-			if !validScheduleEntry(entry) {
-				return ErrStorage
-			}
-			entries = append(entries, entry)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		return []core.ScheduleEntry{}, err
-	}
-	return entries, nil
 }

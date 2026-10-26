@@ -11,7 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const migrationRollbackTimeout = 5 * time.Second
+const rollbackTimeout = 5 * time.Second
 
 var openGate = make(chan struct{}, 1)
 
@@ -113,6 +113,39 @@ func (store *Store) withDB(ctx context.Context, fn func(*sql.DB) error) error {
 		return ErrInvalidInput
 	}
 	return sanitizeError(ctx, fn(store.db), ErrStorage)
+}
+
+// rollback ends an open transaction on conn. It uses its own short timeout because the
+// caller's context may already be canceled, which is often why the transaction failed.
+func rollback(conn *sql.Conn) {
+	ctx, cancel := context.WithTimeout(context.Background(), rollbackTimeout)
+	defer cancel()
+	_, _ = conn.ExecContext(ctx, "ROLLBACK")
+}
+
+// queryAll runs a read query and turns each row into a T with scan. Any error, including one
+// from scan, fails the whole read with an empty, non-nil slice.
+func queryAll[T any](ctx context.Context, store *Store, scan func(*sql.Rows) (T, error), query string, args ...any) ([]T, error) {
+	items := make([]T, 0)
+	err := store.withDB(ctx, func(db *sql.DB) error {
+		rows, err := db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			item, err := scan(rows)
+			if err != nil {
+				return err
+			}
+			items = append(items, item)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return []T{}, err
+	}
+	return items, nil
 }
 
 func (store *Store) Close() error {

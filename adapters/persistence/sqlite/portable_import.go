@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"errors"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,11 +30,11 @@ func ImportPortable(ctx context.Context, legacyPath, targetPath string) error {
 		}
 		return ctx.Err()
 	}
-	source, err := importPath(legacyPath)
+	source, err := absoluteLocalPath(legacyPath)
 	if err != nil {
 		return ErrImportInvalidSource
 	}
-	target, err := importPath(targetPath)
+	target, err := absoluteLocalPath(targetPath)
 	if err != nil {
 		return ErrImportUnavailable
 	}
@@ -101,15 +100,8 @@ func ImportPortable(ctx context.Context, legacyPath, targetPath string) error {
 	return nil
 }
 
-func importPath(raw string) (string, error) {
-	if raw == "" || strings.IndexByte(raw, 0) >= 0 || isRemoteOrDevicePath(raw) || !filepath.IsAbs(raw) {
-		return "", ErrInvalidInput
-	}
-	return filepath.Clean(raw), nil
-}
-
 func ValidatePortablePath(path string) error {
-	absolute, err := importPath(path)
+	absolute, err := absoluteLocalPath(path)
 	if err != nil {
 		return ErrInvalidInput
 	}
@@ -166,20 +158,6 @@ func rejectSymlinkAncestors(path string) error {
 		}
 	}
 	return nil
-}
-
-func readOnlySQLiteDSN(path string) string {
-	slashPath := filepath.ToSlash(path)
-	if isWindowsDrivePath(slashPath) {
-		slashPath = "/" + slashPath
-	}
-	uri := url.URL{Scheme: "file", Path: slashPath}
-	query := uri.Query()
-	query.Set("mode", "ro")
-	query.Set("nofollow", "1")
-	query.Set("_busy_timeout", "5000")
-	uri.RawQuery = query.Encode()
-	return uri.String()
 }
 
 func backupReadOnly(ctx context.Context, source, stage string) error {
@@ -352,20 +330,6 @@ func removeImportDirectory(path, database string) {
 	if err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
 		_ = os.Remove(path)
 	}
-}
-
-func readWriteSQLiteDSN(path string) string {
-	slashPath := filepath.ToSlash(path)
-	if isWindowsDrivePath(slashPath) {
-		slashPath = "/" + slashPath
-	}
-	uri := url.URL{Scheme: "file", Path: slashPath}
-	query := uri.Query()
-	query.Set("mode", "rwc")
-	query.Set("nofollow", "1")
-	query.Set("_busy_timeout", "5000")
-	uri.RawQuery = query.Encode()
-	return uri.String()
 }
 
 func validatePortableSnapshot(ctx context.Context, path string) error {

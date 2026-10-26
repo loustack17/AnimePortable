@@ -92,36 +92,20 @@ func (store *Store) SaveEpisodeMapping(ctx context.Context, mapping core.Episode
 }
 
 func (store *Store) EpisodeMappings(ctx context.Context, animeID core.AnimeID) ([]core.EpisodeMapping, error) {
-	items := make([]core.EpisodeMapping, 0)
 	if !validIdentity(string(animeID)) {
-		return items, ErrInvalidInput
+		return []core.EpisodeMapping{}, ErrInvalidInput
 	}
-	err := store.withDB(ctx, func(db *sql.DB) error {
-		rows, err := db.QueryContext(ctx, `SELECT episode_id, provider, provider_anime_id, provider_episode_id, number, first_seen_at
+	return queryAll(ctx, store, func(rows *sql.Rows) (core.EpisodeMapping, error) {
+		mapping := core.EpisodeMapping{AnimeID: animeID}
+		var firstSeen string
+		if err := rows.Scan(&mapping.EpisodeID, &mapping.Ref.Anime.Provider, &mapping.Ref.Anime.ID, &mapping.Ref.ID, &mapping.Number, &firstSeen); err != nil {
+			return mapping, err
+		}
+		var err error
+		mapping.FirstSeenAt, err = decodeStoredTime(firstSeen)
+		return mapping, err
+	}, `SELECT episode_id, provider, provider_anime_id, provider_episode_id, number, first_seen_at
 			FROM episode_mappings
 			WHERE anime_id = ?
 			ORDER BY episode_id, provider, provider_anime_id, provider_episode_id`, animeID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var mapping core.EpisodeMapping
-			mapping.AnimeID = animeID
-			mapping.Ref.Anime = core.SourceRef{}
-			var firstSeen string
-			if err := rows.Scan(&mapping.EpisodeID, &mapping.Ref.Anime.Provider, &mapping.Ref.Anime.ID, &mapping.Ref.ID, &mapping.Number, &firstSeen); err != nil {
-				return err
-			}
-			if mapping.FirstSeenAt, err = decodeStoredTime(firstSeen); err != nil {
-				return err
-			}
-			items = append(items, mapping)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		return []core.EpisodeMapping{}, err
-	}
-	return items, nil
 }
