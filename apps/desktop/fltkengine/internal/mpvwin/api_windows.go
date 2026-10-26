@@ -32,35 +32,9 @@ type api struct {
 	renderContextFree        func(uintptr)
 }
 
-var requiredSymbols = []string{
-	"mpv_create",
-	"mpv_set_option_string",
-	"mpv_initialize",
-	"mpv_terminate_destroy",
-	"mpv_command",
-	"mpv_set_property",
-	"mpv_get_property_string",
-	"mpv_wait_event",
-	"mpv_observe_property",
-	"mpv_free",
-	"mpv_render_context_create",
-	"mpv_render_context_render",
-	"mpv_render_context_update",
-	"mpv_render_context_set_update_callback",
-	"mpv_render_context_free",
-}
-
 func bindAPI(handle uintptr, resolve func(uintptr, string) (uintptr, error)) (api, error) {
-	addresses := make(map[string]uintptr, len(requiredSymbols))
-	for _, name := range requiredSymbols {
-		address, err := resolve(handle, name)
-		if err != nil || address == 0 {
-			return api{}, ErrMissingSymbol
-		}
-		addresses[name] = address
-	}
 	var bound api
-	registrations := []struct {
+	symbols := []struct {
 		name string
 		ptr  any
 	}{
@@ -80,8 +54,17 @@ func bindAPI(handle uintptr, resolve func(uintptr, string) (uintptr, error)) (ap
 		{"mpv_render_context_set_update_callback", &bound.renderContextSetUpdateCB},
 		{"mpv_render_context_free", &bound.renderContextFree},
 	}
-	for _, registration := range registrations {
-		purego.RegisterFunc(registration.ptr, addresses[registration.name])
+	// Every symbol resolves before any is registered, so a library missing one binds nothing.
+	addresses := make([]uintptr, len(symbols))
+	for index, symbol := range symbols {
+		address, err := resolve(handle, symbol.name)
+		if err != nil || address == 0 {
+			return api{}, ErrMissingSymbol
+		}
+		addresses[index] = address
+	}
+	for index, symbol := range symbols {
+		purego.RegisterFunc(symbol.ptr, addresses[index])
 	}
 	return bound, nil
 }

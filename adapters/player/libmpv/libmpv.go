@@ -161,32 +161,27 @@ func newSession(bridge Bridge, renderer Renderer, server proxyService, request c
 }
 
 func (session *playbackSession) load(ctx context.Context, request core.PlayRequest, candidate capability, initial bool) error {
-	if ctx == nil {
+	// An initial candidate belongs to Start, which closes it with the session.
+	discard := func() {
 		if !initial && candidate != nil {
 			_ = candidate.Close()
 		}
+	}
+	if ctx == nil {
+		discard()
 		return ErrPlayerFailed
 	}
 	if err := ctx.Err(); err != nil {
-		if !initial && candidate != nil {
-			_ = candidate.Close()
-		}
+		discard()
 		return err
 	}
-	if err := validateStartAt(request.StartAt); err != nil {
-		if !initial && candidate != nil {
-			_ = candidate.Close()
-		}
-		return err
-	}
+	// Start and Load validated request.StartAt before calling load.
 	session.opMu.Lock()
 	defer session.opMu.Unlock()
 	session.mu.Lock()
 	if session.closed {
 		session.mu.Unlock()
-		if !initial && candidate != nil {
-			_ = candidate.Close()
-		}
+		discard()
 		return ErrPlayerClosed
 	}
 	operationCtx, cancel := context.WithCancel(ctx)
@@ -215,9 +210,7 @@ func (session *playbackSession) load(ctx context.Context, request core.PlayReque
 	session.mu.Lock()
 	if session.closed {
 		session.mu.Unlock()
-		if !initial {
-			_ = candidate.Close()
-		}
+		discard()
 		return ErrPlayerClosed
 	}
 	old := session.currentProxy

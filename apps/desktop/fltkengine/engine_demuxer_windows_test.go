@@ -53,40 +53,15 @@ func TestEngineOpensOnlyMP4BodiesNeverListedAddresses(t *testing.T) {
 	}
 	defer library.Close()
 	for _, name := range []string{"m3u", "pls", "edl", "hls", "real"} {
-		player, err := library.New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, option := range fltkengine.InitOptions(fltkengine.Options{}) {
-			if option[0] == "vo" {
-				option[1] = "null"
-			}
-			if err := player.SetOptionString(option[0], option[1]); err != nil {
-				t.Fatalf("option %s: %v", option[0], err)
-			}
-		}
-		if err := player.SetOptionString("ao", "null"); err != nil {
-			t.Fatal(err)
-		}
-		if err := player.Initialize(); err != nil {
-			t.Fatal(err)
-		}
+		player := newHeadlessMpv(t, library, fltkengine.Options{})
 		if err := player.Command([]string{"loadfile", upstream.URL + "/" + name}); err != nil {
 			t.Fatal(err)
 		}
-		loaded, ended := false, false
-		for deadline := time.Now().Add(8 * time.Second); time.Now().Before(deadline) && !loaded && !ended; {
-			event := player.WaitEvent(0.2)
-			if event == nil {
-				continue
-			}
-			switch event.EventID {
-			case mpv.EventFileLoaded:
-				loaded = true
-			case mpv.EventEnd:
-				ended = true
-			}
-		}
+		loaded := false
+		waitForMpvEvent(player, 8*time.Second, func(event *mpv.Event) bool {
+			loaded = event.EventID == mpv.EventFileLoaded
+			return loaded || event.EventID == mpv.EventEnd
+		})
 		// A listed entry would be opened after the first file ends, so give it time to show.
 		time.Sleep(500 * time.Millisecond)
 		_ = player.TerminateDestroy()

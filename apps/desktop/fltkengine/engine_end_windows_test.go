@@ -122,7 +122,7 @@ func TestEngineReportsNormalEndOnceAndKeepsItInSnapshot(t *testing.T) {
 	fixture.load(fixture.media, nearEnd, 7)
 	fixture.waitForEnds(1)
 	// Let a few more ticks run: the end must not be reported again.
-	fltkWaitFor(2 * time.Second)
+	fltkWaitFor(t, 2*time.Second)
 	if !slices.Equal(fixture.ends, []uint64{7}) {
 		t.Fatalf("end handler calls = %v, want [7]", fixture.ends)
 	}
@@ -152,7 +152,7 @@ func TestEngineDoesNotReportEndOfReplacedOrFailedLoads(t *testing.T) {
 	if !pumpUntil(t, endWait, failed) {
 		t.Fatal("loading a missing file never failed")
 	}
-	fltkWaitFor(2 * time.Second)
+	fltkWaitFor(t, 2*time.Second)
 	if !slices.Equal(fixture.ends, []uint64{2}) {
 		t.Fatalf("end handler calls = %v after a failed load, want [2]", fixture.ends)
 	}
@@ -180,7 +180,7 @@ func TestEngineReportsStartStagesOncePerLoadIncludingPausedLoads(t *testing.T) {
 	if err := pumpFLTKError(t, 10*time.Second, func() error { return fixture.engine.Control(context.Background(), "seek", 5) }); err != nil {
 		t.Fatal(err)
 	}
-	fltkWaitFor(2 * time.Second)
+	fltkWaitFor(t, 2*time.Second)
 
 	// Autoplay loads the next episode paused; that start must be reported too.
 	fixture.loadWithPause(fixture.media, 10*time.Second, true, 2)
@@ -192,7 +192,7 @@ func TestEngineReportsStartStagesOncePerLoadIncludingPausedLoads(t *testing.T) {
 	if !pumpUntil(t, endWait, func() bool { return fixture.engine.FailedGeneration(3) }) {
 		t.Fatal("loading a missing file never failed")
 	}
-	fltkWaitFor(2 * time.Second)
+	fltkWaitFor(t, 2*time.Second)
 	want := []start{{1, fltkengine.StartFileLoaded}, {1, fltkengine.StartPlaying}, {2, fltkengine.StartFileLoaded}, {2, fltkengine.StartPlaying}}
 	if !slices.Equal(starts, want) {
 		t.Fatalf("starts = %v, want %v", starts, want)
@@ -209,7 +209,7 @@ func TestEnginePausedLoadWaitsAtItsStartAndTheNextLoadPlays(t *testing.T) {
 	if !pumpUntil(t, endWait, func() bool { return duration > 0 }) {
 		t.Fatal("paused load never reported a duration")
 	}
-	fltkWaitFor(2 * time.Second)
+	fltkWaitFor(t, 2*time.Second)
 	snapshot := fixture.snapshot()
 	if !snapshot.Paused || position != start || snapshot.Position != start {
 		t.Fatalf("paused load: paused=%t state position=%s snapshot position=%s, want paused at %s", snapshot.Paused, position, snapshot.Position, start)
@@ -261,11 +261,10 @@ func TestEngineLoadToEndCyclesDoNotGrowGoroutinesOrMemory(t *testing.T) {
 	}
 }
 
-func fltkWaitFor(duration time.Duration) {
-	deadline := time.Now().Add(duration)
-	for time.Now().Before(deadline) {
-		fltk.Wait(0.01)
-	}
+// fltkWaitFor runs the FLTK loop for duration, so a test can check that something does not happen.
+func fltkWaitFor(t *testing.T, duration time.Duration) {
+	t.Helper()
+	pumpUntil(t, duration, func() bool { return false })
 }
 
 // processMemoryCountersEx is PROCESS_MEMORY_COUNTERS_EX.

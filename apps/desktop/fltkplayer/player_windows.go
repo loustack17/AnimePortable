@@ -105,7 +105,7 @@ type View struct {
 	render        func(width, height int)
 	episodeText   unsafe.Pointer
 	menuText      unsafe.Pointer
-	// fixedText is the overlay's own labels in the current language: 選集, then 正在載入….
+	// fixedText is the overlay's own labels in the current language: 選集, 正在載入…, then 跳過片頭.
 	fixedText unsafe.Pointer
 	speedText unsafe.Pointer
 	// skipWidth is the 跳過片頭 button's width for the current language.
@@ -156,11 +156,7 @@ func (view *View) handleWindowEvent(event fltk.Event) bool {
 		return view.handleUnfocus(fltk.EventKey())
 	}
 	if event == fltk.DEACTIVATE || event == fltk.HIDE {
-		view.pressedKeys = nil
-		if event == fltk.HIDE {
-			view.removeNativeInput()
-		}
-		return false
+		return view.handleDeactivate(event)
 	}
 	if event == fltk.KEYDOWN || event == fltk.KEYUP || event == fltk.SHORTCUT {
 		return view.handle(event)
@@ -445,11 +441,7 @@ func (view *View) handle(event fltk.Event) bool {
 	case fltk.UNFOCUS:
 		return view.handleUnfocus(fltk.EventKey())
 	case fltk.DEACTIVATE, fltk.HIDE:
-		view.pressedKeys = nil
-		if event == fltk.HIDE {
-			view.removeNativeInput()
-		}
-		return false
+		return view.handleDeactivate(event)
 	}
 	x, y := fltk.EventX()-view.video.X(), fltk.EventY()-view.video.Y()
 	switch event {
@@ -493,12 +485,7 @@ func (view *View) handle(event fltk.Event) bool {
 	case fltk.PUSH:
 		view.showAt(x, y)
 		if view.menuVisible() && x >= 0 && x <= 180 && y >= 62 && y < 62+46*len(view.menuItems) {
-			index := (y - 62) / 46
-			if view.callbacks.Navigate != nil {
-				view.callbacks.Navigate(index)
-			}
-			view.menuPinned = false
-			view.menuHover = false
+			view.navigateMenu((y - 62) / 46)
 			view.Redraw()
 			return true
 		}
@@ -543,6 +530,16 @@ func (view *View) handle(event fltk.Event) bool {
 			view.Redraw()
 		}
 		return true
+	}
+	return false
+}
+
+// handleDeactivate forgets held keys when the window is deactivated or hidden; a hidden window
+// also stops taking media keys.
+func (view *View) handleDeactivate(event fltk.Event) bool {
+	view.pressedKeys = nil
+	if event == fltk.HIDE {
+		view.removeNativeInput()
 	}
 	return false
 }
@@ -642,12 +639,7 @@ func (view *View) handleKey(key, modifiers int) bool {
 		return true
 	}
 	if key == 'm' && !view.menuVisible() && !view.episodesOpen && !view.speedOpen {
-		if view.state.Volume == 0 {
-			view.setVolume(view.lastVolume)
-		} else {
-			view.lastVolume = view.state.Volume
-			view.setVolume(0)
-		}
+		view.toggleMute()
 		return true
 	}
 	if key == 'f' && !view.menuVisible() && !view.episodesOpen && !view.speedOpen {
@@ -674,24 +666,7 @@ func (view *View) handleKey(key, modifiers int) bool {
 		return true
 	}
 	if key == int(' ') {
-		if view.speedOpen {
-			view.chooseSpeed(view.speedCursor)
-			view.Redraw()
-			return true
-		}
-		if view.episodesOpen {
-			view.selectEpisode(view.episodeCursor)
-			view.episodesOpen = false
-			view.Redraw()
-			return true
-		}
-		if view.menuPinned {
-			if view.callbacks.Navigate != nil {
-				view.callbacks.Navigate(view.menuCursor)
-			}
-			view.menuPinned = false
-			view.menuHover = false
-			view.Redraw()
+		if view.confirmOpenPanel() {
 			return true
 		}
 		// Space plays or pauses from any control except the star, which it toggles.
@@ -703,24 +678,7 @@ func (view *View) handleKey(key, modifiers int) bool {
 		return true
 	}
 	if key == fltk.ENTER_KEY || key == 13 || key == 0xff8d {
-		if view.speedOpen {
-			view.chooseSpeed(view.speedCursor)
-			view.Redraw()
-			return true
-		}
-		if view.episodesOpen {
-			view.selectEpisode(view.episodeCursor)
-			view.episodesOpen = false
-			view.Redraw()
-			return true
-		}
-		if view.menuPinned {
-			if view.callbacks.Navigate != nil {
-				view.callbacks.Navigate(view.menuCursor)
-			}
-			view.menuPinned = false
-			view.menuHover = false
-			view.Redraw()
+		if view.confirmOpenPanel() {
 			return true
 		}
 		if view.state.Focus == focusProgress {
@@ -783,12 +741,53 @@ func (view *View) handleKey(key, modifiers int) bool {
 			if key == 0xff51 || key == 0xff54 {
 				step = -5
 			}
-			view.setVolume(view.state.Volume + step)
+			view.stepVolume(step)
 		}
 		return true
 	}
 	return false
 }
+
+// confirmOpenPanel commits the cursor row of the open speed list, episode list or pinned
+// menu, for Space and Enter; it reports false when none is open.
+func (view *View) confirmOpenPanel() bool {
+	switch {
+	case view.speedOpen:
+		view.chooseSpeed(view.speedCursor)
+	case view.episodesOpen:
+		// The list closes after the selection, a click closes it before: SelectEpisode can call
+		// SetState, which moves the cursor only while the list is closed.
+		view.selectEpisode(view.episodeCursor)
+		view.episodesOpen = false
+	case view.menuPinned:
+		view.navigateMenu(view.menuCursor)
+	default:
+		return false
+	}
+	view.Redraw()
+	return true
+}
+
+// navigateMenu opens a menu section and closes the menu.
+func (view *View) navigateMenu(index int) {
+	if view.callbacks.Navigate != nil {
+		view.callbacks.Navigate(index)
+	}
+	view.menuPinned = false
+	view.menuHover = false
+}
+
+// toggleMute mutes, or restores the volume from before muting.
+func (view *View) toggleMute() {
+	if view.state.Volume == 0 {
+		view.setVolume(view.lastVolume)
+	} else {
+		view.lastVolume = view.state.Volume
+		view.setVolume(0)
+	}
+}
+
+func (view *View) stepVolume(step int) { view.setVolume(view.state.Volume + step) }
 
 func (view *View) setVolume(volume int) {
 	if volume < 0 {

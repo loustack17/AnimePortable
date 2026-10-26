@@ -324,6 +324,43 @@ func preparePinnedRuntime(t *testing.T) {
 	t.Setenv("ANIMEPORTABLE_LIBMPV_OVERRIDE_SHA256", pinnedDLLHash)
 }
 
+// newHeadlessMpv starts an mpv core with the app's options but no video or audio output, so
+// the test opens no window.
+func newHeadlessMpv(t *testing.T, library *mpv.Library, options fltkengine.Options) *mpv.Mpv {
+	t.Helper()
+	player, err := library.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	headless := false
+	for _, option := range append(fltkengine.InitOptions(options), [2]string{"ao", "null"}) {
+		if option[0] == "vo" {
+			option[1], headless = "null", true
+		}
+		if err := player.SetOptionString(option[0], option[1]); err != nil {
+			t.Fatalf("option %s: %v", option[0], err)
+		}
+	}
+	if !headless {
+		t.Fatal("InitOptions has no vo option to replace; mpv would open a window")
+	}
+	if err := player.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	return player
+}
+
+// waitForMpvEvent hands mpv's events to done until it returns true, and reports whether
+// that happened before timeout.
+func waitForMpvEvent(player *mpv.Mpv, timeout time.Duration, done func(*mpv.Event) bool) bool {
+	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); {
+		if event := player.WaitEvent(0.2); event != nil && done(event) {
+			return true
+		}
+	}
+	return false
+}
+
 func downloadPinnedRuntime(t *testing.T) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

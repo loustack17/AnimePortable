@@ -127,22 +127,17 @@ func (view *View) handleNativeAppCommand(command int) bool {
 		if view.callbacks.Volume == nil {
 			return false
 		}
-		if view.state.Volume == 0 {
-			view.setVolume(view.lastVolume)
-		} else {
-			view.lastVolume = view.state.Volume
-			view.setVolume(0)
-		}
+		view.toggleMute()
 	case appCommandVolumeDown:
 		if view.callbacks.Volume == nil {
 			return false
 		}
-		view.setVolume(view.state.Volume - 5)
+		view.stepVolume(-5)
 	case appCommandVolumeUp:
 		if view.callbacks.Volume == nil {
 			return false
 		}
-		view.setVolume(view.state.Volume + 5)
+		view.stepVolume(5)
 	default:
 		return false
 	}

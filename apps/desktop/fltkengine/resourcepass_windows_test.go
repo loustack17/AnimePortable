@@ -35,21 +35,14 @@ func TestResourcePassRealLibmpvOpenSwitchClose(t *testing.T) {
 		if err := player.Command([]string{"loadfile", url}); err != nil {
 			t.Fatal(err)
 		}
-		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
-			event := player.WaitEvent(0.2)
-			if event == nil {
-				continue
+		if !waitForMpvEvent(player, 10*time.Second, func(event *mpv.Event) bool {
+			if event.EventID == mpv.EventEnd && event.EndFile().Reason == mpv.EndFileError {
+				t.Fatal("mpv failed to load the fixture")
 			}
-			switch event.EventID {
-			case mpv.EventPlaybackRestart:
-				return
-			case mpv.EventEnd:
-				if event.EndFile().Reason == mpv.EndFileError {
-					t.Fatal("mpv failed to load the fixture")
-				}
-			}
+			return event.EventID == mpv.EventPlaybackRestart
+		}) {
+			t.Fatal("mpv never showed the first frame")
 		}
-		t.Fatal("mpv never showed the first frame")
 	}
 	resourcepass.Run(t, "real-libmpv-open-switch-close", 2000, func() {
 		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -61,26 +54,7 @@ func TestResourcePassRealLibmpvOpenSwitchClose(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		player, err := library.New()
-		if err != nil {
-			t.Fatal(err)
-		}
-		options := append(fltkengine.InitOptions(fltkengine.Options{HardwareDecoding: true}), [2]string{"ao", "null"})
-		headless := false
-		for _, option := range options {
-			if option[0] == "vo" {
-				option[1], headless = "null", true
-			}
-			if err := player.SetOptionString(option[0], option[1]); err != nil {
-				t.Fatalf("option %s: %v", option[0], err)
-			}
-		}
-		if !headless {
-			t.Fatal("InitOptions has no vo option to replace; mpv would open a window")
-		}
-		if err := player.Initialize(); err != nil {
-			t.Fatal(err)
-		}
+		player := newHeadlessMpv(t, library, fltkengine.Options{HardwareDecoding: true})
 		playUntilFirstFrame(player, server.URL+"/episode-1")
 		playUntilFirstFrame(player, server.URL+"/episode-2")
 		if err := player.TerminateDestroy(); err != nil {
