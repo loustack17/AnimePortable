@@ -2,6 +2,12 @@
 
 package backend
 
+import (
+	"strings"
+
+	"animeportable/core"
+)
+
 type Anime struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
@@ -124,4 +130,58 @@ type UpdateInfo struct {
 	Latest  string `json:"latest"`
 	Newer   bool   `json:"newer"`
 	URL     string `json:"url"`
+}
+
+// settingNames are the names a setting's values have in Settings. The zero value of every
+// setting is "unspecified" and has no entry.
+type settingNames[T comparable] struct {
+	names map[T]string
+	// aliases are further accepted spellings, lower case.
+	aliases map[string]T
+}
+
+var (
+	appearanceNames = settingNames[core.Appearance]{names: map[core.Appearance]string{
+		core.AppearanceSystem: "system", core.AppearanceLight: "light", core.AppearanceDark: "dark",
+	}}
+	toggleNames = settingNames[core.Toggle]{names: map[core.Toggle]string{
+		core.ToggleEnabled: "enabled", core.ToggleDisabled: "disabled",
+	}}
+	proxyModeNames = settingNames[core.ProxyMode]{names: map[core.ProxyMode]string{
+		core.ProxyModeNone: "none", core.ProxyModeSystem: "system", core.ProxyModeManual: "manual",
+	}}
+	languageNames = settingNames[core.Language]{
+		names: map[core.Language]string{
+			core.LanguageTraditionalChinese: "zh-TW", core.LanguageEnglish: "en", core.LanguageJapanese: "ja",
+		},
+		aliases: map[string]core.Language{
+			"zh_tw": core.LanguageTraditionalChinese, "en-us": core.LanguageEnglish, "ja-jp": core.LanguageJapanese,
+		},
+	}
+)
+
+func (setting settingNames[T]) name(value T) string {
+	if name, ok := setting.names[value]; ok {
+		return name
+	}
+	return "unspecified"
+}
+
+// parse reads a name case-insensitively, ignoring surrounding space. An empty name is
+// "unspecified".
+func (setting settingNames[T]) parse(value string) (T, error) {
+	var unspecified T
+	key := strings.ToLower(strings.TrimSpace(value))
+	if key == "" || key == "unspecified" {
+		return unspecified, nil
+	}
+	for candidate, name := range setting.names {
+		if strings.ToLower(name) == key {
+			return candidate, nil
+		}
+	}
+	if candidate, ok := setting.aliases[key]; ok {
+		return candidate, nil
+	}
+	return unspecified, ErrInvalidInput
 }

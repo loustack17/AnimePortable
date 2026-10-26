@@ -595,18 +595,57 @@ func TestDefaultSettingsAreWhatThePlayerStartsWith(t *testing.T) {
 // production adapters.
 func newWithDependencies(deps dependencies) *Service {
 	service := NewAt("")
-	service.store = service.guardedStore(deps.store)
-	service.source = stageSource{AnimeSource: deps.source, timeline: service.timeline}
-	service.cover = deps.cover
-	service.metadata = deps.metadata
-	service.schedule = deps.schedule
-	service.updates = deps.updates
-	service.myAnimeList = deps.myAnimeList
-	service.openings = deps.openings
-	service.closeDeps = deps.close
-	if deps.newPlayer != nil {
-		service.newPlayer = deps.newPlayer
-	}
-	service.app = core.NewApp(service.source, nil, service.store)
+	service.adopt(deps)
 	return service
+}
+
+func TestSettingNamesRoundTripAndAcceptAliases(t *testing.T) {
+	for value, want := range map[core.Language]string{core.LanguageUnspecified: "unspecified", core.LanguageTraditionalChinese: "zh-TW", core.LanguageEnglish: "en", core.LanguageJapanese: "ja"} {
+		if got := languageNames.name(value); got != want {
+			t.Fatalf("language name(%v) = %q, want %q", value, got, want)
+		}
+		if parsed, err := languageNames.parse(want); err != nil || parsed != value {
+			t.Fatalf("language parse(%q) = %v, %v", want, parsed, err)
+		}
+	}
+	for input, want := range map[string]core.Language{"zh_tw": core.LanguageTraditionalChinese, " ZH-tw ": core.LanguageTraditionalChinese, "EN-US": core.LanguageEnglish, "ja-JP": core.LanguageJapanese, "": core.LanguageUnspecified} {
+		if parsed, err := languageNames.parse(input); err != nil || parsed != want {
+			t.Fatalf("language parse(%q) = %v, %v, want %v", input, parsed, err, want)
+		}
+	}
+	names := map[string]func(string) error{
+		"appearance": func(v string) error { _, err := appearanceNames.parse(v); return err },
+		"toggle":     func(v string) error { _, err := toggleNames.parse(v); return err },
+		"proxy mode": func(v string) error { _, err := proxyModeNames.parse(v); return err },
+		"language":   func(v string) error { _, err := languageNames.parse(v); return err },
+	}
+	for name, parse := range names {
+		if err := parse("bogus"); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("%s accepted an unknown name: %v", name, err)
+		}
+	}
+	for value, want := range map[core.Appearance]string{core.AppearanceUnspecified: "unspecified", core.AppearanceSystem: "system", core.AppearanceLight: "light", core.AppearanceDark: "dark"} {
+		if got := appearanceNames.name(value); got != want {
+			t.Fatalf("appearance name(%v) = %q", value, got)
+		}
+		if parsed, err := appearanceNames.parse(strings.ToUpper(want)); err != nil || parsed != value {
+			t.Fatalf("appearance parse(%q) = %v, %v", want, parsed, err)
+		}
+	}
+	for value, want := range map[core.Toggle]string{core.ToggleUnspecified: "unspecified", core.ToggleEnabled: "enabled", core.ToggleDisabled: "disabled"} {
+		if got := toggleNames.name(value); got != want {
+			t.Fatalf("toggle name(%v) = %q", value, got)
+		}
+		if parsed, err := toggleNames.parse(want); err != nil || parsed != value {
+			t.Fatalf("toggle parse(%q) = %v, %v", want, parsed, err)
+		}
+	}
+	for value, want := range map[core.ProxyMode]string{core.ProxyModeUnspecified: "unspecified", core.ProxyModeNone: "none", core.ProxyModeSystem: "system", core.ProxyModeManual: "manual"} {
+		if got := proxyModeNames.name(value); got != want {
+			t.Fatalf("proxy mode name(%v) = %q", value, got)
+		}
+		if parsed, err := proxyModeNames.parse(want); err != nil || parsed != value {
+			t.Fatalf("proxy mode parse(%q) = %v, %v", want, parsed, err)
+		}
+	}
 }

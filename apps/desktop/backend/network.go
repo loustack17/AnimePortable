@@ -52,7 +52,7 @@ func (service *Service) TestProxy(ctx context.Context, input Settings) (ProxyTes
 		return ProxyTestResult{}, err
 	}
 	defer done()
-	mode, err := parseProxyMode(input.ProxyMode)
+	mode, err := proxyModeNames.parse(input.ProxyMode)
 	if err != nil {
 		return ProxyTestResult{}, err
 	}

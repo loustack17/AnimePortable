@@ -11,12 +11,15 @@ import (
 	metadata "animeportable/internal/metadata"
 )
 
+// sourceIngester is the store's atomic write for source search results (SQLite has it).
+type sourceIngester interface {
+	IngestSourceAnime(context.Context, core.Anime, core.SourceRef) (core.Anime, error)
+}
+
 func (service *Service) ingestAnime(ctx context.Context, store core.Store, items []core.SourceAnime) ([]sourceIdentity, error) {
 	service.identity.Lock()
 	defer service.identity.Unlock()
-	atomic, ok := store.(interface {
-		IngestSourceAnime(context.Context, core.Anime, core.SourceRef) (core.Anime, error)
-	})
+	atomic, ok := store.(sourceIngester)
 	if !ok {
 		return nil, ErrUnavailable
 	}

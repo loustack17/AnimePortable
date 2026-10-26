@@ -138,11 +138,7 @@ func (log *FailureLog) PlayerFailed() {
 	if log == nil {
 		return
 	}
-	log.mu.Lock()
-	status, recent := log.upstreamStatus, !log.upstreamAt.IsZero() && log.now().Sub(log.upstreamAt) <= upstreamFailureWindow
-	log.upstreamAt = time.Time{}
-	log.mu.Unlock()
-	if recent {
+	if status, recent := log.takeRecentUpstream(); recent {
 		log.record(stageProxyUpstream, status, upstreamCategory(status))
 		return
 	}
@@ -155,14 +151,21 @@ func (log *FailureLog) StartTimedOut() {
 	if log == nil {
 		return
 	}
-	log.mu.Lock()
 	status := 0
-	if !log.upstreamAt.IsZero() && log.now().Sub(log.upstreamAt) <= upstreamFailureWindow {
-		status = log.upstreamStatus
+	if upstream, recent := log.takeRecentUpstream(); recent {
+		status = upstream
 	}
-	log.upstreamAt = time.Time{}
-	log.mu.Unlock()
 	log.record(stageStartTimeout, status, categoryTimeout)
+}
+
+// takeRecentUpstream returns the status of the proxy rejection seen within
+// upstreamFailureWindow, if any, and forgets it so the next attempt starts clean.
+func (log *FailureLog) takeRecentUpstream() (int, bool) {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	recent := !log.upstreamAt.IsZero() && log.now().Sub(log.upstreamAt) <= upstreamFailureWindow
+	log.upstreamAt = time.Time{}
+	return log.upstreamStatus, recent
 }
 
 func upstreamCategory(status int) failureCategory {
@@ -240,23 +243,6 @@ type stageError struct {
 
 func (e *stageError) Error() string { return e.err.Error() }
 func (e *stageError) Unwrap() error { return e.err }
-
-// stageSource tags Resolve failures so Play can tell resolve from player failures, and
-// times each Resolve for the start timeline.
-type stageSource struct {
-	core.AnimeSource
-	timeline *StartTimeline
-}
-
-func (source stageSource) Resolve(ctx context.Context, ref core.EpisodeRef) (core.PlaybackSource, error) {
-	began := time.Now()
-	resolved, err := source.AnimeSource.Resolve(ctx, ref)
-	source.timeline.resolved(time.Since(began), err)
-	if err != nil {
-		return resolved, &stageError{stage: stageResolve, err: err}
-	}
-	return resolved, nil
-}
 
 // recordPlayFailure logs one failed Play attempt. Cancellation and shutdown are not failures.
 func (log *FailureLog) recordPlayFailure(err error) {

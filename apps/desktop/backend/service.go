@@ -173,15 +173,39 @@ func (service *Service) Start(ctx context.Context) error {
 	service.mu.Lock()
 	if service.closed {
 		service.mu.Unlock()
-		_ = deps.close()
-		if deps.cover != nil {
-			deps.cover.CloseIdleConnections()
-		}
-		if closer, ok := deps.store.(interface{ Close() error }); ok {
-			_ = closer.Close()
-		}
+		_ = closeDependencies(deps.close, deps.cover, deps.store)
 		return ErrClosed
 	}
+	service.adopt(deps)
+	service.mu.Unlock()
+	service.bindLifecycle(ctx)
+	if err := ctx.Err(); err != nil {
+		service.lifecycleCancel()
+		return safeError(err)
+	}
+	return nil
+}
+
+// stageSource tags Resolve failures so Play can tell resolve from player failures, and
+// times each Resolve for the start timeline.
+type stageSource struct {
+	core.AnimeSource
+	timeline *StartTimeline
+}
+
+func (source stageSource) Resolve(ctx context.Context, ref core.EpisodeRef) (core.PlaybackSource, error) {
+	began := time.Now()
+	resolved, err := source.AnimeSource.Resolve(ctx, ref)
+	source.timeline.resolved(time.Since(began), err)
+	if err != nil {
+		return resolved, &stageError{stage: stageResolve, err: err}
+	}
+	return resolved, nil
+}
+
+// adopt makes deps the Service's dependencies. The caller holds service.mu or owns the
+// Service exclusively.
+func (service *Service) adopt(deps dependencies) {
 	service.store = service.guardedStore(deps.store)
 	service.source = stageSource{AnimeSource: deps.source, timeline: service.timeline}
 	service.cover = deps.cover
@@ -191,14 +215,28 @@ func (service *Service) Start(ctx context.Context) error {
 	service.myAnimeList = deps.myAnimeList
 	service.openings = deps.openings
 	service.closeDeps = deps.close
-	service.app = core.NewApp(service.source, nil, service.store)
-	service.mu.Unlock()
-	service.bindLifecycle(ctx)
-	if err := ctx.Err(); err != nil {
-		service.lifecycleCancel()
-		return safeError(err)
+	if deps.newPlayer != nil {
+		service.newPlayer = deps.newPlayer
 	}
-	return nil
+	service.app = core.NewApp(service.source, nil, service.store)
+}
+
+// closeDependencies releases what adopt took over, in order: the HTTP clients, the cover
+// loader's connections, then the store. It returns the first error.
+func closeDependencies(closeClients func() error, coverLoader *cover.Loader, store core.Store) error {
+	var first error
+	if closeClients != nil {
+		first = closeClients()
+	}
+	if coverLoader != nil {
+		coverLoader.CloseIdleConnections()
+	}
+	if closer, ok := store.(interface{ Close() error }); ok {
+		if err := closer.Close(); first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 func (service *Service) bindLifecycle(ctx context.Context) {
@@ -235,20 +273,8 @@ func (service *Service) Close() error {
 		if session != nil {
 			first = session.Close()
 		}
-		if closeDeps != nil {
-			if err := closeDeps(); first == nil {
-				first = err
-			}
-		}
-		if coverLoader != nil {
-			coverLoader.CloseIdleConnections()
-		}
-		if store != nil {
-			if closer, ok := store.(interface{ Close() error }); ok {
-				if err := closer.Close(); first == nil {
-					first = err
-				}
-			}
+		if err := closeDependencies(closeDeps, coverLoader, store); first == nil {
+			first = err
 		}
 		service.shutdownErr = safeError(first)
 		close(service.shutdownDone)
@@ -353,40 +379,46 @@ func openProduction(ctx context.Context, databasePath string, proxySource *forwa
 	stored = stored.Resolved()
 	proxySource.Set(stored.ProxyMode, stored.ProxyAddress)
 	proxy := proxySource.Address
-	client, err := securehttp.New(securehttp.Config{AllowedOrigins: anime1.AllowedOrigins(), Proxy: proxy})
-	if err != nil {
+	// clients are closed in creation order, on a failure below and by the returned close.
+	var clients []*securehttp.Client
+	closeClients := func() error {
+		for _, client := range clients {
+			client.CloseIdleConnections()
+		}
+		return nil
+	}
+	fail := func(err error) (dependencies, error) {
+		_ = closeClients()
 		_ = store.Close()
 		return dependencies{}, err
 	}
-	metadataClient, err := securehttp.New(securehttp.Config{AllowedOrigins: append(anilist.AllowedOrigins(), bangumi.AllowedOrigins()...), Proxy: proxy})
-	if err != nil {
-		client.CloseIdleConnections()
-		_ = store.Close()
-		return dependencies{}, err
+	newClient := func(config securehttp.Config) (*securehttp.Client, error) {
+		config.Proxy = proxy
+		created, err := securehttp.New(config)
+		if err == nil {
+			clients = append(clients, created)
+		}
+		return created, err
 	}
-	updateClient, err := securehttp.New(securehttp.Config{AllowedOrigins: github.AllowedOrigins(), MaxResponseBytes: github.MaxResponseBytes, Proxy: proxy})
+	client, err := newClient(securehttp.Config{AllowedOrigins: anime1.AllowedOrigins()})
 	if err != nil {
-		client.CloseIdleConnections()
-		metadataClient.CloseIdleConnections()
-		_ = store.Close()
-		return dependencies{}, err
+		return fail(err)
 	}
-	openingClient, err := securehttp.New(securehttp.Config{AllowedOrigins: aniskip.AllowedOrigins(), MaxResponseBytes: aniskip.MaxResponseBytes, Proxy: proxy})
+	metadataClient, err := newClient(securehttp.Config{AllowedOrigins: append(anilist.AllowedOrigins(), bangumi.AllowedOrigins()...)})
 	if err != nil {
-		client.CloseIdleConnections()
-		metadataClient.CloseIdleConnections()
-		updateClient.CloseIdleConnections()
-		_ = store.Close()
-		return dependencies{}, err
+		return fail(err)
+	}
+	updateClient, err := newClient(securehttp.Config{AllowedOrigins: github.AllowedOrigins(), MaxResponseBytes: github.MaxResponseBytes})
+	if err != nil {
+		return fail(err)
+	}
+	openingClient, err := newClient(securehttp.Config{AllowedOrigins: aniskip.AllowedOrigins(), MaxResponseBytes: aniskip.MaxResponseBytes})
+	if err != nil {
+		return fail(err)
 	}
 	loader, err := cover.New(proxy)
 	if err != nil {
-		client.CloseIdleConnections()
-		metadataClient.CloseIdleConnections()
-		updateClient.CloseIdleConnections()
-		openingClient.CloseIdleConnections()
-		_ = store.Close()
-		return dependencies{}, err
+		return fail(err)
 	}
 	anilistClient := anilist.New(metadataClient)
 	bangumiClient := bangumi.New(metadataClient)
@@ -399,13 +431,7 @@ func openProduction(ctx context.Context, databasePath string, proxySource *forwa
 		updates:     github.New(updateClient),
 		myAnimeList: anilistClient,
 		openings:    aniskip.New(openingClient),
-		close: func() error {
-			client.CloseIdleConnections()
-			metadataClient.CloseIdleConnections()
-			updateClient.CloseIdleConnections()
-			openingClient.CloseIdleConnections()
-			return nil
-		},
+		close:       closeClients,
 	}, nil
 }
 
@@ -496,34 +522,34 @@ func DefaultSettings() Settings {
 }
 
 func settingValues(settings core.Settings) Settings {
-	return Settings{Appearance: appearanceName(settings.Appearance), AutoplayNext: toggleName(settings.AutoplayNext), AutoPlay: toggleName(settings.AutoPlay), ResumePlayback: toggleName(settings.ResumePlayback), Language: languageName(settings.Language),
+	return Settings{Appearance: appearanceNames.name(settings.Appearance), AutoplayNext: toggleNames.name(settings.AutoplayNext), AutoPlay: toggleNames.name(settings.AutoPlay), ResumePlayback: toggleNames.name(settings.ResumePlayback), Language: languageNames.name(settings.Language),
 		PlaybackSpeed:    int(settings.PlaybackSpeed),
-		HardwareDecoding: toggleName(settings.HardwareDecoding), ProxyMode: proxyModeName(settings.ProxyMode), ProxyAddress: settings.ProxyAddress}
+		HardwareDecoding: toggleNames.name(settings.HardwareDecoding), ProxyMode: proxyModeNames.name(settings.ProxyMode), ProxyAddress: settings.ProxyAddress}
 }
 
 // settingsFromInput validates every field; zero values stay unspecified so the core resolves them.
 func settingsFromInput(input Settings) (core.Settings, error) {
 	var settings core.Settings
 	var err error
-	if settings.Appearance, err = parseAppearance(input.Appearance); err != nil {
+	if settings.Appearance, err = appearanceNames.parse(input.Appearance); err != nil {
 		return core.Settings{}, err
 	}
-	if settings.AutoplayNext, err = parseToggle(input.AutoplayNext); err != nil {
+	if settings.AutoplayNext, err = toggleNames.parse(input.AutoplayNext); err != nil {
 		return core.Settings{}, err
 	}
-	if settings.AutoPlay, err = parseToggle(input.AutoPlay); err != nil {
+	if settings.AutoPlay, err = toggleNames.parse(input.AutoPlay); err != nil {
 		return core.Settings{}, err
 	}
-	if settings.ResumePlayback, err = parseToggle(input.ResumePlayback); err != nil {
+	if settings.ResumePlayback, err = toggleNames.parse(input.ResumePlayback); err != nil {
 		return core.Settings{}, err
 	}
-	if settings.Language, err = parseLanguage(input.Language); err != nil {
+	if settings.Language, err = languageNames.parse(input.Language); err != nil {
 		return core.Settings{}, err
 	}
-	if settings.HardwareDecoding, err = parseToggle(input.HardwareDecoding); err != nil {
+	if settings.HardwareDecoding, err = toggleNames.parse(input.HardwareDecoding); err != nil {
 		return core.Settings{}, err
 	}
-	if settings.ProxyMode, err = parseProxyMode(input.ProxyMode); err != nil {
+	if settings.ProxyMode, err = proxyModeNames.parse(input.ProxyMode); err != nil {
 		return core.Settings{}, err
 	}
 	settings.ProxyAddress = strings.TrimSpace(input.ProxyAddress)
@@ -531,107 +557,6 @@ func settingsFromInput(input Settings) (core.Settings, error) {
 		return core.Settings{}, ErrInvalidInput
 	}
 	return settings, nil
-}
-
-func appearanceName(value core.Appearance) string {
-	switch value {
-	case core.AppearanceSystem:
-		return "system"
-	case core.AppearanceLight:
-		return "light"
-	case core.AppearanceDark:
-		return "dark"
-	default:
-		return "unspecified"
-	}
-}
-func toggleName(value core.Toggle) string {
-	if value == core.ToggleEnabled {
-		return "enabled"
-	}
-	if value == core.ToggleDisabled {
-		return "disabled"
-	}
-	return "unspecified"
-}
-func proxyModeName(value core.ProxyMode) string {
-	switch value {
-	case core.ProxyModeNone:
-		return "none"
-	case core.ProxyModeSystem:
-		return "system"
-	case core.ProxyModeManual:
-		return "manual"
-	default:
-		return "unspecified"
-	}
-}
-func languageName(value core.Language) string {
-	if value == core.LanguageTraditionalChinese {
-		return "zh-TW"
-	}
-	if value == core.LanguageEnglish {
-		return "en"
-	}
-	if value == core.LanguageJapanese {
-		return "ja"
-	}
-	return "unspecified"
-}
-
-func parseAppearance(value string) (core.Appearance, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "unspecified":
-		return core.AppearanceUnspecified, nil
-	case "system":
-		return core.AppearanceSystem, nil
-	case "light":
-		return core.AppearanceLight, nil
-	case "dark":
-		return core.AppearanceDark, nil
-	default:
-		return 0, ErrInvalidInput
-	}
-}
-func parseToggle(value string) (core.Toggle, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "unspecified":
-		return core.ToggleUnspecified, nil
-	case "enabled":
-		return core.ToggleEnabled, nil
-	case "disabled":
-		return core.ToggleDisabled, nil
-	default:
-		return 0, ErrInvalidInput
-	}
-}
-func parseProxyMode(value string) (core.ProxyMode, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "unspecified":
-		return core.ProxyModeUnspecified, nil
-	case "none":
-		return core.ProxyModeNone, nil
-	case "system":
-		return core.ProxyModeSystem, nil
-	case "manual":
-		return core.ProxyModeManual, nil
-	default:
-		return 0, ErrInvalidInput
-	}
-}
-func parseLanguage(value string) (core.Language, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "unspecified":
-		return core.LanguageUnspecified, nil
-	case "zh-tw", "zh_tw":
-		return core.LanguageTraditionalChinese, nil
-	case "en", "en-us":
-		return core.LanguageEnglish, nil
-	case "ja", "ja-jp":
-		return core.LanguageJapanese, nil
-	default:
-		return 0, ErrInvalidInput
-	}
 }
 
 func sortAnime(items []Anime) {

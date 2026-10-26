@@ -51,16 +51,11 @@ func (service *Service) remoteAnime(ctx context.Context, fetch func(context.Cont
 	if err != nil {
 		return nil, safeError(err)
 	}
-	result := make([]Anime, 0, len(identities))
-	for _, identity := range identities {
-		item, dtoErr := animeDTO(identity.anime)
-		if dtoErr != nil {
-			return nil, dtoErr
-		}
-		result = append(result, item)
+	anime := make([]core.Anime, len(identities))
+	for index, identity := range identities {
+		anime[index] = identity.anime
 	}
-	sortAnime(result)
-	return result, nil
+	return animeDTOs(anime)
 }
 
 func (service *Service) Library(ctx context.Context) ([]Anime, error) {
@@ -77,11 +72,16 @@ func (service *Service) Library(ctx context.Context) ([]Anime, error) {
 	if err != nil {
 		return nil, safeError(err)
 	}
+	return animeDTOs(items)
+}
+
+// animeDTOs converts anime for the UI, sorted by ID.
+func animeDTOs(items []core.Anime) ([]Anime, error) {
 	result := make([]Anime, 0, len(items))
 	for _, item := range items {
-		dto, dtoErr := animeDTO(item)
-		if dtoErr != nil {
-			return nil, dtoErr
+		dto, err := animeDTO(item)
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, dto)
 	}

@@ -5,6 +5,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,6 +17,9 @@ import (
 
 	"animeportable/adapters/persistence/sqlite"
 )
+
+// ErrDataFolderInUse means the chosen data folder is the one the open database is in.
+var ErrDataFolderInUse = fmt.Errorf("data folder is in use: %w", ErrInvalidInput)
 
 const (
 	DatabaseFileName     = "animeportable.db"

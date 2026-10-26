@@ -28,15 +28,16 @@ const (
 )
 
 func validateSourceRef(ref core.SourceRef) error {
-	if strings.TrimSpace(ref.Provider) == "" || strings.TrimSpace(ref.ID) == "" {
-		return fmt.Errorf("invalid source ref: %#v", ref)
-	}
-	return nil
+	return validateRefFields("source", ref.Provider, ref.ID, ref)
 }
 
 func validateMetadataRef(ref core.MetadataRef) error {
-	if strings.TrimSpace(ref.Provider) == "" || strings.TrimSpace(ref.ID) == "" {
-		return fmt.Errorf("invalid metadata ref: %#v", ref)
+	return validateRefFields("metadata", ref.Provider, ref.ID, ref)
+}
+
+func validateRefFields(kind, provider, id string, ref any) error {
+	if strings.TrimSpace(provider) == "" || strings.TrimSpace(id) == "" {
+		return fmt.Errorf("invalid %s ref: %#v", kind, ref)
 	}
 	return nil
 }
@@ -71,19 +72,8 @@ func validateSourceMembership(actual []core.SourceRef, expected []core.SourceRef
 			return err
 		}
 	}
-	consumed := make([]bool, len(actual))
-	for _, expectedRef := range expected {
-		found := false
-		for index, actualRef := range actual {
-			if !consumed[index] && actualRef == expectedRef {
-				consumed[index] = true
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("missing source ref %#v", expectedRef)
-		}
+	if missing, ok := firstMissing(actual, expected); ok {
+		return fmt.Errorf("missing source ref %#v", missing)
 	}
 	return nil
 }
@@ -117,21 +107,31 @@ func validateMetadataCandidates(actual []core.MetadataCandidate, expected []core
 		}
 		refs = append(refs, candidate.Ref)
 	}
-	consumed := make([]bool, len(refs))
-	for _, expectedRef := range expected {
+	if missing, ok := firstMissing(refs, expected); ok {
+		return fmt.Errorf("missing metadata ref %#v", missing)
+	}
+	return nil
+}
+
+// firstMissing returns the first expected value that actual does not contain, counting
+// repeats: an expected value listed twice must appear twice.
+func firstMissing[T comparable](actual, expected []T) (T, bool) {
+	consumed := make([]bool, len(actual))
+	for _, want := range expected {
 		found := false
-		for index, actualRef := range refs {
-			if !consumed[index] && actualRef == expectedRef {
+		for index, have := range actual {
+			if !consumed[index] && have == want {
 				consumed[index] = true
 				found = true
 				break
 			}
 		}
 		if !found {
-			return fmt.Errorf("missing metadata ref %#v", expectedRef)
+			return want, true
 		}
 	}
-	return nil
+	var none T
+	return none, false
 }
 
 func validateMetadataCandidate(candidate core.MetadataCandidate) error {

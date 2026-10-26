@@ -14,9 +14,6 @@ import (
 // database is the old copy, so anything written to it would be lost at the next start.
 var ErrRestartRequired = fmt.Errorf("data folder moved, restart required: %w", ErrUnavailable)
 
-// ErrDataFolderInUse means the chosen data folder is the one the open database is in.
-var ErrDataFolderInUse = fmt.Errorf("data folder is in use: %w", ErrInvalidInput)
-
 // writeGuard passes everything to the store until refuse is set, then rejects every write.
 // Reads (through the embedded store), the snapshot and Close keep working so the app can still shut down cleanly.
 type writeGuard struct {
@@ -113,9 +110,7 @@ func (g writeGuard) IngestSourceAnime(ctx context.Context, candidate core.Anime,
 	if err := g.check(); err != nil {
 		return core.Anime{}, err
 	}
-	ingester, ok := g.Store.(interface {
-		IngestSourceAnime(context.Context, core.Anime, core.SourceRef) (core.Anime, error)
-	})
+	ingester, ok := g.Store.(sourceIngester)
 	if !ok {
 		return core.Anime{}, ErrUnavailable
 	}
