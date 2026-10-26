@@ -180,15 +180,19 @@ func TestAppListFollowingPropagatesLocalErrors(t *testing.T) {
 	tests := []struct {
 		name  string
 		store *fakeStore
+		want  error
 	}{
-		{name: "anime", store: &fakeStore{animeErr: expected, following: []AnimeID{"anime"}}},
-		{name: "episode mappings", store: &fakeStore{episodeMappingsErr: expected, following: []AnimeID{"anime"}}},
-		{name: "history", store: &fakeStore{historyErr: expected, following: []AnimeID{"anime"}}},
-		{name: "following", store: &fakeStore{followingErr: expected}},
+		{name: "anime", store: &fakeStore{animeErr: expected, following: []AnimeID{"anime"}}, want: expected},
+		{name: "episode mappings", store: &fakeStore{episodeMappingsErr: expected, following: []AnimeID{"anime"}}, want: expected},
+		{name: "history", store: &fakeStore{historyErr: expected, following: []AnimeID{"anime"}}, want: expected},
+		// History is read even when nothing is followed.
+		{name: "history with nothing followed", store: &fakeStore{historyErr: expected}, want: expected},
+		{name: "following", store: &fakeStore{followingErr: expected}, want: expected},
+		{name: "store canceled", store: &fakeStore{followingErr: context.Canceled}, want: context.Canceled},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := NewApp(nil, &fakePlayer{}, test.store).ListFollowing(context.Background()); !errors.Is(err, expected) {
+			if _, err := NewApp(nil, &fakePlayer{}, test.store).ListFollowing(context.Background()); !errors.Is(err, test.want) {
 				t.Fatalf("error = %v", err)
 			}
 		})
@@ -320,5 +324,19 @@ func TestAppListFollowingFirstStoredListAndLegacyRowsAreNotUpdates(t *testing.T)
 				t.Fatalf("entries = %#v, %v, want RecentlyUpdated %v", entries, err, test.want)
 			}
 		})
+	}
+}
+
+func TestEpisodeNumberLess(t *testing.T) {
+	for _, test := range []struct {
+		left, right string
+		want        bool
+	}{
+		{"2", "12", true}, {"12", "2", false}, {"12", "12.5", true}, {"00", "2", true},
+		{"12", "SP", true}, {"SP", "12", false}, {"SP", "OVA", false}, {"OVA", "SP", false}, {"3", "3", false},
+	} {
+		if got := EpisodeNumberLess(test.left, test.right); got != test.want {
+			t.Fatalf("EpisodeNumberLess(%q, %q) = %v, want %v", test.left, test.right, got, test.want)
+		}
 	}
 }

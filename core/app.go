@@ -83,8 +83,13 @@ func (app *App) Unfollow(ctx context.Context, animeID AnimeID) error {
 	return app.setFollowing(ctx, animeID, false)
 }
 
+// ready reports whether ctx is set and app has a store, which the store-backed operations need.
+func (app *App) ready(ctx context.Context) bool {
+	return ctx != nil && app != nil && app.store != nil
+}
+
 func (app *App) setFollowing(ctx context.Context, animeID AnimeID, following bool) error {
-	if ctx == nil || app == nil || app.store == nil {
+	if !app.ready(ctx) {
 		return ErrInvalidPlayback
 	}
 	if err := ctx.Err(); err != nil {
@@ -100,7 +105,7 @@ func (app *App) setFollowing(ctx context.Context, animeID AnimeID, following boo
 }
 
 func (app *App) preparePlayRequest(ctx context.Context, animeID AnimeID, episodeID EpisodeID, ref EpisodeRef, startAt time.Duration) (PlayRequest, error) {
-	if ctx == nil || app == nil || app.source == nil || app.player == nil || app.store == nil || startAt < 0 {
+	if !app.ready(ctx) || app.source == nil || app.player == nil || startAt < 0 {
 		return PlayRequest{}, ErrInvalidPlayback
 	}
 	if err := ctx.Err(); err != nil {

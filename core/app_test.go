@@ -698,21 +698,6 @@ func TestAppFollowingCancellationPropagates(t *testing.T) {
 	if len(store.following) != 1 {
 		t.Fatalf("following after canceled follow = %#v", store.following)
 	}
-
-	store.followingErr = context.Canceled
-	if _, err := app.ListFollowing(context.Background()); !errors.Is(err, context.Canceled) {
-		t.Fatalf("list error = %v", err)
-	}
-}
-
-func TestAppListFollowingPropagatesHistoryError(t *testing.T) {
-	expected := errors.New("history read failed")
-	store := &fakeStore{historyErr: expected}
-	app := NewApp(&fakeSource{}, &fakePlayer{}, store)
-
-	if _, err := app.ListFollowing(context.Background()); !errors.Is(err, expected) {
-		t.Fatalf("error = %v", err)
-	}
 }
 
 type contextKey struct{}

@@ -4,6 +4,7 @@
 package release
 
 import (
+	"cmp"
 	"strconv"
 	"strings"
 )
@@ -63,7 +64,7 @@ func (left Parsed) String() string {
 func (left Parsed) Compare(right Parsed) int {
 	for index := range left.numbers {
 		if left.numbers[index] != right.numbers[index] {
-			return sign(left.numbers[index] > right.numbers[index])
+			return cmp.Compare(left.numbers[index], right.numbers[index])
 		}
 	}
 	switch {
@@ -79,7 +80,7 @@ func (left Parsed) Compare(right Parsed) int {
 			return result
 		}
 	}
-	return compareInt(len(left.stage), len(right.stage))
+	return cmp.Compare(len(left.stage), len(right.stage))
 }
 
 func compareIdentifier(left, right string) int {
@@ -87,7 +88,7 @@ func compareIdentifier(left, right string) int {
 	rightNumber, rightIsNumber := parseNumber(right)
 	switch {
 	case leftIsNumber && rightIsNumber:
-		return compareUint64(leftNumber, rightNumber)
+		return cmp.Compare(leftNumber, rightNumber)
 	case leftIsNumber:
 		return -1
 	case rightIsNumber:
@@ -119,25 +120,4 @@ func validIdentifier(value string) bool {
 		}
 	}
 	return true
-}
-
-func sign(greater bool) int {
-	if greater {
-		return 1
-	}
-	return -1
-}
-
-func compareInt(left, right int) int {
-	return compareUint64(uint64(left), uint64(right))
-}
-
-func compareUint64(left, right uint64) int {
-	switch {
-	case left < right:
-		return -1
-	case left > right:
-		return 1
-	}
-	return 0
 }

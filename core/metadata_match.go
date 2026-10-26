@@ -119,11 +119,7 @@ func scoreMetadataCandidates(request MetadataMatchRequest, queryTitle, queryNati
 			continue
 		}
 		title, native, season := metadataFields(candidate.Title, candidate.NativeTitle, candidate.Season)
-		aliases := metadataAliases(candidate.Aliases)
-		titleScore := bestMetadataTitleScore(queryTitle, queryNative, []string{title, native}, aliases)
-		if titleScore < metadataWeakExactScore && metadataSeriesMatch(series, title, native) {
-			titleScore = metadataWeakExactScore
-		}
+		titleScore := candidateTitleScore(queryTitle, queryNative, title, native, metadataAliases(candidate.Aliases), series)
 		if titleScore == 0 {
 			continue
 		}
@@ -144,8 +140,17 @@ func scoreMetadataCandidates(request MetadataMatchRequest, queryTitle, queryNati
 func metadataNamesMatch(query MetadataQuery, candidate MetadataCandidate, series []string) bool {
 	queryTitle, queryNative, _ := metadataFields(query.Title, query.NativeTitle, query.Season)
 	title, native, _ := metadataFields(candidate.Title, candidate.NativeTitle, candidate.Season)
-	return bestMetadataTitleScore(queryTitle, queryNative, []string{title, native}, metadataAliases(candidate.Aliases)) > 0 ||
-		metadataSeriesMatch(series, title, native)
+	return candidateTitleScore(queryTitle, queryNative, title, native, metadataAliases(candidate.Aliases), series) > 0
+}
+
+// candidateTitleScore is how well a candidate's names match the query; a candidate named as
+// the query's series (see metadataSeriesNames) scores at least a weak exact match.
+func candidateTitleScore(queryTitle, queryNative, title, native string, aliases, series []string) int {
+	score := bestMetadataTitleScore(queryTitle, queryNative, []string{title, native}, aliases)
+	if score < metadataWeakExactScore && metadataSeriesMatch(series, title, native) {
+		score = metadataWeakExactScore
+	}
+	return score
 }
 
 // metadataSeriesNames finds the provider's own name for the query's series. Taiwan names are

@@ -2,7 +2,10 @@
 
 package release
 
-import "testing"
+import (
+	"cmp"
+	"testing"
+)
 
 func TestVersionIsParseable(t *testing.T) {
 	if _, ok := Parse(Version); !ok {
@@ -19,7 +22,7 @@ func TestCompare(t *testing.T) {
 			if !lok || !rok {
 				t.Fatalf("parse %q %q", left, right)
 			}
-			want := compareInt(index, other)
+			want := cmp.Compare(index, other)
 			if got := l.Compare(r); got != want {
 				t.Errorf("Compare(%q, %q) = %d, want %d", left, right, got, want)
 			}

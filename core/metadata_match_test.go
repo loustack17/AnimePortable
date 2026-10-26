@@ -347,3 +347,16 @@ func TestMetadataMatchAcceptsColonOrTildeSubtitle(t *testing.T) {
 		t.Fatalf("colon subtitle = %+v", result)
 	}
 }
+
+func TestSeasonNumeral(t *testing.T) {
+	for value, want := range map[string]string{
+		"一": "1", "五": "5", "九": "9", "十": "10", "十一": "11", "十二": "12",
+		"貳": "2", "參": "3", "叄": "3", "肆": "4", "II": "2", "III": "3", "IV": "4", "V": "5", "VI": "6",
+		"": "", "十三": "", "VII": "", "I": "", "零": "", "2": "", "一二": "", "ii": "",
+	} {
+		got, ok := seasonNumeral(value)
+		if got != want || ok != (want != "") {
+			t.Fatalf("seasonNumeral(%q) = %q, %v, want %q", value, got, ok, want)
+		}
+	}
+}

@@ -14,7 +14,7 @@ type WatchedEpisode struct {
 // ListHistory returns watch history, newest first, with episode numbers from stored
 // episode mappings. It reads only the store, so history never needs the network.
 func (app *App) ListHistory(ctx context.Context) ([]WatchedEpisode, error) {
-	if ctx == nil || app == nil || app.store == nil {
+	if !app.ready(ctx) {
 		return nil, ErrInvalidPlayback
 	}
 	if err := ctx.Err(); err != nil {

@@ -18,7 +18,7 @@ var ErrMetadataUnavailable = errors.New("metadata unavailable")
 // no metadata is better than wrong metadata (ADR-009). One failing provider does not stop
 // the others.
 func (app *App) RefreshMetadata(ctx context.Context, animeID AnimeID, providers []MetadataProvider) (bool, error) {
-	if ctx == nil || app == nil || app.store == nil {
+	if !app.ready(ctx) {
 		return false, ErrInvalidPlayback
 	}
 	anime, err := app.store.Anime(ctx, animeID)

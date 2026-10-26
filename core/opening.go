@@ -50,7 +50,7 @@ type MyAnimeListSource interface {
 // that title: metadata stored later (a detail page refreshes it in the background) may still
 // find the id, so such an answer is not worth remembering.
 func (app *App) MyAnimeListID(ctx context.Context, animeID AnimeID, source MyAnimeListSource) (id int, settled bool, err error) {
-	if ctx == nil || app == nil || app.store == nil || source == nil {
+	if !app.ready(ctx) || source == nil {
 		return 0, false, ErrInvalidPlayback
 	}
 	anime, err := app.store.Anime(ctx, animeID)
@@ -84,7 +84,7 @@ func (app *App) MyAnimeListID(ctx context.Context, animeID AnimeID, source MyAni
 // FindOpening finds the opening of the episode playing, which is length long. It reports
 // false when the episode has no plain whole number or no submission fits this cut.
 func (app *App) FindOpening(ctx context.Context, animeID AnimeID, episodeID EpisodeID, myAnimeListID int, length time.Duration, source OpeningSource) (Opening, bool, error) {
-	if ctx == nil || app == nil || app.store == nil || source == nil || myAnimeListID <= 0 || length <= 0 {
+	if !app.ready(ctx) || source == nil || myAnimeListID <= 0 || length <= 0 {
 		return Opening{}, false, ErrInvalidPlayback
 	}
 	mappings, err := app.store.EpisodeMappings(ctx, animeID)

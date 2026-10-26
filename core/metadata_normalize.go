@@ -163,43 +163,15 @@ func normalizeMetadataText(value string) string {
 	return strings.TrimSpace(normalized.String())
 }
 
+// seasonNumerals maps the Chinese and Roman season numerals seen in titles to digits.
+var seasonNumerals = map[string]string{
+	"一": "1", "二": "2", "三": "3", "四": "4", "五": "5", "六": "6", "七": "7", "八": "8", "九": "9",
+	"十": "10", "十一": "11", "十二": "12",
+	"貳": "2", "參": "3", "叄": "3", "肆": "4",
+	"II": "2", "III": "3", "IV": "4", "V": "5", "VI": "6",
+}
+
 func seasonNumeral(value string) (string, bool) {
-	if value == "" {
-		return "", false
-	}
-	switch value {
-	case "貳":
-		return "2", true
-	case "參", "叄":
-		return "3", true
-	case "肆":
-		return "4", true
-	case "II":
-		return "2", true
-	case "III":
-		return "3", true
-	case "IV":
-		return "4", true
-	case "V":
-		return "5", true
-	case "VI":
-		return "6", true
-	}
-	if len([]rune(value)) == 1 {
-		for numeric, character := range []rune("一二三四五六七八九") {
-			if value == string(character) {
-				return string(rune('1' + numeric)), true
-			}
-		}
-		if value == "十" {
-			return "10", true
-		}
-	}
-	if value == "十一" {
-		return "11", true
-	}
-	if value == "十二" {
-		return "12", true
-	}
-	return "", false
+	numeric, ok := seasonNumerals[value]
+	return numeric, ok
 }

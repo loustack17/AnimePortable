@@ -15,7 +15,7 @@ import (
 // without the network and still shows when the source is unreachable. Episode lists
 // are refreshed separately; this reports the last stored state.
 func (app *App) ListFollowing(ctx context.Context) ([]FollowingEntry, error) {
-	if ctx == nil || app == nil || app.store == nil {
+	if !app.ready(ctx) {
 		return nil, ErrInvalidPlayback
 	}
 	if err := ctx.Err(); err != nil {
@@ -205,4 +205,16 @@ func indexPlaybackHistory(history []HistoryEntry) (map[AnimeID]map[EpisodeID]str
 func EpisodeNumberValue(number string) (float64, bool) {
 	value, err := strconv.ParseFloat(strings.TrimSpace(number), 64)
 	return value, err == nil && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+// EpisodeNumberLess orders episode numbers for an episode list: plain numbers ascending, then
+// labels that are not plain numbers (such as "SP"), which compare equal so a stable sort keeps
+// their source order.
+func EpisodeNumberLess(left, right string) bool {
+	leftValue, leftOK := EpisodeNumberValue(left)
+	rightValue, rightOK := EpisodeNumberValue(right)
+	if leftOK != rightOK {
+		return leftOK
+	}
+	return leftOK && leftValue < rightValue
 }

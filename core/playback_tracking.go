@@ -57,23 +57,40 @@ func normalizePlaybackTrackingConfig(config playbackTrackingConfig) playbackTrac
 	return config
 }
 
+// trackedPlayback is what the session knows about one episode: the current one, or the one a
+// pending Load switches to.
+type trackedPlayback struct {
+	request   PlayRequest
+	snapshot  PlaybackSnapshot
+	completed bool
+	terminal  bool
+	owner     uint64
+}
+
+func newTrackedPlayback(request PlayRequest, owner uint64) trackedPlayback {
+	return trackedPlayback{
+		request:  request,
+		snapshot: PlaybackSnapshot{Position: request.StartAt, Paused: request.Paused},
+		owner:    owner,
+	}
+}
+
+// apply records an event of this episode.
+func (playback *trackedPlayback) apply(event PlaybackEvent) {
+	playback.snapshot = PlaybackSnapshot{Position: event.Position, Duration: event.Duration, Paused: event.Kind == PlaybackEventPaused}
+	playback.completed = playback.completed || event.Kind == PlaybackEventEnded || completionThresholdReached(event.Position, event.Duration)
+	playback.terminal = isTerminalPlaybackEvent(event.Kind)
+}
+
 type trackedPlaybackState struct {
-	request    PlayRequest
-	snapshot   PlaybackSnapshot
-	completed  bool
-	terminal   bool
-	owner      uint64
+	trackedPlayback
 	generation uint64
 	persisted  uint64
 	pending    *trackedPendingPlayback
 }
 
 type trackedPendingPlayback struct {
-	request    PlayRequest
-	snapshot   PlaybackSnapshot
-	completed  bool
-	terminal   bool
-	owner      uint64
+	trackedPlayback
 	events     []PlaybackEvent
 	checkpoint bool
 }
@@ -121,13 +138,8 @@ func newTrackedPlaybackSession(raw PlaybackSession, store Store, request PlayReq
 		runDone:     make(chan struct{}),
 		closeDone:   make(chan struct{}),
 		state: trackedPlaybackState{
-			request: request,
-			snapshot: PlaybackSnapshot{
-				Position: request.StartAt,
-				Paused:   request.Paused,
-			},
-			owner:      1,
-			generation: 1,
+			trackedPlayback: newTrackedPlayback(request, 1),
+			generation:      1,
 		},
 	}
 	session.relay = newTrackedEventRelay(session.stop)
@@ -257,10 +269,7 @@ func (session *trackedPlaybackSession) loadPending(ctx context.Context, request 
 
 func (session *trackedPlaybackSession) beginPending(request PlayRequest) {
 	session.stateMu.Lock()
-	session.state.pending = &trackedPendingPlayback{
-		request: request, snapshot: PlaybackSnapshot{Position: request.StartAt, Paused: request.Paused},
-		owner: session.state.owner + 1,
-	}
+	session.state.pending = &trackedPendingPlayback{trackedPlayback: newTrackedPlayback(request, session.state.owner+1)}
 	session.stateMu.Unlock()
 }
 
@@ -281,11 +290,7 @@ func (session *trackedPlaybackSession) commitPending() bool {
 		session.stateMu.Unlock()
 		return false
 	}
-	session.state.request = pending.request
-	session.state.snapshot = pending.snapshot
-	session.state.completed = pending.completed
-	session.state.terminal = pending.terminal
-	session.state.owner = pending.owner
+	session.state.trackedPlayback = pending.trackedPlayback
 	session.state.generation++
 	session.state.pending = nil
 	events := append([]PlaybackEvent(nil), pending.events...)
@@ -396,10 +401,7 @@ func (session *trackedPlaybackSession) observe(event PlaybackEvent) (bool, uint6
 		if pending.terminal {
 			return false, 0
 		}
-		snapshot := PlaybackSnapshot{Position: event.Position, Duration: event.Duration, Paused: event.Kind == PlaybackEventPaused}
-		pending.snapshot = snapshot
-		pending.completed = pending.completed || event.Kind == PlaybackEventEnded || completionThresholdReached(snapshot.Position, snapshot.Duration)
-		pending.terminal = isTerminalPlaybackEvent(event.Kind)
+		pending.apply(event)
 		pending.checkpoint = pending.checkpoint || isCheckpointBoundary(event.Kind)
 		pending.events = appendPendingPlaybackEvent(pending.events, event)
 		return false, pending.owner
@@ -408,10 +410,7 @@ func (session *trackedPlaybackSession) observe(event PlaybackEvent) (bool, uint6
 		if session.state.terminal {
 			return false, 0
 		}
-		snapshot := PlaybackSnapshot{Position: event.Position, Duration: event.Duration, Paused: event.Kind == PlaybackEventPaused}
-		session.state.snapshot = snapshot
-		session.state.completed = session.state.completed || event.Kind == PlaybackEventEnded || completionThresholdReached(snapshot.Position, snapshot.Duration)
-		session.state.terminal = isTerminalPlaybackEvent(event.Kind)
+		session.state.apply(event)
 		session.state.generation++
 		return isCheckpointBoundary(event.Kind), session.state.owner
 	}
@@ -601,11 +600,12 @@ func (relay *trackedEventRelay) publish(event PlaybackEvent, owner uint64) {
 	}
 	item := trackedRelayEvent{event: event, owner: owner}
 	relay.mu.Lock()
+	// Nothing more is relayed for an owner after its terminal event.
+	if relay.terminalSeen && relay.lastTerminalOwner == owner {
+		relay.mu.Unlock()
+		return
+	}
 	if isTerminalPlaybackEvent(event.Kind) {
-		if relay.terminalSeen && relay.lastTerminalOwner == owner {
-			relay.mu.Unlock()
-			return
-		}
 		relay.terminalSeen = true
 		relay.lastTerminalOwner = owner
 		relay.queue = relay.queue[:0]
@@ -615,10 +615,6 @@ func (relay *trackedEventRelay) publish(event PlaybackEvent, owner uint64) {
 		}
 		relay.mu.Unlock()
 		relay.wakeRelay()
-		return
-	}
-	if relay.terminalSeen && relay.lastTerminalOwner == owner {
-		relay.mu.Unlock()
 		return
 	}
 	if event.Kind == PlaybackEventProgress {

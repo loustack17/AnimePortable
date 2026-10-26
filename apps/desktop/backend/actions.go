@@ -267,12 +267,7 @@ func (service *Service) Episodes(ctx context.Context, animeID string) ([]Episode
 // Episodes without a plain number (specials) keep their relative order after the numbered ones.
 func orderEpisodes(episodes []Episode) {
 	sort.SliceStable(episodes, func(left, right int) bool {
-		leftNumber, leftOK := core.EpisodeNumberValue(episodes[left].Number)
-		rightNumber, rightOK := core.EpisodeNumberValue(episodes[right].Number)
-		if leftOK != rightOK {
-			return leftOK
-		}
-		return leftOK && leftNumber < rightNumber
+		return core.EpisodeNumberLess(episodes[left].Number, episodes[right].Number)
 	})
 }
 
