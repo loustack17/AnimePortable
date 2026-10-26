@@ -259,9 +259,7 @@ func (model *searchModel) movePage(delta int) {
 	if len(model.results) == 0 || delta == 0 {
 		return
 	}
-	page := model.selected / searchResultPageSize
-	lastPage := (len(model.results) - 1) / searchResultPageSize
-	page = max(0, min(lastPage, page+delta))
+	page := movedPage(model.selected/searchResultPageSize, delta, len(model.results), searchResultPageSize)
 	model.selected = min(page*searchResultPageSize, len(model.results)-1)
 }
 
@@ -282,10 +280,7 @@ func (model *searchModel) pageStart() int {
 }
 
 func (model *searchModel) pageCount() int {
-	if len(model.results) == 0 {
-		return 0
-	}
-	return (len(model.results) + searchResultPageSize - 1) / searchResultPageSize
+	return pageCount(len(model.results), searchResultPageSize)
 }
 
 func (model *searchModel) pageNumber() int {

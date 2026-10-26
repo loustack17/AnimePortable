@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"sync/atomic"
 	"time"
 
@@ -114,7 +113,7 @@ func (ui *view) startFollowingRefresh(force bool) {
 			ui.syncHomeNotice()
 			if ui.followingVisible() {
 				ui.loadFollowing()
-			} else if ui.selected == 0 && failures < total {
+			} else if ui.selected == HomeSection && failures < total {
 				// Some episode lists were stored, so 近期更新 may have changed.
 				ui.reloadHomeIfUpdatesChanged()
 			}
@@ -131,7 +130,7 @@ func (ui *view) reloadHomeIfUpdatesChanged() {
 	go func() {
 		following, err := ui.service.Following(ui.ctx)
 		fltk.Awake(func() {
-			if err != nil || ui.closing || ui.ctx.Err() != nil || ui.selected != 0 || ui.homeLoading {
+			if err != nil || ui.closing || ui.ctx.Err() != nil || ui.selected != HomeSection || ui.homeLoading {
 				return
 			}
 			if recentUpdateKey(recentUpdateRows(following, nil, rowLimit, time.Now())) != ui.homeUpdateKey {
@@ -183,56 +182,6 @@ func FollowErrorMessage(err error) string {
 		return ""
 	}
 	return uitext.T().FollowFailed
-}
-
-// detailOrigin is the page the detail screen was opened from; the zero value is Search.
-type detailOrigin uint8
-
-const (
-	detailFromSearch detailOrigin = iota
-	detailFromHome
-	detailFromFollowing
-	detailFromSchedule
-)
-
-func (origin detailOrigin) backLabel() string {
-	switch origin {
-	case detailFromHome:
-		return uitext.T().BackToHome
-	case detailFromFollowing:
-		return uitext.T().BackToFollowing
-	case detailFromSchedule:
-		return uitext.T().BackToSchedule
-	}
-	return uitext.T().BackToResults
-}
-
-// openDetailFrom opens an anime's detail screen (which lives in the Search page) so that
-// Back and Escape return to origin.
-func (ui *view) openDetailFrom(origin detailOrigin, item backend.Anime) {
-	if ui.closing {
-		return
-	}
-	ui.showSection(4)
-	ui.detailOrigin = origin
-	ui.openSearchResult(item)
-}
-
-// leaveDetail goes back to where the detail screen was opened from.
-func (ui *view) leaveDetail() {
-	switch ui.detailOrigin {
-	case detailFromHome:
-		ui.showSection(0)
-		ui.focusContent()
-	case detailFromFollowing:
-		ui.showSection(followingSection)
-		ui.focusFollowing()
-	case detailFromSchedule:
-		ui.showSection(scheduleSection)
-		ui.focusSchedule()
-	default:
-		ui.backToSearchResults()
-	}
 }
 
 func (ui *view) focusFollowing() {
@@ -300,101 +249,4 @@ func (ui *view) renderFollowing() {
 
 func (ui *view) resizeFollowing() {
 	ui.resizeRowList(ui.followingList())
-}
-
-func (ui *view) toggleDetailFollow() {
-	detail := ui.searchModel.preview
-	if detail == nil {
-		return
-	}
-	animeID, follow := detail.Anime.ID, !detail.Following
-	started := ui.setFollowing(animeID, follow, func(err error) {
-		if preview := ui.searchModel.preview; err == nil && preview != nil && preview.Anime.ID == animeID {
-			preview.Following = follow
-		}
-		ui.renderPreview()
-	})
-	if started {
-		// The button shows inactive while the change runs.
-		ui.renderPreview()
-	}
-}
-
-func (ui *view) renderDetailFollow() {
-	detail := ui.searchModel.preview
-	if detail == nil || ui.searchModel.requestActive {
-		ui.previewFollow.Hide()
-		return
-	}
-	if detail.Following {
-		ui.previewFollow.SetLabel(uitext.T().Unfollow)
-	} else {
-		ui.previewFollow.SetLabel(uitext.T().Follow)
-	}
-	ui.previewFollow.SetTooltip(ui.previewFollow.Label())
-	if ui.followPending {
-		ui.previewFollow.Deactivate()
-	} else {
-		ui.previewFollow.Activate()
-	}
-	ui.previewFollow.Show()
-}
-
-// followIconSize is the width of the detail screen's star follow button.
-const followIconSize = 40
-
-// placeFollowIcon puts the detail screen's follow icon at the right end of the button
-// row, its right edge flush with the episode rows below it.
-func (ui *view) placeFollowIcon() {
-	x, width := ui.detailEpisodeRowSpan()
-	ui.previewFollow.Resize(x+width-followIconSize, 118, followIconSize, 38)
-}
-
-// styleFollowIcon draws a follow button as a star: an outline when the anime is not
-// followed, filled in the accent color when it is. The label is not drawn; it names the
-// action for the tooltip.
-func (ui *view) styleFollowIcon(button *fltk.Button, followed func() bool) {
-	button.SetBox(fltk.NO_BOX)
-	button.SetDrawHandler(func(func()) {
-		colors := ui.colors()
-		x, y, width, height := button.X(), button.Y(), button.W(), button.H()
-		if button.HasFocus() {
-			roundedRect(x, y, width, height, 13, colors.accent)
-		} else {
-			roundedRect(x, y, width, height, 13, colors.surface)
-		}
-		roundedRect(x+3, y+3, width-6, height-6, 11, colors.surface)
-		centerX, centerY := x+width/2, y+height/2+1
-		points := starPoints(centerX, centerY, 11)
-		if followed() {
-			fltk.SetDrawColor(colors.accent)
-			for index := range points {
-				next := points[(index+1)%len(points)]
-				fltk.DrawPolygon(centerX, centerY, points[index][0], points[index][1], next[0], next[1])
-			}
-			return
-		}
-		fltk.SetDrawColor(colors.muted)
-		fltk.SetLineStyle(fltk.SOLID, 2)
-		for index := range points {
-			next := points[(index+1)%len(points)]
-			fltk.DrawLine(points[index][0], points[index][1], next[0], next[1])
-		}
-		fltk.SetLineStyle(fltk.SOLID, 0)
-	})
-}
-
-// starPoints returns the ten corners of a five-pointed star, alternating outer and
-// inner points, starting at the top.
-func starPoints(centerX, centerY, radius int) [10][2]int {
-	var points [10][2]int
-	for index := range points {
-		length := float64(radius)
-		if index%2 == 1 {
-			length *= 0.45
-		}
-		angle := -math.Pi/2 + float64(index)*math.Pi/5
-		points[index] = [2]int{centerX + int(math.Round(length*math.Cos(angle))), centerY + int(math.Round(length*math.Sin(angle)))}
-	}
-	return points
 }

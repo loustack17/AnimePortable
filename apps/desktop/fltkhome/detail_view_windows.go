@@ -141,7 +141,7 @@ func (ui *view) loadDetailResources(generation uint64, animeID string) {
 }
 
 func (ui *view) detailRequestCurrent(generation uint64, animeID string) bool {
-	return !ui.closing && ui.ctx.Err() == nil && ui.selected == 4 && ui.searchPreview && ui.detailGeneration == generation && ui.detailModel.animeID == animeID
+	return !ui.closing && ui.ctx.Err() == nil && ui.selected == SearchSection && ui.searchPreview && ui.detailGeneration == generation && ui.detailModel.animeID == animeID
 }
 
 func (ui *view) stopDetailLoad() {
@@ -201,7 +201,7 @@ func (ui *view) retryDetailLoad() {
 			if applied && err == nil && ui.detailGeneration == generation && ui.searchPreview {
 				ui.loadDetailResources(generation, item.ID)
 			}
-			if ui.selected == 4 {
+			if ui.selected == SearchSection {
 				ui.refreshSearchView()
 			}
 		})
@@ -296,10 +296,7 @@ func (ui *view) renderDetailEpisodes() {
 			break
 		}
 	}
-	for _, button := range ui.previewEpisodeRows {
-		ui.previewEpisodes.Remove(button)
-		button.Destroy()
-	}
+	destroyChildren(ui.previewEpisodes, ui.previewEpisodeRows)
 	ui.previewEpisodeRows = nil
 	ui.previewEpisodeIDs = nil
 	ui.previewEpisodes.ScrollTo(0, 0)
@@ -349,7 +346,7 @@ func (ui *view) renderDetailEpisodes() {
 	if ui.detailHistoryErr {
 		ui.previewStatus.SetLabel(ui.previewStatus.Label() + uitext.T().Separator + uitext.T().ProgressUnavailable)
 	}
-	pageCount := (len(ui.detailModel.episodes) + detailEpisodePageSize - 1) / detailEpisodePageSize
+	pageCount := ui.detailModel.pageCount()
 	if len(ui.detailModel.episodes) == 0 {
 		ui.previewEpisodeText.SetLabel(uitext.T().NoEpisodesShort)
 	} else {
@@ -407,14 +404,59 @@ func (ui *view) handleDetailEpisodeKey(index int, command keyCommand) bool {
 	return true
 }
 
-func playbackPositionLabel(milliseconds int64) string {
-	seconds := max(0, int(milliseconds/1000))
-	return fmt.Sprintf("%d:%02d", seconds/60, seconds%60)
-}
-
 func episodeProgressLabel(history backend.History) string {
 	if history.Duration <= 0 {
-		return fmt.Sprintf(uitext.T().WatchedPosition, playbackPositionLabel(history.Position))
+		return fmt.Sprintf(uitext.T().WatchedPosition, formatPosition(history.Position))
 	}
-	return fmt.Sprintf("%s / %s", playbackPositionLabel(history.Position), playbackPositionLabel(history.Duration))
+	return fmt.Sprintf("%s / %s", formatPosition(history.Position), formatPosition(history.Duration))
+}
+
+// detailOrigin is the page the detail screen was opened from; the zero value is Search.
+type detailOrigin uint8
+
+const (
+	detailFromSearch detailOrigin = iota
+	detailFromHome
+	detailFromFollowing
+	detailFromSchedule
+)
+
+func (origin detailOrigin) backLabel() string {
+	switch origin {
+	case detailFromHome:
+		return uitext.T().BackToHome
+	case detailFromFollowing:
+		return uitext.T().BackToFollowing
+	case detailFromSchedule:
+		return uitext.T().BackToSchedule
+	}
+	return uitext.T().BackToResults
+}
+
+// openDetailFrom opens an anime's detail screen (which lives in the Search page) so that
+// Back and Escape return to origin.
+func (ui *view) openDetailFrom(origin detailOrigin, item backend.Anime) {
+	if ui.closing {
+		return
+	}
+	ui.showSection(SearchSection)
+	ui.detailOrigin = origin
+	ui.openSearchResult(item)
+}
+
+// leaveDetail goes back to where the detail screen was opened from.
+func (ui *view) leaveDetail() {
+	switch ui.detailOrigin {
+	case detailFromHome:
+		ui.showSection(HomeSection)
+		ui.focusContent()
+	case detailFromFollowing:
+		ui.showSection(followingSection)
+		ui.focusFollowing()
+	case detailFromSchedule:
+		ui.showSection(scheduleSection)
+		ui.focusSchedule()
+	default:
+		ui.backToSearchResults()
+	}
 }

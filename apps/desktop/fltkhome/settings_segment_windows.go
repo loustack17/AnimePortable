@@ -136,7 +136,7 @@ func (ui *view) bindSegmentKeys(control *segmentedControl, index int) {
 func (ui *view) drawSegmentedCard(control *segmentedControl) {
 	colors := ui.colors()
 	x, y, width, height := control.card.X(), control.card.Y(), control.card.W(), control.card.H()
-	drawSettingsCard(colors, x, y, width, height, false)
+	drawCard(colors, x, y, width, height, 13, false)
 	title := colors.ink
 	if ui.settingsLoadFailed {
 		title = colors.muted

@@ -309,7 +309,7 @@ func (ui *view) build() {
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 13)
 		fltk.Draw(browse.Label(), x, y, width, height, fltk.ALIGN_CENTER)
 	})
-	browseAction := func() { ui.showSection(4); ui.focusSearchInput() }
+	browseAction := func() { ui.showSection(SearchSection); ui.focusSearchInput() }
 	browse.SetCallback(browseAction)
 	ui.bindContentKeys(browse, browseAction, nil, func() *fltk.Button {
 		if ui.retryButton != nil && ui.retryButton.Visible() {
@@ -467,8 +467,8 @@ func (ui *view) finishStartup(err error, settings backend.Settings, settingsErr 
 		ui.setMessage(nil)
 	}
 	ui.mainGroup.Show()
-	ui.showSection(0)
-	ui.navigation[0].TakeFocus()
+	ui.showSection(HomeSection)
+	ui.navigation[HomeSection].TakeFocus()
 	ui.loadHome()
 	ui.window.Redraw()
 }
@@ -477,14 +477,14 @@ func (ui *view) showSection(index int) {
 	if ui.closing || index < 0 || index >= len(uitext.T().Sections) {
 		return
 	}
-	enteringHome := index == 0 && ui.selected != 0
+	enteringHome := index == HomeSection && ui.selected != HomeSection
 	if ui.selected == settingsSection && index != settingsSection {
 		ui.commitProxyAddress()
 	}
 	if ui.selected != index {
 		ui.pageGeneration++
 	}
-	if index == 4 && ui.searchPreview {
+	if index == SearchSection && ui.searchPreview {
 		ui.pageGeneration++
 		ui.stopDetailLoad()
 		ui.searchModel.cancel()
@@ -492,13 +492,13 @@ func (ui *view) showSection(index int) {
 		// The results page shows; a detail opened from it next must return to it.
 		ui.detailOrigin = detailFromSearch
 	}
-	if ui.selected == 4 && index != 4 {
+	if ui.selected == SearchSection && index != SearchSection {
 		ui.stopDetailLoad()
 		ui.searchModel.cancel()
 		ui.searchPreview = false
 	}
 	ui.selected = index
-	if index != 4 {
+	if index != SearchSection {
 		ui.detailOrigin = detailFromSearch
 	}
 	if ui.followingPage != nil && index != followingSection {
@@ -517,7 +517,7 @@ func (ui *view) showSection(index int) {
 		button.Redraw()
 	}
 	ui.syncSectionText()
-	if index == 0 {
+	if index == HomeSection {
 		ui.scroll.Show()
 		ui.searchPage.Hide()
 		ui.previewGroup.Hide()
@@ -525,7 +525,7 @@ func (ui *view) showSection(index int) {
 			// Following and history can change on other pages; Home must not show them stale.
 			ui.refreshHome()
 		}
-	} else if index == 4 {
+	} else if index == SearchSection {
 		ui.scroll.Hide()
 		ui.searchPage.Show()
 		ui.previewGroup.Hide()
@@ -567,7 +567,7 @@ func (ui *view) syncSectionText() {
 	text := uitext.T()
 	title, hint := text.Sections[ui.selected], text.PageMissing
 	switch {
-	case ui.selected == 0:
+	case ui.selected == HomeSection:
 		title, hint = text.HomeTitle, text.HomeHint
 	case ui.selected == SearchSection:
 		hint = text.SearchHint
@@ -589,9 +589,9 @@ func (ui *view) syncSectionText() {
 func (ui *view) syncHomeNotice() {
 	current := ui.message.Label()
 	switch {
-	case ui.selected == 0 && ui.homeOffline && current == "":
+	case ui.selected == HomeSection && ui.homeOffline && current == "":
 		ui.setMessage(func() string { return uitext.T().OfflineNotice })
-	case current == uitext.T().OfflineNotice && (ui.selected != 0 || !ui.homeOffline):
+	case current == uitext.T().OfflineNotice && (ui.selected != HomeSection || !ui.homeOffline):
 		ui.setMessage(nil)
 	}
 }
@@ -599,7 +599,7 @@ func (ui *view) syncHomeNotice() {
 // navigate shows a page after playback and focuses it: the search input for 搜尋, otherwise
 // the page's navigation button. Focus waits for the window to be shown again.
 func (ui *view) navigate(index int) {
-	alreadyHome := index == 0 && ui.selected == 0
+	alreadyHome := index == HomeSection && ui.selected == HomeSection
 	ui.showSection(index)
 	if alreadyHome {
 		// showSection reloads Home only when entering it; after playback Home may already be shown.
@@ -707,29 +707,20 @@ func (ui *view) hideHomeContinue() {
 }
 
 func (ui *view) playHomeRow(item backend.History, generation uint64) {
-	if ui.onPlay != nil && ui.ctx.Err() == nil && !ui.closing && !ui.homeLoading && !ui.loadFailed && ui.selected == 0 && generation == ui.homeLoadGeneration {
+	if ui.onPlay != nil && ui.ctx.Err() == nil && !ui.closing && !ui.homeLoading && !ui.loadFailed && ui.selected == HomeSection && generation == ui.homeLoadGeneration {
 		ui.onPlay(historyPlayRequest(item))
 	}
 }
 
 func (ui *view) populateHome(library []backend.Anime, following []backend.Following) {
 	ui.scroll.ScrollTo(ui.scroll.XPosition()+ui.browseButton.X()-278, ui.scroll.YPosition()+ui.browseButton.Y()-205)
-	for _, button := range ui.cardButtons {
-		ui.scroll.Remove(button)
-		button.Destroy()
-	}
-	for _, card := range ui.cards {
-		ui.scroll.Remove(card)
-		card.Destroy()
-	}
+	destroyChildren(ui.scroll, ui.cardButtons)
+	destroyChildren(ui.scroll, ui.cards)
 	for _, label := range ui.contentLabels[ui.staticLabels:] {
 		ui.scroll.Remove(label.widget)
 		label.widget.Destroy()
 	}
-	for _, button := range ui.homeUpdateButtons {
-		ui.scroll.Remove(button)
-		button.Destroy()
-	}
+	destroyChildren(ui.scroll, ui.homeUpdateButtons)
 	ui.homeUpdateButtons = nil
 	ui.homeUpdateIDs = nil
 	ui.homeUpdateOffsets = nil
@@ -756,7 +747,7 @@ func (ui *view) populateHome(library []backend.Anime, following []backend.Follow
 		ui.styleTitleStatusRow(button, row.Anime.Title, row.Status)
 		item := row.Anime
 		openRow := func() {
-			if ui.selected == 0 && !ui.homeLoading {
+			if ui.selected == HomeSection && !ui.homeLoading {
 				ui.openDetailFrom(detailFromHome, item)
 			}
 		}
@@ -871,7 +862,7 @@ func (ui *view) bindNavigationKeys(button *fltk.Button, index int) {
 }
 
 func (ui *view) focusContent() {
-	if ui.selected == 4 {
+	if ui.selected == SearchSection {
 		if ui.searchPreview {
 			ui.previewBack.TakeFocus()
 		} else {
@@ -987,25 +978,13 @@ func (ui *view) bindContentKeys(button *fltk.Button, action func(), previous, ne
 			} else {
 				return true
 			}
-		case keyUp:
+		case keyUp, keyPrevious:
 			if previous == nil || previous() == nil {
 				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
 			} else {
 				ui.focusAfterKey(func() { ui.focusTarget(previous()) })
 			}
-		case keyDown:
-			if next != nil && next() != nil {
-				ui.focusAfterKey(func() { ui.focusTarget(next()) })
-			} else {
-				return false
-			}
-		case keyPrevious:
-			if previous == nil || previous() == nil {
-				ui.focusAfterKey(func() { ui.navigation[ui.selected].TakeFocus() })
-			} else {
-				ui.focusAfterKey(func() { ui.focusTarget(previous()) })
-			}
-		case keyNext:
+		case keyDown, keyNext:
 			if next != nil && next() != nil {
 				ui.focusAfterKey(func() { ui.focusTarget(next()) })
 			} else {

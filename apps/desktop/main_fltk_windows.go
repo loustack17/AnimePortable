@@ -398,7 +398,7 @@ func main() {
 		},
 		SelectEpisode: func(index int) { selectEpisode(index, false, nil) },
 		Navigate:      stop,
-		Leave:         func() { stop(0) },
+		Leave:         func() { stop(fltkhome.HomeSection) },
 		Search:        func() { stop(fltkhome.SearchSection) },
 		ToggleFollow: func() {
 			if animeID := selection().AnimeID; animeID != "" {
@@ -407,7 +407,7 @@ func main() {
 		},
 	})
 	player.SetSpeed(playbackSettings.PlaybackSpeed)
-	player.Window().SetCallback(func() { stop(0) })
+	player.Window().SetCallback(func() { stop(fltkhome.HomeSection) })
 	// One source for every client that needs the forward proxy; the service keeps it in step
 	// with the saved settings.
 	proxySource := forwardproxy.New()

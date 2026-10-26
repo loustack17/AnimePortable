@@ -68,7 +68,7 @@ func (ui *view) styleAction(action *settingsAction) {
 		colors := ui.colors()
 		x, y, width, height := button.X(), button.Y(), button.W(), button.H()
 		active := button.IsActive()
-		drawSettingsCard(colors, x, y, width, height, button.HasFocus())
+		drawCard(colors, x, y, width, height, 13, button.HasFocus())
 		title := colors.ink
 		if !active {
 			title = colors.muted
@@ -106,7 +106,7 @@ func (ui *view) addInfoRow(info *settingsInfo) {
 	info.card.SetDrawHandler(func(func()) {
 		colors := ui.colors()
 		x, y, width, height := info.card.X(), info.card.Y(), info.card.W(), info.card.H()
-		drawSettingsCard(colors, x, y, width, height, false)
+		drawCard(colors, x, y, width, height, 13, false)
 		drawRowText(x, y, width, height, width-36, info.title.String(), info.detail(), colors.ink, colors.muted, false)
 	})
 	ui.settingsRows = append(ui.settingsRows, &settingsRow{
@@ -136,7 +136,7 @@ func (ui *view) addProxyAddressRow() {
 	field.card.SetDrawHandler(func(func()) {
 		colors := ui.colors()
 		x, y, width, height := field.card.X(), field.card.Y(), field.card.W(), field.card.H()
-		drawSettingsCard(colors, x, y, width, height, field.input.HasFocus())
+		drawCard(colors, x, y, width, height, 13, field.input.HasFocus())
 		title, hint, hintColor := colors.ink, uitext.T().ProxyAddressHint, colors.muted
 		if ui.settingsLoadFailed {
 			title = colors.muted

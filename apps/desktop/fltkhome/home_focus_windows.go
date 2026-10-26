@@ -40,7 +40,7 @@ func (ui *view) rememberHomeFocus() {
 func (ui *view) restoreHomeFocus() {
 	focus := ui.homeFocus
 	ui.homeFocus = homeFocus{}
-	if !focus.pending || ui.selected != 0 || ui.focusOutsideHomeRows() {
+	if !focus.pending || ui.selected != HomeSection || ui.focusOutsideHomeRows() {
 		return
 	}
 	ids, buttons := ui.homeUpdateIDs, ui.homeUpdateButtons

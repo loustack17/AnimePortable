@@ -160,10 +160,7 @@ func (ui *view) renderSchedule() {
 			card.Destroy()
 		}
 	}
-	for _, header := range ui.scheduleHeaders {
-		ui.scheduleScroll.Remove(header)
-		header.Destroy()
-	}
+	destroyChildren(ui.scheduleScroll, ui.scheduleHeaders)
 	ui.scheduleCards, ui.scheduleHeaders = nil, nil
 	scrollX, scrollY := ui.scheduleScroll.XPosition(), ui.scheduleScroll.YPosition()
 	ui.scheduleScroll.ScrollTo(0, 0)
@@ -243,12 +240,7 @@ func (ui *view) styleScheduleCard(button *fltk.Button, show scheduleShow) {
 	button.SetDrawHandler(func(func()) {
 		colors := ui.colors()
 		x, y, width, height := button.X(), button.Y(), button.W(), button.H()
-		if button.HasFocus() {
-			roundedRect(x, y, width, height, 11, colors.accent)
-		} else {
-			roundedRect(x, y, width, height, 11, colors.surface)
-		}
-		roundedRect(x+3, y+3, width-6, height-6, 9, colors.surface)
+		drawCard(colors, x, y, width, height, 11, button.HasFocus())
 		fltk.PushClip(x+3, y+3, width-6, height-6)
 		fltk.SetDrawColor(colors.ink)
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 13)
@@ -373,7 +365,7 @@ func (ui *view) openScheduleShow(day, index int) {
 		ui.openDetailFrom(detailFromSchedule, show.Anime)
 		return
 	}
-	ui.showSection(4)
+	ui.showSection(SearchSection)
 	ui.searchInput.SetValue(show.Query)
 	ui.searchModel.setQuery(show.Query)
 	ui.renderSearch()

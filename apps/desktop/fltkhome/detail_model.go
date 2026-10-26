@@ -107,9 +107,12 @@ func (model *detailModel) movePage(delta int) {
 	if len(model.episodes) == 0 || delta == 0 {
 		return
 	}
-	lastPage := (len(model.episodes) - 1) / detailEpisodePageSize
-	model.page = max(0, min(lastPage, model.page+delta))
+	model.page = movedPage(model.page, delta, len(model.episodes), detailEpisodePageSize)
 	model.selected = model.page * detailEpisodePageSize
+}
+
+func (model *detailModel) pageCount() int {
+	return pageCount(len(model.episodes), detailEpisodePageSize)
 }
 
 func (model *detailModel) playRequest() (backend.PlayRequest, bool) {

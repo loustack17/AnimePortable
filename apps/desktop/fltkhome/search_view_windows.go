@@ -27,7 +27,7 @@ func (ui *view) buildSearchView() {
 		inputVersion := ui.searchInputVersion
 		pageGeneration := ui.pageGeneration
 		fltk.AddTimeout(0.01, func() {
-			if ui.ctx.Err() != nil || ui.closing || ui.pageGeneration != pageGeneration || ui.searchInputVersion != inputVersion || ui.selected != 4 || ui.searchPreview || ui.mainGroup == nil || !ui.mainGroup.Visible() {
+			if ui.ctx.Err() != nil || ui.closing || ui.pageGeneration != pageGeneration || ui.searchInputVersion != inputVersion || ui.selected != SearchSection || ui.searchPreview || ui.mainGroup == nil || !ui.mainGroup.Visible() {
 				return
 			}
 			ui.searchModel.setQuery(query)
@@ -45,7 +45,7 @@ func (ui *view) buildSearchView() {
 	ui.searchBack = fltk.NewButton(853, 118, 104, 42, "")
 	ui.labelled(ui.searchBack, func(text *uitext.Strings) string { return text.BackToHome })
 	ui.styleButton(ui.searchBack, nil)
-	ui.bindSearchButton(ui.searchBack, func() { ui.showSection(0) })
+	ui.bindSearchButton(ui.searchBack, func() { ui.showSection(HomeSection) })
 	ui.searchStatus = fltk.NewBox(fltk.NO_BOX, 252, 169, 705, 29, "")
 	ui.searchStatus.SetLabelSize(12)
 	ui.searchStatus.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
@@ -188,7 +188,7 @@ func (ui *view) loadSearchLibrary() {
 	if !ok {
 		return
 	}
-	if ui.selected == 4 {
+	if ui.selected == SearchSection {
 		ui.renderSearch()
 	}
 	go func() {
@@ -198,7 +198,7 @@ func (ui *view) loadSearchLibrary() {
 			if ui.ctx.Err() != nil || ui.closing {
 				return
 			}
-			if ui.selected == 4 {
+			if ui.selected == SearchSection {
 				ui.refreshSearchView()
 			}
 		})
@@ -244,7 +244,7 @@ func (ui *view) startRemoteSearch() {
 			if ui.ctx.Err() != nil || ui.closing {
 				return
 			}
-			if ui.selected == 4 {
+			if ui.selected == SearchSection {
 				ui.refreshSearchView()
 			}
 		})
@@ -264,13 +264,6 @@ func (ui *view) openSearchResult(item backend.Anime) {
 	request, ctx, ok := ui.searchModel.beginDetail(item)
 	if !ok {
 		ui.searchModel.queueDetail(item)
-		ui.searchPreview = true
-		ui.searchPage.Hide()
-		ui.previewGroup.Show()
-		ui.renderPreview()
-		ui.renderDetailEpisodes()
-		ui.previewBack.TakeFocus()
-		return
 	}
 	ui.searchPreview = true
 	ui.searchPage.Hide()
@@ -278,6 +271,9 @@ func (ui *view) openSearchResult(item backend.Anime) {
 	ui.renderPreview()
 	ui.renderDetailEpisodes()
 	ui.previewBack.TakeFocus()
+	if !ok {
+		return
+	}
 	if ui.service == nil {
 		ui.searchModel.finishDetail(request, backend.Detail{}, fmt.Errorf("service unavailable"))
 		ui.renderPreview()
@@ -293,7 +289,7 @@ func (ui *view) openSearchResult(item backend.Anime) {
 			if applied && err == nil && ui.detailGeneration == detailGeneration && ui.searchPreview {
 				ui.loadDetailResources(detailGeneration, item.ID)
 			}
-			if ui.selected == 4 {
+			if ui.selected == SearchSection {
 				ui.refreshSearchView()
 			}
 		})
@@ -302,7 +298,7 @@ func (ui *view) openSearchResult(item backend.Anime) {
 
 func (ui *view) startPendingSearchAction() {
 	kind, item, ok := ui.searchModel.takePending()
-	if !ok || ui.selected != 4 {
+	if !ok || ui.selected != SearchSection {
 		return
 	}
 	switch kind {
@@ -320,7 +316,7 @@ func (ui *view) refreshSearchView() {
 		ui.renderSearch()
 	}
 	ui.startPendingSearchAction()
-	if ui.selected == 4 && !ui.searchModel.loaded && !ui.searchModel.libraryFailed && !ui.searchModel.requestActive && ui.searchModel.pending == 0 {
+	if ui.selected == SearchSection && !ui.searchModel.loaded && !ui.searchModel.libraryFailed && !ui.searchModel.requestActive && ui.searchModel.pending == 0 {
 		ui.loadSearchLibrary()
 	}
 }
@@ -331,10 +327,7 @@ func (ui *view) renderSearch() {
 	}
 	// Results are rebuilt when stored or online results arrive; the focused row stays focused.
 	focusedRow := slices.IndexFunc(ui.searchRows, (*fltk.Button).HasFocus)
-	for _, button := range ui.searchRows {
-		ui.searchScroll.Remove(button)
-		button.Destroy()
-	}
+	destroyChildren(ui.searchScroll, ui.searchRows)
 	ui.searchRows = nil
 	ui.searchScroll.ScrollTo(0, 0)
 	ui.searchScroll.Begin()
@@ -527,7 +520,7 @@ func searchPageLabel(page, count, total int) string {
 }
 
 func (ui *view) focusSearchInput() {
-	if ui.selected == 4 && !ui.searchPreview {
+	if ui.selected == SearchSection && !ui.searchPreview {
 		ui.searchInput.TakeFocus()
 	}
 }
@@ -536,7 +529,7 @@ func (ui *view) deferredSearchAction(action func(), preview bool) func() {
 	return func() {
 		pageGeneration := ui.pageGeneration
 		ui.deferredKeyAction(func() {
-			if ui.pageGeneration == pageGeneration && ui.selected == 4 && ui.mainGroup != nil && ui.mainGroup.Visible() && ui.searchPreview == preview {
+			if ui.pageGeneration == pageGeneration && ui.selected == SearchSection && ui.mainGroup != nil && ui.mainGroup.Visible() && ui.searchPreview == preview {
 				action()
 			}
 		})()
@@ -545,7 +538,7 @@ func (ui *view) deferredSearchAction(action func(), preview bool) func() {
 
 func (ui *view) focusSearchResult(index int) {
 	if len(ui.searchRows) == 0 {
-		if ui.selected == 4 && !ui.searchPreview {
+		if ui.selected == SearchSection && !ui.searchPreview {
 			ui.searchInput.TakeFocus()
 		}
 		return
@@ -559,7 +552,7 @@ func (ui *view) focusSelectedSearchResult() {
 }
 
 func (ui *view) searchEscape() {
-	if ui.selected != 4 {
+	if ui.selected != SearchSection {
 		return
 	}
 	if ui.searchPreview {

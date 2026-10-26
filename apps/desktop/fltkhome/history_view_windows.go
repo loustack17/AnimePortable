@@ -191,12 +191,7 @@ func (ui *view) styleRemoveIcon(button *fltk.Button) {
 	button.SetDrawHandler(func(func()) {
 		colors := ui.colors()
 		x, y, width, height := button.X(), button.Y(), button.W(), button.H()
-		if button.HasFocus() {
-			roundedRect(x, y, width, height, 13, colors.accent)
-		} else {
-			roundedRect(x, y, width, height, 13, colors.surface)
-		}
-		roundedRect(x+3, y+3, width-6, height-6, 11, colors.surface)
+		drawCard(colors, x, y, width, height, 13, button.HasFocus())
 		centerX, centerY := x+width/2, y+height/2
 		fltk.SetDrawColor(colors.muted)
 		fltk.SetLineStyle(fltk.SOLID, 2)

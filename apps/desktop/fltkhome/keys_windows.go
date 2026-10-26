@@ -6,8 +6,12 @@ package fltkhome
 
 import fltk "github.com/pwiecz/go-fltk"
 
-// SearchSection is the index of 搜尋 in sections; the player opens it for `/` and Ctrl+K.
-const SearchSection = 4
+// HomeSection and SearchSection are the indexes of 首頁 and 搜尋 in sections; the player
+// returns to them (Esc, and `/` or Ctrl+K).
+const (
+	HomeSection   = 0
+	SearchSection = 4
+)
 
 // keyCommand is what a key means anywhere in the main window. Screens decide what a command
 // does on them; only classifyKey looks at key codes.
@@ -214,8 +218,8 @@ func (ui *view) goBack() {
 }
 
 func (ui *view) goHome() {
-	ui.showSection(0)
-	ui.navigation[0].TakeFocus()
+	ui.showSection(HomeSection)
+	ui.navigation[HomeSection].TakeFocus()
 }
 
 // openQuickSearch shows 搜尋's results page; showSection closes the detail screen if it is open.

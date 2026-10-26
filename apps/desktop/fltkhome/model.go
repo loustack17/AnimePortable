@@ -380,3 +380,13 @@ func homeErrorMessage(err error) string {
 func isCanceled(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
+
+// pageCount is how many pages of size hold items.
+func pageCount(items, size int) int {
+	return (items + size - 1) / size
+}
+
+// movedPage is page moved by delta and kept within the pages that hold items (items > 0).
+func movedPage(page, delta, items, size int) int {
+	return max(0, min((items-1)/size, page+delta))
+}

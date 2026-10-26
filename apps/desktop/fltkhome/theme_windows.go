@@ -79,6 +79,29 @@ var darkPalette = palette{
 	danger:     fltk.ColorFromRgb(252, 129, 129),
 }
 
+// destroyChildren removes widgets from parent and then destroys them one by one, so no draw
+// handler of a child outlives its widget (a group destroyed with its children crashes go-fltk).
+func destroyChildren[W interface {
+	fltk.Widget
+	Destroy()
+}](parent interface{ Remove(fltk.Widget) }, widgets []W) {
+	for _, widget := range widgets {
+		parent.Remove(widget)
+		widget.Destroy()
+	}
+}
+
+// drawCard fills a card: a 3 px ring, in the accent color when the card has focus, around
+// the surface, with the given corner radius.
+func drawCard(colors palette, x, y, width, height, radius int, focused bool) {
+	ring := colors.surface
+	if focused {
+		ring = colors.accent
+	}
+	roundedRect(x, y, width, height, radius, ring)
+	roundedRect(x+3, y+3, width-6, height-6, radius-2, colors.surface)
+}
+
 func roundedRect(x, y, width, height, radius int, color fltk.Color) {
 	fltk.SetDrawColor(color)
 	fltk.DrawRectf(x+radius, y, width-2*radius, height)

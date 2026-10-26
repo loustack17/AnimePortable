@@ -553,7 +553,7 @@ func (ui *view) styleSettingsToggle(toggle *settingsToggle) {
 	button.SetDrawHandler(func(func()) {
 		colors := ui.colors()
 		x, y, width, height := button.X(), button.Y(), button.W(), button.H()
-		drawSettingsCard(colors, x, y, width, height, button.HasFocus())
+		drawCard(colors, x, y, width, height, 13, button.HasFocus())
 
 		active, on := button.IsActive(), toggle.on()
 		title, hint := colors.ink, toggle.hint
@@ -578,16 +578,6 @@ func (ui *view) styleSettingsToggle(toggle *settingsToggle) {
 		fltk.SetDrawColor(knob)
 		fltk.DrawPie(knobX, trackY+2, settingsSwitchH-4, settingsSwitchH-4, 0, 360)
 	})
-}
-
-// drawSettingsCard paints a row's rounded card; a focused row gets an accent ring.
-func drawSettingsCard(colors palette, x, y, width, height int, focused bool) {
-	ring := colors.surface
-	if focused {
-		ring = colors.accent
-	}
-	roundedRect(x, y, width, height, 13, ring)
-	roundedRect(x+3, y+3, width-6, height-6, 11, colors.surface)
 }
 
 // drawRowText writes a row's title and, under it, its hint, clipped to textWidth.

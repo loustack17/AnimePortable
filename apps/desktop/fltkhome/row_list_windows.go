@@ -211,12 +211,7 @@ func (ui *view) styleTitleStatusRow(button *fltk.Button, title, status string) {
 	button.SetDrawHandler(func(func()) {
 		colors := ui.colors()
 		x, y, width, height := button.X(), button.Y(), button.W(), button.H()
-		if button.HasFocus() {
-			roundedRect(x, y, width, height, 13, colors.accent)
-		} else {
-			roundedRect(x, y, width, height, 13, colors.surface)
-		}
-		roundedRect(x+3, y+3, width-6, height-6, 11, colors.surface)
+		drawCard(colors, x, y, width, height, 13, button.HasFocus())
 		fltk.PushClip(x+3, y+3, width-6, height-6)
 		fltk.SetDrawColor(colors.ink)
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 15)
