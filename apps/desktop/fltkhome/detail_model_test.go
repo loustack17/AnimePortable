@@ -80,6 +80,25 @@ func TestDetailModelContinueMatchesAnimeAndEpisodeAndRejectsCompleted(t *testing
 	}
 }
 
+func TestDetailModelContinueUsesTheHomeResumableRule(t *testing.T) {
+	model := detailModel{}
+	model.open("wanted")
+	model.setEpisodes([]backend.Episode{{ID: "past-end"}, {ID: "no-duration"}})
+	// A position at or past a known duration is not resumable on Home, so the detail page does
+	// not offer to continue it either; a position without a known duration still is.
+	model.setHistory([]backend.History{
+		{AnimeID: "wanted", EpisodeID: "past-end", Position: 24000, Duration: 24000, UpdatedAt: "2026-10-05T10:00:00Z"},
+		{AnimeID: "wanted", EpisodeID: "no-duration", Position: 12000, UpdatedAt: "2026-10-04T10:00:00Z"},
+	})
+	request, ok := model.continueRequest()
+	if !ok || request.EpisodeID != "no-duration" || request.StartAt != 12000 {
+		t.Fatalf("continue request = %#v, accepted %v", request, ok)
+	}
+	if resumable(backend.History{Position: 24000, Duration: 24000}) {
+		t.Fatal("Home rule changed: a position at the duration is resumable")
+	}
+}
+
 func TestDetailModelReordersNoEpisodesAndClearsOnClose(t *testing.T) {
 	model := detailModel{}
 	model.open("anime")

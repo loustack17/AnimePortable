@@ -131,7 +131,7 @@ func (model *detailModel) continueRequest() (backend.PlayRequest, bool) {
 	found := false
 	for _, episode := range model.episodes {
 		history, ok := model.history[episode.ID]
-		if !ok || episode.ID == "" || episode.AnimeID != "" && episode.AnimeID != model.animeID || history.Completed || history.Position <= 0 {
+		if !ok || episode.ID == "" || episode.AnimeID != "" && episode.AnimeID != model.animeID || !resumable(history) {
 			continue
 		}
 		if !found || historyOrder(history) > historyOrder(selected) {

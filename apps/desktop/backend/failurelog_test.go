@@ -42,6 +42,8 @@ func TestFailureLineFormat(t *testing.T) {
 		{stagePlayerLoad, 0, categoryPlayerFailed, "2026-10-13T17:02:03Z player_load - player_failed"},
 		{"https://secret.example", 99, "token=abc", "2026-10-13T17:02:03Z other - unknown"},
 		{stageOther, 600, categoryTimeout, "2026-10-13T17:02:03Z other - timeout"},
+		{stageResolve, 0, failureCategory(securehttp.KindProxy), "2026-10-13T17:02:03Z resolve - proxy"},
+		{stageResolve, 0, failureCategory(securehttp.KindProxyRefused), "2026-10-13T17:02:03Z resolve - proxy_refused"},
 	}
 	for _, test := range cases {
 		if got := formatFailureLine(at, test.stage, test.status, test.category); got != test.want {
@@ -70,6 +72,23 @@ func TestFailureLogNeverWritesErrorText(t *testing.T) {
 			if strings.Contains(line, forbidden) {
 				t.Errorf("line %q leaks %q", line, forbidden)
 			}
+		}
+	}
+}
+
+func TestFailureLogNamesForwardProxyFailures(t *testing.T) {
+	directory := t.TempDir()
+	log := NewFailureLog(directory)
+	log.recordPlayFailure(&stageError{stage: stageResolve, err: &securehttp.Error{Kind: securehttp.KindProxy}})
+	log.recordPlayFailure(&stageError{stage: stageResolve, err: &securehttp.Error{Kind: securehttp.KindProxyRefused}})
+	lines := readFailureLines(t, directory)
+	want := []string{" resolve - proxy", " resolve - proxy_refused"}
+	if len(lines) != len(want) {
+		t.Fatalf("lines = %q", lines)
+	}
+	for index, line := range lines {
+		if !failureLineFormat.MatchString(line) || !strings.HasSuffix(line, want[index]) {
+			t.Errorf("line %d = %q, want suffix %q", index, line, want[index])
 		}
 	}
 }

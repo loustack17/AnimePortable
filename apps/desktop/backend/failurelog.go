@@ -67,6 +67,8 @@ var allowedCategories = map[failureCategory]struct{}{
 	failureCategory(securehttp.KindResponse):     {},
 	failureCategory(securehttp.KindBodyTooLarge): {},
 	failureCategory(securehttp.KindStatus):       {},
+	failureCategory(securehttp.KindProxy):        {},
+	failureCategory(securehttp.KindProxyRefused): {},
 }
 
 // FailureLog keeps the newest failureLogMaxLines playback failures next to the database.
