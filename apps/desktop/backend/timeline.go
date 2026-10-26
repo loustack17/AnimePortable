@@ -18,7 +18,7 @@ import (
 const (
 	startTimelineName = "playback-timeline.log"
 	// StartTimelineVariable turns the timeline on when set to 1 at launch. It is a measuring
-	// aid for developers (Loop 37d), not a user setting.
+	// aid for developers, not a user setting.
 	StartTimelineVariable = "ANIMEPORTABLE_START_TIMELINE"
 	// A start that never plays must not fill the disk with mpv's retries.
 	startTimelineMaxEvents = 200

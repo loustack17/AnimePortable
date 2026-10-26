@@ -5,7 +5,7 @@ package main
 import "time"
 
 // startTimeout is how long a start may go without a first frame before it is reported as
-// failed: a normal start takes about 2 s, so this only catches starts that hang (Loop 37d).
+// failed: a normal start takes about 2 s, so this only catches starts that hang.
 const startTimeout = 20 * time.Second
 
 // playerStartWatch reports a start that shows no first frame in time instead of leaving the

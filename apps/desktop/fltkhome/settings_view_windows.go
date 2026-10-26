@@ -364,7 +364,7 @@ func (ui *view) toggleResumePlayback() {
 }
 
 // toggleHardwareDecoding says when the change applies: mpv reads it only as the player opens,
-// and without the notice users expected to restart the app (owner check, Loop 38a).
+// and without the notice users expected to restart the app.
 func (ui *view) toggleHardwareDecoding() {
 	if ui.changeSettings(func(settings *backend.Settings) {
 		settings.HardwareDecoding = toggleName(!settingOn(settings.HardwareDecoding))

@@ -97,7 +97,7 @@ func (ui *view) loadDetailResources(generation uint64, animeID string) {
 		ui.previewCover.SetLabel(uitext.T().CoverNone)
 	}
 	// The stored list shows at once; Anime1's answer replaces it. A first answer for a list
-	// takes Anime1 one to three seconds (Loop 37d).
+	// takes Anime1 one to three seconds.
 	if stored, ok := ui.service.(interface {
 		StoredEpisodes(context.Context, string) ([]backend.Episode, error)
 	}); ok {

@@ -91,8 +91,7 @@ func (client *Client) Search(ctx context.Context, query core.MetadataQuery) ([]c
 		return nil, err
 	}
 	// Bangumi's Chinese names are Simplified, and its search does not match a Taiwan title
-	// written in Traditional characters (判處勇者刑 finds nothing, 判处勇者刑 finds it; Loop
-	// 37d), so the Chinese title is searched in Simplified. A Japanese native title is searched
+	// written in Traditional characters (判處勇者刑 finds nothing, 判处勇者刑 finds it), so the Chinese title is searched in Simplified. A Japanese native title is searched
 	// as it is: folding would turn 日本語 into 日本语.
 	keyword := core.FoldToSimplified(strings.TrimSpace(query.Title))
 	if keyword == "" {

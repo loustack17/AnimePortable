@@ -357,7 +357,7 @@ func checkContext(ctx context.Context) error {
 
 // Anime1 sometimes leaves a page request without an answer, then answers the same request at
 // once when it is sent again: one in 30 resolver page requests stalled for the full timeout and
-// its retry took half a second (Loop 37d). pageTimeout ends such a request early and getPage
+// its retry took half a second. pageTimeout ends such a request early and getPage
 // sends it once more, so a stall costs seconds instead of failing after the client's 30 s. The
 // retry has only the client's own timeouts, so a slow but working connection still gets its page.
 const pageTimeout = 5 * time.Second
