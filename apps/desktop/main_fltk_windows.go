@@ -61,6 +61,16 @@ func main() {
 	}
 	var engineMu sync.Mutex
 	var active *fltkengine.Engine
+	activeEngine := func() *fltkengine.Engine {
+		engineMu.Lock()
+		defer engineMu.Unlock()
+		return active
+	}
+	setActiveEngine := func(engine *fltkengine.Engine) {
+		engineMu.Lock()
+		active = engine
+		engineMu.Unlock()
+	}
 	var home *fltk.Window
 	var navigateHome func(int)
 	var play func(backend.PlayRequest)
@@ -81,6 +91,9 @@ func main() {
 		}
 		return home
 	}
+	showNotice := func(title, message string) { fltkhome.ShowNotice(noticeParent(), title, message) }
+	showProgressNotSaved := func() { showNotice(uitext.T().ProgressNotSavedTitle, uitext.T().ProgressNotSaved) }
+	showEpisodeUnavailable := func() { showNotice(uitext.T().PlaybackFailedTitle, uitext.T().EpisodeUnavailable) }
 	var selectedMu sync.Mutex
 	var selected backend.PlayRequest
 	selection := func() backend.PlayRequest {
@@ -118,10 +131,13 @@ func main() {
 		playbackContextMu.Unlock()
 	}
 	playQueue := newActionQueue()
+	// startWork and awakeUI are how the player helpers run blocking work and return to the UI thread.
+	startWork := func(work func()) { go work() }
+	awakeUI := func(update func()) { fltk.Awake(update) }
 	follow := &playerFollow{
 		ctx:     ctx,
-		start:   func(work func()) { go work() },
-		awake:   func(update func()) { fltk.Awake(update) },
+		start:   startWork,
+		awake:   awakeUI,
 		playing: func() string { return selection().AnimeID },
 		show: func(known, following bool) {
 			state := player.State()
@@ -129,13 +145,13 @@ func main() {
 			player.SetState(state)
 		},
 		fail: func(err error) {
-			fltkhome.ShowNotice(noticeParent(), uitext.T().FollowFailedTitle, fltkhome.FollowErrorMessage(err))
+			showNotice(uitext.T().FollowFailedTitle, fltkhome.FollowErrorMessage(err))
 		},
 	}
 	opening := &playerOpening{
 		ctx:   ctx,
-		start: func(work func()) { go work() },
-		awake: func(update func()) { fltk.Awake(update) },
+		start: startWork,
+		awake: awakeUI,
 		view:  viewGeneration.Load,
 		show: func(found backend.Opening) {
 			state := player.State()
@@ -146,7 +162,7 @@ func main() {
 	}
 	watch := &playerStartWatch{
 		after: func(delay time.Duration, run func()) func() bool { return time.AfterFunc(delay, run).Stop },
-		awake: func(update func()) { fltk.Awake(update) },
+		awake: awakeUI,
 		view:  viewGeneration.Load,
 	}
 	stop := func(destination int) {
@@ -158,9 +174,7 @@ func main() {
 		awaitingPlayback.Store(false)
 		playQueue.Enqueue(func() {
 			stopErr := service.StopPlayback(context.Background())
-			engineMu.Lock()
-			active = nil
-			engineMu.Unlock()
+			setActiveEngine(nil)
 			fltk.Awake(func() {
 				if generation != viewGeneration.Load() {
 					return
@@ -173,16 +187,13 @@ func main() {
 					navigateHome(destination)
 				}
 				if stopErr != nil {
-					fltkhome.ShowNotice(noticeParent(), uitext.T().ProgressNotSavedTitle, uitext.T().ProgressNotSaved)
+					showProgressNotSaved()
 				}
 			})
 		})
 	}
 	control := func(command string, value int) {
-		engineMu.Lock()
-		current := active
-		engineMu.Unlock()
-		if current != nil {
+		if current := activeEngine(); current != nil {
 			playQueue.Enqueue(func() { _ = current.Control(ctx, command, value) })
 		}
 	}
@@ -195,10 +206,7 @@ func main() {
 		opening.stop()
 		watch.end()
 		expectedPlaybackGeneration.Store(0)
-		engineMu.Lock()
-		current := active
-		engineMu.Unlock()
-		if current != nil {
+		if current := activeEngine(); current != nil {
 			go func() { _ = current.Control(ctx, "stop", 0) }()
 		}
 		state := player.State()
@@ -208,11 +216,8 @@ func main() {
 		state.Position = 0
 		state.Duration = 0
 		state.OpeningStart, state.OpeningEnd = 0, 0
-		for index, episode := range episodes {
-			if episode.ID == selection().EpisodeID {
-				state.Episode = index
-				break
-			}
+		if index := episodeIndex(episodes, selection().EpisodeID); index >= 0 {
+			state.Episode = index
 		}
 		player.SetState(state)
 		playQueue.Enqueue(func() {
@@ -220,14 +225,12 @@ func main() {
 			if generation == viewGeneration.Load() {
 				awaitingPlayback.Store(false)
 			}
-			engineMu.Lock()
-			active = nil
-			engineMu.Unlock()
+			setActiveEngine(nil)
 			fltk.Awake(func() {
 				if generation == viewGeneration.Load() {
 					player.SetRenderHook(nil)
 					if stopErr != nil {
-						fltkhome.ShowNotice(noticeParent(), uitext.T().ProgressNotSavedTitle, uitext.T().ProgressNotSaved)
+						showProgressNotSaved()
 					}
 				}
 			})
@@ -244,7 +247,7 @@ func main() {
 		timeline.TimedOut()
 		go failures.StartTimedOut() // off the UI thread: the log writes to disk
 		endPlayback()
-		fltkhome.ShowNotice(noticeParent(), uitext.T().PlaybackFailedTitle, uitext.T().EpisodeUnavailable)
+		showEpisodeUnavailable()
 	}
 	// Playback settings are read once per load, here, so a change on 設定 applies to the next
 	// load. A failed read keeps the last values, which start as the defaults.
@@ -265,10 +268,7 @@ func main() {
 		playbackSettings = settings
 		playbackSettingsMu.Unlock()
 		fltk.Awake(func() { player.SetSpeed(settings.PlaybackSpeed) })
-		engineMu.Lock()
-		current := active
-		engineMu.Unlock()
-		if current != nil {
+		if current := activeEngine(); current != nil {
 			current.SetPlaybackSpeed(settings.PlaybackSpeed)
 		}
 	}
@@ -319,23 +319,15 @@ func main() {
 					if generation == viewGeneration.Load() {
 						// This failure is reported here; the start watch must not report it again.
 						watch.end()
-						previous := 0
-						playing := selection()
-						for current, episode := range episodes {
-							if episode.ID == playing.EpisodeID {
-								previous = current
-								break
-							}
-						}
 						state := player.State()
-						state.Episode = previous
+						state.Episode = max(episodeIndex(episodes, selection().EpisodeID), 0)
 						state.Loading = false
 						player.SetState(state)
 						if failed != nil {
 							failed()
 							return
 						}
-						fltkhome.ShowNotice(noticeParent(), uitext.T().PlaybackFailedTitle, uitext.T().PlayEpisodeFailed)
+						showNotice(uitext.T().PlaybackFailedTitle, uitext.T().PlayEpisodeFailed)
 					}
 				})
 				return
@@ -355,10 +347,7 @@ func main() {
 			if state.Loading {
 				return
 			}
-			engineMu.Lock()
-			current := active
-			engineMu.Unlock()
-			if current == nil || !state.Playing {
+			if activeEngine() == nil || !state.Playing {
 				request := selection()
 				request.StartAt = 0
 				if play != nil && request.AnimeID != "" && request.EpisodeID != "" {
@@ -388,10 +377,7 @@ func main() {
 			// The engine is read here, not when the speed was chosen: a load queued earlier may
 			// have created it since, at the speed stored before this choice.
 			playQueue.Enqueue(func() {
-				engineMu.Lock()
-				current := active
-				engineMu.Unlock()
-				if current != nil {
+				if current := activeEngine(); current != nil {
 					_ = current.Control(ctx, "speed", percent)
 				}
 				err := service.SavePlaybackSpeed(ctx, percent)
@@ -405,7 +391,7 @@ func main() {
 				playbackSettingsMu.Unlock()
 				if notify {
 					fltk.Awake(func() {
-						fltkhome.ShowNotice(noticeParent(), uitext.T().SpeedTitle, uitext.T().SpeedSaveFailed)
+						showNotice(uitext.T().SpeedTitle, uitext.T().SpeedSaveFailed)
 					})
 				}
 			})
@@ -459,10 +445,7 @@ func main() {
 				if ctx.Err() != nil {
 					return
 				}
-				engineMu.Lock()
-				current := active == created
-				engineMu.Unlock()
-				if !current || generation != expectedPlaybackGeneration.Load() || !created.FailedGeneration(generation) {
+				if activeEngine() != created || generation != expectedPlaybackGeneration.Load() || !created.FailedGeneration(generation) {
 					return
 				}
 				watch.end() // the failure is reported here, once
@@ -471,13 +454,10 @@ func main() {
 				state.Loading = false
 				player.SetState(state)
 				go failures.PlayerFailed() // off the UI thread: the log writes to disk
-				fltkhome.ShowNotice(noticeParent(), uitext.T().PlaybackFailedTitle, uitext.T().EpisodeUnavailable)
+				showEpisodeUnavailable()
 			})
 			created.SetStartHandler(func(generation uint64, stage fltkengine.StartStage) {
-				engineMu.Lock()
-				current := active == created
-				engineMu.Unlock()
-				if !current || generation != expectedPlaybackGeneration.Load() {
+				if activeEngine() != created || generation != expectedPlaybackGeneration.Load() {
 					return
 				}
 				if stage == fltkengine.StartFileLoaded {
@@ -491,17 +471,12 @@ func main() {
 				if ctx.Err() != nil {
 					return
 				}
-				engineMu.Lock()
-				current := active == created
-				engineMu.Unlock()
-				if !current || generation != expectedPlaybackGeneration.Load() || awaitingPlayback.Load() {
+				if activeEngine() != created || generation != expectedPlaybackGeneration.Load() || awaitingPlayback.Load() {
 					return
 				}
 				autoplay.ended(generation)
 			})
-			engineMu.Lock()
-			active = created
-			engineMu.Unlock()
+			setActiveEngine(created)
 			fltk.Awake(func() { player.SetRenderHook(func(width, height int) { _ = created.Render(width, height) }) })
 			return created, created, nil
 		}, failures.UpstreamRejected, timeline.Stream, proxySource.Address), nil
@@ -512,8 +487,8 @@ func main() {
 	autoplay = &playerAutoplay{
 		ctx:      ctx,
 		settings: service,
-		start:    func(work func()) { go work() },
-		awake:    func(update func()) { fltk.Awake(update) },
+		start:    startWork,
+		awake:    awakeUI,
 		still: func(generation uint64) bool {
 			return ctx.Err() == nil && generation == expectedPlaybackGeneration.Load() && !awaitingPlayback.Load()
 		},
@@ -523,7 +498,7 @@ func main() {
 		advance:  selectEpisode,
 		finish:   endPlayback,
 		fail: func() {
-			fltkhome.ShowNotice(noticeParent(), uitext.T().PlaybackFailedTitle, uitext.T().NextEpisodeFailed)
+			showNotice(uitext.T().PlaybackFailedTitle, uitext.T().NextEpisodeFailed)
 		},
 	}
 	play = func(request backend.PlayRequest) {
@@ -596,7 +571,7 @@ func main() {
 					player.Window().Hide()
 					home.Show()
 					// Shown after Home so a late Home reload cannot clear it.
-					fltkhome.ShowNotice(noticeParent(), uitext.T().PlaybackFailedTitle, uitext.T().PlayEpisodeFailed)
+					showNotice(uitext.T().PlaybackFailedTitle, uitext.T().PlayEpisodeFailed)
 				})
 			}
 		})

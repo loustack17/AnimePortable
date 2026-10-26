@@ -45,7 +45,7 @@ func (autoplay *playerAutoplay) ended(generation uint64) {
 	autoplay.handled = view
 	playingID := autoplay.playing()
 	episodes := autoplay.episodes()
-	current := slices.IndexFunc(episodes, func(episode backend.Episode) bool { return episode.ID == playingID })
+	current := episodeIndex(episodes, playingID)
 	nextIndex := current + 1
 	if current < 0 || nextIndex >= len(episodes) {
 		autoplay.finish()
@@ -87,4 +87,9 @@ func autoplayDecision(settings backend.Settings, err error) (next, play bool) {
 		return false, false
 	}
 	return true, settings.AutoPlay == "enabled"
+}
+
+// episodeIndex is the position of the episode with id in episodes, or -1.
+func episodeIndex(episodes []backend.Episode, id string) int {
+	return slices.IndexFunc(episodes, func(episode backend.Episode) bool { return episode.ID == id })
 }
