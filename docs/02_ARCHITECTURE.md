@@ -86,8 +86,8 @@ type Store interface {
 	SaveEpisodeMapping / EpisodeMappings
 	SaveMetadata / Metadata
 	SetFollowing / Following
-	AddHistory / History / RemoveHistory
-	SaveProgress / SavePlaybackCheckpoint / Progress
+	History / RemoveHistory
+	SavePlaybackCheckpoint / Progress
 	SaveSettings / Settings
 	ReplaceSchedule / Schedule
 }

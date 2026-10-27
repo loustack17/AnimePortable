@@ -32,7 +32,7 @@ func newLocationFixture(t *testing.T) locationFixture {
 	if err := os.WriteFile(executable, []byte("app"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := planPortable(runtime.GOOS, executable, "")
+	plan, err := planPortable(runtime.GOOS, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func newLocationFixture(t *testing.T) locationFixture {
 
 func (fixture locationFixture) replan(t *testing.T) PortablePlan {
 	t.Helper()
-	plan, err := planPortable(runtime.GOOS, fixture.plan.executable, "")
+	plan, err := planPortable(runtime.GOOS, fixture.plan.executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestPlanPortableReadsCustomLocation(t *testing.T) {
 	} {
 		fixture.writeLocation(t, content)
 		plan := fixture.replan(t)
-		if plan.Location != LocationCustom || plan.CustomDir != folder || plan.DataDir != folder || plan.DatabasePath != custom || !plan.TargetExists || plan.OfferImport {
+		if plan.Location != LocationCustom || plan.CustomDir != folder || plan.DataDir != folder || plan.DatabasePath != custom || !plan.TargetExists {
 			t.Fatalf("%s: plan = %#v, want custom %q", name, plan, folder)
 		}
 	}

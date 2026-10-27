@@ -207,37 +207,6 @@ func (store *Store) SavePlaybackCheckpoint(ctx context.Context, entry core.Histo
 	})
 }
 
-func (store *Store) AddHistory(ctx context.Context, entry core.HistoryEntry) error {
-	if !validPlaybackProgress(entry.Progress) {
-		return ErrInvalidInput
-	}
-	updatedAt, err := encodeStoredTime(entry.Progress.UpdatedAt)
-	if err != nil {
-		return err
-	}
-	lastPlayedAt, err := encodeStoredTime(entry.LastPlayedAt)
-	if err != nil {
-		return err
-	}
-	return store.withDB(ctx, func(db *sql.DB) error {
-		if err := requireAnime(ctx, db, entry.Progress.AnimeID); err != nil {
-			return err
-		}
-		_, err := db.ExecContext(ctx, `INSERT INTO playback_history (
-			anime_id, episode_id, position_ns, duration_ns, completed, updated_at, last_played_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(anime_id, episode_id) DO UPDATE SET
-			position_ns = excluded.position_ns,
-			duration_ns = excluded.duration_ns,
-			completed = excluded.completed,
-			updated_at = excluded.updated_at,
-			last_played_at = excluded.last_played_at`,
-			entry.Progress.AnimeID, entry.Progress.EpisodeID, entry.Progress.Position, entry.Progress.Duration,
-			entry.Progress.Completed, updatedAt, lastPlayedAt)
-		return err
-	})
-}
-
 func (store *Store) History(ctx context.Context) ([]core.HistoryEntry, error) {
 	return queryAll(ctx, store, func(rows *sql.Rows) (core.HistoryEntry, error) {
 		var entry core.HistoryEntry
@@ -283,32 +252,6 @@ func (store *Store) RemoveHistory(ctx context.Context, animeID core.AnimeID) err
 			return err
 		}
 		return tx.Commit()
-	})
-}
-
-func (store *Store) SaveProgress(ctx context.Context, progress core.PlaybackProgress) error {
-	if !validPlaybackProgress(progress) {
-		return ErrInvalidInput
-	}
-	updatedAt, err := encodeStoredTime(progress.UpdatedAt)
-	if err != nil {
-		return err
-	}
-	return store.withDB(ctx, func(db *sql.DB) error {
-		if err := requireAnime(ctx, db, progress.AnimeID); err != nil {
-			return err
-		}
-		_, err := db.ExecContext(ctx, `INSERT INTO playback_progress (
-			anime_id, episode_id, position_ns, duration_ns, completed, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(anime_id, episode_id) DO UPDATE SET
-			position_ns = excluded.position_ns,
-			duration_ns = excluded.duration_ns,
-			completed = excluded.completed,
-			updated_at = excluded.updated_at`,
-			progress.AnimeID, progress.EpisodeID, progress.Position, progress.Duration,
-			progress.Completed, updatedAt)
-		return err
 	})
 }
 

@@ -7,7 +7,6 @@ import "context"
 type MetadataQuery struct {
 	Title        string
 	NativeTitle  string
-	Season       string
 	Year         int
 	EpisodeCount int
 }
@@ -18,7 +17,6 @@ type MetadataCandidate struct {
 	NativeTitle string
 	// Aliases are the provider's alternative names; they often include the Taiwan title.
 	Aliases      []string
-	Season       string
 	Year         int
 	EpisodeCount int
 }

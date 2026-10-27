@@ -23,7 +23,6 @@ type CatalogInfo struct {
 type SourceEpisode struct {
 	Ref    EpisodeRef
 	Number string
-	Title  string
 }
 
 type AnimeSource interface {

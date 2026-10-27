@@ -645,7 +645,7 @@ func TestEpisodesAcceptsXHTMLAndExactLabels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := []core.SourceEpisode{{Ref: episodeRef("123"), Number: "BD特典SP", Title: ""}}
+	expected := []core.SourceEpisode{{Ref: episodeRef("123"), Number: "BD特典SP"}}
 	if !reflect.DeepEqual(items, expected) {
 		t.Fatalf("items = %#v, want %#v", items, expected)
 	}
@@ -852,7 +852,7 @@ func TestEpisodeTitleExcludesRawTextTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := []core.SourceEpisode{{Ref: episodeRef("123"), Number: "SP", Title: ""}}
+	expected := []core.SourceEpisode{{Ref: episodeRef("123"), Number: "SP"}}
 	if !reflect.DeepEqual(items, expected) || strings.Contains(fmt.Sprintf("%#v", items), token) {
 		t.Fatalf("items = %#v", items)
 	}
@@ -937,14 +937,13 @@ func TestAnime1AdapterAcceptanceContract(t *testing.T) {
 	}
 	contract.RunAnimeSource(t, contract.AnimeSourceSuite{
 		New:     factory,
-		Catalog: contract.SourceListCase{Supported: true, Expected: []core.SourceRef{{Provider: providerID, ID: "42"}, {Provider: providerID, ID: "7"}}},
-		Search:  contract.SourceSearchCase{Supported: true, Query: "beta", Expected: []core.SourceRef{{Provider: providerID, ID: "7"}}},
+		Catalog: contract.SourceListCase{Expected: []core.SourceRef{{Provider: providerID, ID: "42"}, {Provider: providerID, ID: "7"}}},
+		Search:  contract.SourceSearchCase{Query: "beta", Expected: []core.SourceRef{{Provider: providerID, ID: "7"}}},
 		Episodes: contract.SourceEpisodesCase{
-			Supported: true,
-			Anime:     core.SourceRef{Provider: providerID, ID: "42"},
-			Expected:  []core.EpisodeRef{episodeRef("98"), episodeRef("99"), episodeRef("100"), episodeRef("101")},
+			Anime:    core.SourceRef{Provider: providerID, ID: "42"},
+			Expected: []core.EpisodeRef{episodeRef("98"), episodeRef("99"), episodeRef("100"), episodeRef("101")},
 		},
-		Resolve:          contract.SourceResolveCase{Supported: true, Episode: episodeRef("101")},
+		Resolve:          contract.SourceResolveCase{Episode: episodeRef("101")},
 		ForbiddenStrings: []string{"do-not-return", "secret", "<script>"},
 	})
 }

@@ -63,25 +63,11 @@ func (g writeGuard) SetFollowing(ctx context.Context, animeID core.AnimeID, foll
 	return g.Store.SetFollowing(ctx, animeID, following)
 }
 
-func (g writeGuard) AddHistory(ctx context.Context, entry core.HistoryEntry) error {
-	if err := g.check(); err != nil {
-		return err
-	}
-	return g.Store.AddHistory(ctx, entry)
-}
-
 func (g writeGuard) RemoveHistory(ctx context.Context, animeID core.AnimeID) error {
 	if err := g.check(); err != nil {
 		return err
 	}
 	return g.Store.RemoveHistory(ctx, animeID)
-}
-
-func (g writeGuard) SaveProgress(ctx context.Context, progress core.PlaybackProgress) error {
-	if err := g.check(); err != nil {
-		return err
-	}
-	return g.Store.SaveProgress(ctx, progress)
 }
 
 func (g writeGuard) SavePlaybackCheckpoint(ctx context.Context, entry core.HistoryEntry) error {

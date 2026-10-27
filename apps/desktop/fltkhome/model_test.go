@@ -107,9 +107,7 @@ func TestFollowingStatusDescribesEachEpisodeState(t *testing.T) {
 func TestStartupAndHomeErrorsAreRedacted(t *testing.T) {
 	private := errors.New("secret C:/Users/example/player.exe token=hidden")
 	for _, message := range []string{
-		startupErrorMessage(private, false, false),
-		startupErrorMessage(private, true, false),
-		startupErrorMessage(private, false, true),
+		startupErrorMessage(private),
 		homeErrorMessage(private),
 	} {
 		if strings.Contains(message, "C:/Users") || strings.Contains(message, "hidden") || strings.Contains(message, "secret") {

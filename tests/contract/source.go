@@ -13,25 +13,21 @@ import (
 )
 
 type SourceListCase struct {
-	Supported bool
-	Expected  []core.SourceRef
+	Expected []core.SourceRef
 }
 
 type SourceSearchCase struct {
-	Supported bool
-	Query     string
-	Expected  []core.SourceRef
+	Query    string
+	Expected []core.SourceRef
 }
 
 type SourceEpisodesCase struct {
-	Supported bool
-	Anime     core.SourceRef
-	Expected  []core.EpisodeRef
+	Anime    core.SourceRef
+	Expected []core.EpisodeRef
 }
 
 type SourceResolveCase struct {
-	Supported bool
-	Episode   core.EpisodeRef
+	Episode core.EpisodeRef
 }
 
 type AnimeSourceSuite struct {
@@ -49,10 +45,6 @@ func RunAnimeSource(t *testing.T, suite AnimeSourceSuite) {
 	t.Run("catalog", func(t *testing.T) {
 		source := suite.New(t)
 		items, err := source.Catalog(context.Background())
-		if !suite.Catalog.Supported {
-			requireUnsupported(t, err, suite.ForbiddenStrings)
-			return
-		}
 		requireNoError(t, err, suite.ForbiddenStrings)
 		refs := make([]core.SourceRef, 0, len(items))
 		for _, item := range items {
@@ -65,10 +57,6 @@ func RunAnimeSource(t *testing.T, suite AnimeSourceSuite) {
 	t.Run("search", func(t *testing.T) {
 		source := suite.New(t)
 		items, err := source.Search(context.Background(), suite.Search.Query)
-		if !suite.Search.Supported {
-			requireUnsupported(t, err, suite.ForbiddenStrings)
-			return
-		}
 		requireNoError(t, err, suite.ForbiddenStrings)
 		refs := make([]core.SourceRef, 0, len(items))
 		for _, item := range items {
@@ -81,10 +69,6 @@ func RunAnimeSource(t *testing.T, suite AnimeSourceSuite) {
 	t.Run("episodes", func(t *testing.T) {
 		source := suite.New(t)
 		items, err := source.Episodes(context.Background(), suite.Episodes.Anime)
-		if !suite.Episodes.Supported {
-			requireUnsupported(t, err, suite.ForbiddenStrings)
-			return
-		}
 		requireNoError(t, err, suite.ForbiddenStrings)
 		requireValid(t, validateForbidden(items, suite.ForbiddenStrings))
 		requireValid(t, validateEpisodeOrder(items, suite.Episodes.Anime, suite.Episodes.Expected))
@@ -93,10 +77,6 @@ func RunAnimeSource(t *testing.T, suite AnimeSourceSuite) {
 	t.Run("resolve", func(t *testing.T) {
 		source := suite.New(t)
 		resolved, err := source.Resolve(context.Background(), suite.Resolve.Episode)
-		if !suite.Resolve.Supported {
-			requireUnsupported(t, err, suite.ForbiddenStrings)
-			return
-		}
 		requireNoError(t, err, suite.ForbiddenStrings)
 		requireValid(t, validateAbsoluteURL(resolved.URL()))
 		requireValid(t, validateForbidden(resolved, suite.ForbiddenStrings))
@@ -114,36 +94,18 @@ func validateAnimeSourceSuite(t *testing.T, suite AnimeSourceSuite) {
 	if suite.New == nil {
 		t.Fatal("source factory is nil")
 	}
-	for _, contractCase := range []struct {
-		supported bool
-		count     int
-	}{
-		{suite.Catalog.Supported, len(suite.Catalog.Expected)},
-		{suite.Search.Supported, len(suite.Search.Expected)},
-		{suite.Episodes.Supported, len(suite.Episodes.Expected)},
-	} {
-		if contractCase.supported && contractCase.count == 0 {
-			t.Fatal("supported source case has no expected fixtures")
-		}
-		if !contractCase.supported && contractCase.count != 0 {
-			t.Fatal("unsupported source case has expected fixtures")
+	for _, count := range []int{len(suite.Catalog.Expected), len(suite.Search.Expected), len(suite.Episodes.Expected)} {
+		if count == 0 {
+			t.Fatal("source case has no expected fixtures")
 		}
 	}
 	validateSourceFixtures(t, suite.Catalog.Expected)
 	validateSourceFixtures(t, suite.Search.Expected)
-	if suite.Episodes.Supported {
-		if err := validateSourceRef(suite.Episodes.Anime); err != nil {
-			t.Fatal(err)
-		}
-		validateEpisodeFixtures(t, suite.Episodes.Expected, suite.Episodes.Anime)
-	} else if suite.Episodes.Anime != (core.SourceRef{}) {
-		t.Fatal("unsupported episodes case has anime fixture")
+	if err := validateSourceRef(suite.Episodes.Anime); err != nil {
+		t.Fatal(err)
 	}
-	if suite.Resolve.Supported {
-		validateEpisodeFixtures(t, []core.EpisodeRef{suite.Resolve.Episode}, suite.Resolve.Episode.Anime)
-	} else if suite.Resolve.Episode != (core.EpisodeRef{}) {
-		t.Fatal("unsupported resolve case has episode fixture")
-	}
+	validateEpisodeFixtures(t, suite.Episodes.Expected, suite.Episodes.Anime)
+	validateEpisodeFixtures(t, []core.EpisodeRef{suite.Resolve.Episode}, suite.Resolve.Episode.Anime)
 }
 
 func validateSourceFixtures(t *testing.T, refs []core.SourceRef) {
@@ -185,14 +147,6 @@ func checkCanceled(t *testing.T, forbidden []string, call func(context.Context) 
 	requireErrorSafe(t, err, forbidden)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal("canceled call did not return context.Canceled")
-	}
-}
-
-func requireUnsupported(t *testing.T, err error, forbidden []string) {
-	t.Helper()
-	requireErrorSafe(t, err, forbidden)
-	if !errors.Is(err, core.ErrUnsupported) {
-		t.Fatal("unsupported call did not return ErrUnsupported")
 	}
 }
 

@@ -74,7 +74,7 @@ func TestSeasonCandidatesComeInThroughTheSeriesName(t *testing.T) {
 	fifth := bangumiCandidate("533027", "租借女友 第五季", "彼女、お借りします 第5期", 2026, 12)
 	unrelated := bangumiCandidate("9", "別的作品", "", 2026, 12)
 	query := MetadataQuery{Title: "出租女友 第五季", Year: 2026, EpisodeCount: 12}
-	queryTitle, queryNative, _ := metadataFields(query.Title, query.NativeTitle, query.Season)
+	queryTitle, queryNative, _ := metadataFields(query.Title, query.NativeTitle)
 	series := metadataSeriesNames(queryTitle, queryNative, []MetadataCandidate{base})
 	if !metadataNamesMatch(query, fifth, series) || metadataNamesMatch(query, unrelated, series) {
 		t.Fatalf("season filter: fifth=%t unrelated=%t, want only the fifth season", metadataNamesMatch(query, fifth, series), metadataNamesMatch(query, unrelated, series))

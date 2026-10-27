@@ -16,11 +16,11 @@ type Store interface {
 	Metadata(ctx context.Context, animeID AnimeID) (AnimeMetadata, error)
 	SetFollowing(ctx context.Context, animeID AnimeID, following bool) error
 	Following(ctx context.Context) ([]FollowedAnime, error)
-	AddHistory(ctx context.Context, entry HistoryEntry) error
 	History(ctx context.Context) ([]HistoryEntry, error)
 	// RemoveHistory also deletes the anime's saved resume positions.
 	RemoveHistory(ctx context.Context, animeID AnimeID) error
-	SaveProgress(ctx context.Context, progress PlaybackProgress) error
+	// SavePlaybackCheckpoint records the playing position in both the resume positions and
+	// the watch history.
 	SavePlaybackCheckpoint(ctx context.Context, entry HistoryEntry) error
 	Progress(ctx context.Context, animeID AnimeID, episodeID EpisodeID) (PlaybackProgress, error)
 	SaveSettings(ctx context.Context, settings Settings) error

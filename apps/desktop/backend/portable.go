@@ -3,7 +3,6 @@
 package backend
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,8 +16,6 @@ type PortablePlan struct {
 	Root         string
 	DataDir      string
 	DatabasePath string
-	LegacyPath   string
-	OfferImport  bool
 	TargetExists bool
 	// Location says whether data-location.txt is in use. CustomDir is the folder it names
 	// (empty when the file was unreadable); both are empty or default for the standard layout.
@@ -26,14 +23,13 @@ type PortablePlan struct {
 	CustomDir string
 
 	executable string
-	configDir  string
 }
 
-func PlanPortable(executablePath, userConfigDir string) (PortablePlan, error) {
-	return planPortable(runtime.GOOS, executablePath, userConfigDir)
+func PlanPortable(executablePath string) (PortablePlan, error) {
+	return planPortable(runtime.GOOS, executablePath)
 }
 
-func planPortable(goos, executablePath, userConfigDir string) (PortablePlan, error) {
+func planPortable(goos, executablePath string) (PortablePlan, error) {
 	if goos != "windows" {
 		return PortablePlan{}, ErrInvalidInput
 	}
@@ -46,7 +42,7 @@ func planPortable(goos, executablePath, userConfigDir string) (PortablePlan, err
 		return PortablePlan{}, ErrUnavailable
 	}
 	root := filepath.Dir(executablePath)
-	plan := PortablePlan{Root: root, executable: executablePath, configDir: userConfigDir}
+	plan := PortablePlan{Root: root, executable: executablePath}
 	dataDir := defaultDataDir(root)
 	switch location := readDataLocation(root); location.state {
 	case LocationCustomMissing:
@@ -74,27 +70,12 @@ func planPortable(goos, executablePath, userConfigDir string) (PortablePlan, err
 	} else if !errors.Is(targetErr, os.ErrNotExist) {
 		return PortablePlan{}, ErrUnavailable
 	}
-	if userConfigDir == "" || !filepath.IsAbs(userConfigDir) {
-		return plan, nil
-	}
-	legacyPath := filepath.Join(filepath.Clean(userConfigDir), "AnimePortable", "animeportable.db")
-	plan.LegacyPath = legacyPath
-	legacyInfo, legacyErr := os.Lstat(legacyPath)
-	if legacyErr == nil && legacyInfo.Mode().IsRegular() {
-		plan.OfferImport = !plan.TargetExists
-	}
 	return plan, nil
 }
 
-func (plan PortablePlan) Import(ctx context.Context) error {
-	if !plan.OfferImport || plan.LegacyPath == "" || plan.DatabasePath == "" {
-		return ErrInvalidInput
-	}
-	return sqlite.ImportPortable(ctx, plan.LegacyPath, plan.DatabasePath)
-}
-
-func IsPortableImportConflict(err error) bool {
-	return errors.Is(err, sqlite.ErrImportConflict)
+// IsDatabaseExists reports whether err says the database file was already there.
+func IsDatabaseExists(err error) bool {
+	return errors.Is(err, sqlite.ErrTargetExists)
 }
 
 func (plan PortablePlan) CreateFresh() error {
@@ -116,7 +97,7 @@ func (plan PortablePlan) CreateFresh() error {
 	}
 	file, err := os.OpenFile(plan.DatabasePath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if errors.Is(err, os.ErrExist) {
-		return sqlite.ErrImportConflict
+		return sqlite.ErrTargetExists
 	}
 	if err != nil {
 		return ErrUnavailable

@@ -11,15 +11,13 @@ import (
 )
 
 type MetadataSearchCase struct {
-	Supported bool
-	Query     core.MetadataQuery
-	Expected  []core.MetadataRef
+	Query    core.MetadataQuery
+	Expected []core.MetadataRef
 }
 
 type MetadataGetCase struct {
-	Supported bool
-	Ref       core.MetadataRef
-	Expected  core.AnimeMetadata
+	Ref      core.MetadataRef
+	Expected core.AnimeMetadata
 }
 
 type MetadataMissingCase struct {
@@ -41,10 +39,6 @@ func RunMetadataProvider(t *testing.T, suite MetadataProviderSuite) {
 	t.Run("search", func(t *testing.T) {
 		provider := suite.New(t)
 		items, err := provider.Search(context.Background(), suite.Search.Query)
-		if !suite.Search.Supported {
-			requireUnsupported(t, err, suite.ForbiddenStrings)
-			return
-		}
 		requireNoError(t, err, suite.ForbiddenStrings)
 		requireValid(t, validateForbidden(items, suite.ForbiddenStrings))
 		requireValid(t, validateMetadataCandidates(items, suite.Search.Expected))
@@ -53,10 +47,6 @@ func RunMetadataProvider(t *testing.T, suite MetadataProviderSuite) {
 	t.Run("get", func(t *testing.T) {
 		provider := suite.New(t)
 		metadata, err := provider.Get(context.Background(), suite.Get.Ref)
-		if !suite.Get.Supported {
-			requireUnsupported(t, err, suite.ForbiddenStrings)
-			return
-		}
 		requireNoError(t, err, suite.ForbiddenStrings)
 		requireValid(t, validateForbidden(metadata, suite.ForbiddenStrings))
 		requireValid(t, validateAnimeMetadata(metadata))
@@ -80,21 +70,14 @@ func validateMetadataSuite(t *testing.T, suite MetadataProviderSuite) {
 	if suite.New == nil {
 		t.Fatal("metadata provider factory is nil")
 	}
-	if suite.Search.Supported && len(suite.Search.Expected) == 0 {
-		t.Fatal("supported metadata search has no expected fixtures")
-	}
-	if !suite.Search.Supported && len(suite.Search.Expected) != 0 {
-		t.Fatal("unsupported metadata search has expected fixtures")
+	if len(suite.Search.Expected) == 0 {
+		t.Fatal("metadata search has no expected fixtures")
 	}
 	validateMetadataFixtures(t, suite.Search.Expected)
-	if suite.Get.Supported {
-		requireValid(t, validateMetadataRef(suite.Get.Ref))
-		requireValid(t, validateAnimeMetadata(suite.Get.Expected))
-		if suite.Get.Expected.Ref != suite.Get.Ref {
-			t.Fatal("expected metadata ref does not match get ref")
-		}
-	} else if suite.Get.Ref != (core.MetadataRef{}) || suite.Get.Expected != (core.AnimeMetadata{}) {
-		t.Fatal("unsupported metadata get has fixtures")
+	requireValid(t, validateMetadataRef(suite.Get.Ref))
+	requireValid(t, validateAnimeMetadata(suite.Get.Expected))
+	if suite.Get.Expected.Ref != suite.Get.Ref {
+		t.Fatal("expected metadata ref does not match get ref")
 	}
 	if suite.Missing != nil {
 		requireValid(t, validateMetadataRef(suite.Missing.Ref))

@@ -309,9 +309,6 @@ func (ui *view) renderDetailEpisodes() {
 		} else {
 			label = fmt.Sprintf(uitext.T().EpisodeIndex, index+1)
 		}
-		if episode.Title != "" {
-			label += uitext.T().Separator + episode.Title
-		}
 		if history, ok := ui.detailModel.historyEntry(episode); ok {
 			if history.Completed {
 				label += uitext.T().Separator + uitext.T().EpisodeWatched

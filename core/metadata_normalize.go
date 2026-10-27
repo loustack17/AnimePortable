@@ -14,16 +14,14 @@ import (
 // form, so matching can compare them separately (see metadataNameMatch).
 const metadataSubtitleSeparator = "\x1f"
 
-func metadataFields(title, nativeTitle, season string) (string, string, string) {
+// metadataFields normalizes a title pair and returns the season either title names.
+func metadataFields(title, nativeTitle string) (string, string, string) {
 	titleBase, titleSeason, titleOK := metadataTitleParts(title)
 	nativeBase, nativeSeason, nativeOK := metadataTitleParts(nativeTitle)
-	seasonHint, seasonOK := normalizeMetadataSeason(season)
-	if !titleOK || !nativeOK || !seasonOK {
+	if !titleOK || !nativeOK {
 		return "", "", ""
 	}
-	if seasonHint == "" {
-		seasonHint = titleSeason
-	}
+	seasonHint := titleSeason
 	if seasonHint == "" {
 		seasonHint = nativeSeason
 	}
@@ -128,20 +126,6 @@ func metadataSeasonFromTitle(value string) string {
 		}
 	}
 	return ""
-}
-
-func normalizeMetadataSeason(value string) (string, bool) {
-	if value == "" {
-		return "", true
-	}
-	if len(value) > metadataMaxSeasonBytes || !utf8.ValidString(value) || utf8.RuneCountInString(value) > metadataMaxSeasonRunes {
-		return "", false
-	}
-	value = norm.NFKC.String(strings.ToLower(value))
-	if season := metadataSeasonFromTitle(value); season != "" {
-		return season, true
-	}
-	return normalizeMetadataText(value), true
 }
 
 func normalizeMetadataText(value string) string {

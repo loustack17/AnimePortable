@@ -9,14 +9,6 @@ import (
 	"strings"
 )
 
-type MetadataMatchConfidence uint8
-
-const (
-	MetadataMatchConfidenceLow MetadataMatchConfidence = iota
-	MetadataMatchConfidenceMedium
-	MetadataMatchConfidenceHigh
-)
-
 type MetadataMatchDecision uint8
 
 const (
@@ -31,11 +23,8 @@ type MetadataMatchRequest struct {
 }
 
 type MetadataMatchResult struct {
-	Decision     MetadataMatchDecision
-	Confidence   MetadataMatchConfidence
-	Candidate    MetadataCandidate
-	Score        int
-	CrossChecked bool
+	Decision  MetadataMatchDecision
+	Candidate MetadataCandidate
 }
 
 const (
@@ -48,8 +37,6 @@ const (
 	metadataMaxCandidates  = 100
 	metadataMaxTitleBytes  = 4 << 10
 	metadataMaxTitleRunes  = 1024
-	metadataMaxSeasonBytes = 64
-	metadataMaxSeasonRunes = 32
 	metadataMaxAliases     = 16
 )
 
@@ -64,7 +51,7 @@ type metadataScoredCandidate struct {
 
 func MatchMetadata(request MetadataMatchRequest) MetadataMatchResult {
 	result := noMetadataResult()
-	queryTitle, queryNative, querySeason := metadataFields(request.Query.Title, request.Query.NativeTitle, request.Query.Season)
+	queryTitle, queryNative, querySeason := metadataFields(request.Query.Title, request.Query.NativeTitle)
 	if !validMetadataRequest(request, queryTitle, queryNative) {
 		return result
 	}
@@ -83,17 +70,12 @@ func MatchMetadata(request MetadataMatchRequest) MetadataMatchResult {
 	}
 
 	result.Candidate = top.candidate
-	result.Score = top.score
-	result.Confidence = MetadataMatchConfidenceMedium
-	result.CrossChecked = metadataHasCrossCheck(top, scored[1:])
+	crossChecked := metadataHasCrossCheck(top, scored[1:])
 	// A weak exact name match (alias, or a subtitle on one side only) is accepted when no other
 	// candidate is close and no hint counts against it.
 	weakExactAccepted := top.titleScore == metadataWeakExactScore && top.score >= metadataWeakExactScore
-	if top.score >= metadataHighScore || result.CrossChecked || weakExactAccepted {
+	if top.score >= metadataHighScore || crossChecked || weakExactAccepted {
 		result.Decision = MetadataMatchAccepted
-		if top.score >= metadataHighScore {
-			result.Confidence = MetadataMatchConfidenceHigh
-		}
 		return result
 	}
 	result.Decision = MetadataMatchNeedsCrossCheck
@@ -101,10 +83,7 @@ func MatchMetadata(request MetadataMatchRequest) MetadataMatchResult {
 }
 
 func noMetadataResult() MetadataMatchResult {
-	return MetadataMatchResult{
-		Decision:   MetadataMatchNoMetadata,
-		Confidence: MetadataMatchConfidenceLow,
-	}
+	return MetadataMatchResult{Decision: MetadataMatchNoMetadata}
 }
 
 func validMetadataRequest(request MetadataMatchRequest, queryTitle, queryNative string) bool {
@@ -118,7 +97,7 @@ func scoreMetadataCandidates(request MetadataMatchRequest, queryTitle, queryNati
 		if strings.TrimSpace(candidate.Ref.Provider) == "" || strings.TrimSpace(candidate.Ref.ID) == "" {
 			continue
 		}
-		title, native, season := metadataFields(candidate.Title, candidate.NativeTitle, candidate.Season)
+		title, native, season := metadataFields(candidate.Title, candidate.NativeTitle)
 		titleScore := candidateTitleScore(queryTitle, queryNative, title, native, metadataAliases(candidate.Aliases), series)
 		if titleScore == 0 {
 			continue
@@ -138,8 +117,8 @@ func scoreMetadataCandidates(request MetadataMatchRequest, queryTitle, queryNati
 // metadataNamesMatch reports whether any name of the candidate scores against the query, as
 // scoreMetadataCandidates would score it with series (from metadataSeriesNames).
 func metadataNamesMatch(query MetadataQuery, candidate MetadataCandidate, series []string) bool {
-	queryTitle, queryNative, _ := metadataFields(query.Title, query.NativeTitle, query.Season)
-	title, native, _ := metadataFields(candidate.Title, candidate.NativeTitle, candidate.Season)
+	queryTitle, queryNative, _ := metadataFields(query.Title, query.NativeTitle)
+	title, native, _ := metadataFields(candidate.Title, candidate.NativeTitle)
 	return candidateTitleScore(queryTitle, queryNative, title, native, metadataAliases(candidate.Aliases), series) > 0
 }
 
@@ -162,7 +141,7 @@ func candidateTitleScore(queryTitle, queryNative, title, native string, aliases,
 func metadataSeriesNames(queryTitle, queryNative string, candidates []MetadataCandidate) []string {
 	var names []string
 	for _, candidate := range candidates {
-		title, native, _ := metadataFields(candidate.Title, candidate.NativeTitle, candidate.Season)
+		title, native, _ := metadataFields(candidate.Title, candidate.NativeTitle)
 		for _, alias := range metadataAliases(candidate.Aliases) {
 			if metadataTextScore(queryTitle, alias) != metadataHighScore && metadataTextScore(queryNative, alias) != metadataHighScore {
 				continue

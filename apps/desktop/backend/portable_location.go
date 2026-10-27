@@ -123,7 +123,7 @@ func (plan PortablePlan) UseDefaultLocation() (PortablePlan, error) {
 	if err := removeLocationFile(plan.Root); err != nil {
 		return PortablePlan{}, err
 	}
-	return PlanPortable(plan.executable, plan.configDir)
+	return PlanPortable(plan.executable)
 }
 
 func removeLocationFile(root string) error {

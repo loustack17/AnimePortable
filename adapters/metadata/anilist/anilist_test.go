@@ -127,13 +127,11 @@ func TestAniListAdapterAcceptance(t *testing.T) {
 	contract.RunMetadataProvider(t, contract.MetadataProviderSuite{
 		New: func(*testing.T) core.MetadataProvider { return newWithDo(client) },
 		Search: contract.MetadataSearchCase{
-			Supported: true,
-			Query:     core.MetadataQuery{Title: "Romaji Title"},
-			Expected:  []core.MetadataRef{{Provider: providerID, ID: "123"}},
+			Query:    core.MetadataQuery{Title: "Romaji Title"},
+			Expected: []core.MetadataRef{{Provider: providerID, ID: "123"}},
 		},
 		Get: contract.MetadataGetCase{
-			Supported: true,
-			Ref:       core.MetadataRef{Provider: providerID, ID: "123"},
+			Ref: core.MetadataRef{Provider: providerID, ID: "123"},
 			Expected: core.AnimeMetadata{
 				Ref:          core.MetadataRef{Provider: providerID, ID: "123"},
 				Title:        "Romaji Title",

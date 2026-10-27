@@ -255,10 +255,6 @@ func (store *fakeStore) Following(ctx context.Context) ([]FollowedAnime, error) 
 	return followed, nil
 }
 
-func (*fakeStore) AddHistory(context.Context, HistoryEntry) error {
-	return nil
-}
-
 func (store *fakeStore) History(ctx context.Context) ([]HistoryEntry, error) {
 	store.context = ctx
 	if store.historyErr != nil {
@@ -268,10 +264,6 @@ func (store *fakeStore) History(ctx context.Context) ([]HistoryEntry, error) {
 }
 
 func (*fakeStore) RemoveHistory(context.Context, AnimeID) error {
-	return nil
-}
-
-func (*fakeStore) SaveProgress(context.Context, PlaybackProgress) error {
 	return nil
 }
 

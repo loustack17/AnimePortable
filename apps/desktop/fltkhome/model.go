@@ -357,15 +357,9 @@ func playRequest(item backend.History) backend.PlayRequest {
 	return backend.PlayRequest{AnimeID: item.AnimeID, EpisodeID: item.EpisodeID, StartAt: max(item.Position, int64(0))}
 }
 
-func startupErrorMessage(err error, copying, imported bool) string {
-	if backend.IsPortableImportConflict(err) {
+func startupErrorMessage(err error) string {
+	if backend.IsDatabaseExists(err) {
 		return uitext.T().DataExists
-	}
-	if imported {
-		return uitext.T().DataCopiedUnopenable
-	}
-	if copying {
-		return uitext.T().DataCopyFailed
 	}
 	return uitext.T().DataFolderUnwritable
 }

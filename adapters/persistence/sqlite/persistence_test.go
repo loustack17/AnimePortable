@@ -41,42 +41,22 @@ func TestPlaybackAndSettingsPersistAcrossReopen(t *testing.T) {
 		}
 	}
 	fixed := time.Date(2026, time.August, 31, 12, 34, 56, 123456789, time.UTC)
-	progress := core.PlaybackProgress{
+	entryA := core.HistoryEntry{Progress: core.PlaybackProgress{
 		AnimeID: "anime-a", EpisodeID: "episode-a", Position: 2*time.Minute + 3*time.Nanosecond,
 		Duration: 24*time.Minute + 7*time.Nanosecond, Completed: true, UpdatedAt: fixed,
-	}
-	if err := store.SaveProgress(ctx, progress); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := store.Progress(ctx, progress.AnimeID, progress.EpisodeID); err != nil || got != progress {
-		t.Fatalf("progress = %#v, %v", got, err)
-	}
-	replacement := progress
-	replacement.Position = 4 * time.Minute
-	replacement.Completed = false
-	replacement.UpdatedAt = time.Time{}
-	if err := store.SaveProgress(ctx, replacement); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := store.Progress(ctx, replacement.AnimeID, replacement.EpisodeID); err != nil || got != replacement {
-		t.Fatalf("replaced progress = %#v, %v", got, err)
-	}
-	entryA := core.HistoryEntry{Progress: replacement, LastPlayedAt: fixed}
+	}, LastPlayedAt: fixed}
 	entryB := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: "anime-a", EpisodeID: "episode-b", UpdatedAt: fixed}, LastPlayedAt: fixed.Add(time.Second)}
 	entryC := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: "anime-b", EpisodeID: "episode-a", UpdatedAt: time.Time{}}, LastPlayedAt: fixed.Add(time.Second)}
 	entryD := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: "anime-a", EpisodeID: "episode-c"}}
 	for _, entry := range []core.HistoryEntry{entryA, entryB, entryC, entryD} {
-		if err := store.AddHistory(ctx, entry); err != nil {
+		if err := store.SavePlaybackCheckpoint(ctx, entry); err != nil {
 			t.Fatal(err)
 		}
 	}
-	replacedEntry := entryA
-	replacedEntry.Progress.Position = time.Second
-	replacedEntry.LastPlayedAt = fixed.Add(2 * time.Second)
-	if err := store.AddHistory(ctx, replacedEntry); err != nil {
-		t.Fatal(err)
+	if got, err := store.Progress(ctx, entryA.Progress.AnimeID, entryA.Progress.EpisodeID); err != nil || got != entryA.Progress {
+		t.Fatalf("progress = %#v, %v", got, err)
 	}
-	wantHistory := []core.HistoryEntry{replacedEntry, entryB, entryC, entryD}
+	wantHistory := []core.HistoryEntry{entryB, entryC, entryA, entryD}
 	if got, err := store.History(ctx); err != nil || !reflect.DeepEqual(got, wantHistory) {
 		t.Fatalf("history = %#v, %v, want %#v", got, err, wantHistory)
 	}
@@ -87,10 +67,6 @@ func TestPlaybackAndSettingsPersistAcrossReopen(t *testing.T) {
 		ProxyMode: core.ProxyModeManual, ProxyAddress: "proxy.example:8080",
 	}
 	if err := store.SaveSettings(ctx, settings); err != nil {
-		t.Fatal(err)
-	}
-	kept := core.PlaybackProgress{AnimeID: "anime-b", EpisodeID: "episode-a", Position: 3 * time.Minute, Duration: 24 * time.Minute, UpdatedAt: fixed}
-	if err := store.SaveProgress(ctx, kept); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.RemoveHistory(ctx, "anime-a"); err != nil {
@@ -104,11 +80,11 @@ func TestPlaybackAndSettingsPersistAcrossReopen(t *testing.T) {
 	}
 	store = openLibraryStore(t, path)
 	defer store.Close()
-	if got, err := store.Progress(ctx, kept.AnimeID, kept.EpisodeID); err != nil || got != kept {
+	if got, err := store.Progress(ctx, entryC.Progress.AnimeID, entryC.Progress.EpisodeID); err != nil || got != entryC.Progress {
 		t.Fatalf("reopened progress = %#v, %v", got, err)
 	}
 	// Removing anime-a's history also removed its resume position (owner decision 2026-10-19).
-	if got, err := store.Progress(ctx, replacement.AnimeID, replacement.EpisodeID); !errors.Is(err, core.ErrNotFound) {
+	if got, err := store.Progress(ctx, entryA.Progress.AnimeID, entryA.Progress.EpisodeID); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("removed progress = %#v, %v", got, err)
 	}
 	if got, err := store.History(ctx); err != nil || !reflect.DeepEqual(got, []core.HistoryEntry{entryC}) {
@@ -129,12 +105,10 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	if got, err := store.Settings(ctx); err != nil || got != (core.Settings{}) {
 		t.Fatalf("unset settings = %#v, %v", got, err)
 	}
-	unknownProgress := core.PlaybackProgress{AnimeID: "missing", EpisodeID: "episode"}
-	unknownHistory := core.HistoryEntry{Progress: unknownProgress}
+	unknownHistory := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: "missing", EpisodeID: "episode"}}
 	for name, operation := range map[string]func() error{
-		"progress foreign key": func() error { return store.SaveProgress(ctx, unknownProgress) },
-		"history foreign key":  func() error { return store.AddHistory(ctx, unknownHistory) },
-		"remove foreign key":   func() error { return store.RemoveHistory(ctx, "missing") },
+		"checkpoint foreign key": func() error { return store.SavePlaybackCheckpoint(ctx, unknownHistory) },
+		"remove foreign key":     func() error { return store.RemoveHistory(ctx, "missing") },
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := operation(); !errors.Is(err, ErrInvalidInput) {
@@ -147,7 +121,7 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	valid := core.PlaybackProgress{AnimeID: injection, EpisodeID: "episode"}
-	if err := store.SaveProgress(ctx, valid); err != nil {
+	if err := store.SavePlaybackCheckpoint(ctx, core.HistoryEntry{Progress: valid}); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := store.Progress(ctx, injection, "episode"); err != nil || got != valid {
@@ -156,18 +130,20 @@ func TestPlaybackAndSettingsValidateInput(t *testing.T) {
 	tooLongEpisode := core.EpisodeID(strings.Repeat("x", maxIdentityBytes+1))
 	invalidTime := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	for name, operation := range map[string]func() error{
-		"empty episode": func() error { return store.SaveProgress(ctx, core.PlaybackProgress{AnimeID: injection}) },
+		"empty episode": func() error {
+			return store.SavePlaybackCheckpoint(ctx, core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: injection}})
+		},
 		"episode bounds": func() error {
-			return store.SaveProgress(ctx, core.PlaybackProgress{AnimeID: injection, EpisodeID: tooLongEpisode})
+			return store.SavePlaybackCheckpoint(ctx, core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: injection, EpisodeID: tooLongEpisode}})
 		},
 		"negative position": func() error {
-			return store.SaveProgress(ctx, core.PlaybackProgress{AnimeID: injection, EpisodeID: "episode", Position: -time.Nanosecond})
+			return store.SavePlaybackCheckpoint(ctx, core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: injection, EpisodeID: "episode", Position: -time.Nanosecond}})
 		},
 		"negative duration": func() error {
-			return store.AddHistory(ctx, core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: injection, EpisodeID: "episode", Duration: -time.Nanosecond}})
+			return store.SavePlaybackCheckpoint(ctx, core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: injection, EpisodeID: "episode", Duration: -time.Nanosecond}})
 		},
 		"out of range time": func() error {
-			return store.AddHistory(ctx, core.HistoryEntry{Progress: valid, LastPlayedAt: invalidTime})
+			return store.SavePlaybackCheckpoint(ctx, core.HistoryEntry{Progress: valid, LastPlayedAt: invalidTime})
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -507,7 +483,7 @@ func TestHistoryOrdersFixedWidthTimesWithinSameSecond(t *testing.T) {
 	earlier := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: "anime", EpisodeID: "earlier"}, LastPlayedAt: second}
 	later := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: "anime", EpisodeID: "later"}, LastPlayedAt: second.Add(100 * time.Millisecond)}
 	for _, entry := range []core.HistoryEntry{earlier, later} {
-		if err := store.AddHistory(ctx, entry); err != nil {
+		if err := store.SavePlaybackCheckpoint(ctx, entry); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -528,7 +504,7 @@ func TestPersistenceRejectsCorruptedStoredValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	progress := core.PlaybackProgress{AnimeID: "anime", EpisodeID: "episode"}
-	if err := store.SaveProgress(ctx, progress); err != nil {
+	if err := store.SavePlaybackCheckpoint(ctx, core.HistoryEntry{Progress: progress}); err != nil {
 		t.Fatal(err)
 	}
 	invalidTime := "2026-99-99T99:99:99.000000000Z"

@@ -634,7 +634,6 @@ func parseEpisodeArticle(ctx context.Context, article *html.Node, ref core.Sourc
 	return core.SourceEpisode{
 		Ref:    core.EpisodeRef{Anime: ref, ID: postID},
 		Number: number,
-		Title:  "",
 	}, true, nil
 }
 

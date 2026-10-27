@@ -115,10 +115,6 @@ func readOnlySQLiteDSN(path string) string {
 	return sqliteFileDSN(path, url.Values{"mode": {"ro"}})
 }
 
-func readWriteSQLiteDSN(path string) string {
-	return sqliteFileDSN(path, url.Values{"mode": {"rwc"}})
-}
-
 // sqliteFileDSN builds a file: URI for path with query plus the options every connection
 // needs: nofollow, so SQLite never opens the file through a symbolic link, and a busy timeout.
 func sqliteFileDSN(path string, query url.Values) string {
@@ -134,4 +130,46 @@ func sqliteFileDSN(path string, query url.Values) string {
 
 func isASCIIAlpha(value byte) bool {
 	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
+}
+
+// ValidatePortablePath accepts an absolute local path whose existing ancestors are plain
+// folders: no symbolic link, junction or other reparse point on the way.
+func ValidatePortablePath(path string) error {
+	absolute, err := absoluteLocalPath(path)
+	if err != nil {
+		return ErrInvalidInput
+	}
+	current := absolute
+	for {
+		if err := rejectSymlinkAncestors(current); err == nil {
+			return nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return ErrInvalidInput
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ErrInvalidInput
+		}
+		current = parent
+	}
+}
+
+func rejectSymlinkAncestors(path string) error {
+	volume := filepath.VolumeName(path)
+	current := volume + string(filepath.Separator)
+	rest := strings.TrimPrefix(path, current)
+	for _, component := range strings.Split(rest, string(filepath.Separator)) {
+		if component == "" {
+			continue
+		}
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if err != nil {
+			return err
+		}
+		if info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+			return ErrInvalidInput
+		}
+	}
+	return nil
 }

@@ -363,7 +363,7 @@ func openProduction(ctx context.Context, databasePath string, proxySource *forwa
 		if err != nil {
 			return dependencies{}, ErrUnavailable
 		}
-		plan, err := PlanPortable(executable, "")
+		plan, err := PlanPortable(executable)
 		if err != nil {
 			return dependencies{}, err
 		}

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestPlanPortableWindowsRootAndLegacyOffer(t *testing.T) {
+func TestPlanPortableWindowsRoot(t *testing.T) {
 	parent := filepath.Join(t.TempDir(), "Anime Portable ü")
 	executable := filepath.Join(parent, "AnimePortable")
 	if err := os.MkdirAll(filepath.Dir(executable), 0o755); err != nil {
@@ -19,17 +19,7 @@ func TestPlanPortableWindowsRootAndLegacyOffer(t *testing.T) {
 	if err := os.WriteFile(executable, []byte("executable fixture"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	configDir := filepath.Join(t.TempDir(), "Legacy Config")
-	legacyPath := filepath.Join(configDir, "AnimePortable", "animeportable.db")
-	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	legacyBytes := []byte("legacy profile")
-	if err := os.WriteFile(legacyPath, legacyBytes, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	plan, err := planPortable("windows", executable, configDir)
+	plan, err := planPortable("windows", executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,24 +29,14 @@ func TestPlanPortableWindowsRootAndLegacyOffer(t *testing.T) {
 	if plan.Root != root || plan.DataDir != wantData || plan.DatabasePath != wantDatabase {
 		t.Fatalf("portable locations = %#v, want root=%q data=%q database=%q", plan, root, wantData, wantDatabase)
 	}
-	if plan.LegacyPath != legacyPath || !plan.OfferImport {
-		t.Fatalf("legacy offer = path %q, offer %t; want %q and true", plan.LegacyPath, plan.OfferImport, legacyPath)
-	}
 	if _, err := os.Stat(plan.DataDir); !os.IsNotExist(err) {
 		t.Fatalf("planning created portable data directory: stat error = %v", err)
-	}
-	gotLegacy, err := os.ReadFile(legacyPath)
-	if err != nil || string(gotLegacy) != string(legacyBytes) {
-		t.Fatalf("planning changed legacy profile: bytes=%q err=%v", gotLegacy, err)
 	}
 }
 
 func TestNewAtStartsAtRequestedPortableDatabasePath(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Anime Portable ü")
 	databasePath := filepath.Join(root, "data", "animeportable.db")
-	configDir := filepath.Join(t.TempDir(), "legacy config")
-	t.Setenv("APPDATA", configDir)
-
 	service := NewAt(databasePath)
 	if err := service.Start(context.Background()); err != nil {
 		t.Fatal(err)
@@ -71,64 +51,6 @@ func TestNewAtStartsAtRequestedPortableDatabasePath(t *testing.T) {
 	if !info.Mode().IsRegular() {
 		t.Fatalf("portable database is not a regular file: mode %v", info.Mode())
 	}
-	legacyPath := filepath.Join(configDir, "AnimePortable", "animeportable.db")
-	if _, err := os.Lstat(legacyPath); !os.IsNotExist(err) {
-		t.Fatalf("startup wrote outside the selected portable root at %q: stat error = %v", legacyPath, err)
-	}
-}
-
-func TestPlanPortableSuppressesImportWhenTargetExists(t *testing.T) {
-	root := t.TempDir()
-	executable := portableTestExecutable(root)
-	if err := os.MkdirAll(filepath.Dir(executable), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(executable, []byte("app"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	target := filepath.Join(root, "data", "animeportable.db")
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(target, []byte("portable profile"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	legacy := filepath.Join(t.TempDir(), "AnimePortable", "animeportable.db")
-	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(legacy, []byte("legacy"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	plan, err := planPortable(runtime.GOOS, executable, filepath.Dir(filepath.Dir(legacy)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if plan.OfferImport {
-		t.Fatal("existing portable database must suppress import offer")
-	}
-}
-
-func TestPlanPortableMissingLegacyProfileDoesNotOfferImport(t *testing.T) {
-	root := t.TempDir()
-	executable := portableTestExecutable(root)
-	if err := os.MkdirAll(filepath.Dir(executable), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(executable, []byte("app"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	configDir := filepath.Join(t.TempDir(), "not-created")
-
-	plan, err := planPortable(runtime.GOOS, executable, configDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantLegacy := filepath.Join(configDir, "AnimePortable", "animeportable.db")
-	if plan.LegacyPath != wantLegacy || plan.OfferImport {
-		t.Fatalf("missing config profile plan = %#v; want path %q and no import offer", plan, wantLegacy)
-	}
 }
 
 func TestPlanPortableUsesExecutablePathNotWorkingDirectory(t *testing.T) {
@@ -140,8 +62,7 @@ func TestPlanPortableUsesExecutablePathNotWorkingDirectory(t *testing.T) {
 	if err := os.WriteFile(executable, []byte("app"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	configDir := filepath.Join(t.TempDir(), "config")
-	want, err := planPortable(runtime.GOOS, executable, configDir)
+	want, err := planPortable(runtime.GOOS, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +79,7 @@ func TestPlanPortableUsesExecutablePathNotWorkingDirectory(t *testing.T) {
 			t.Errorf("restore working directory: %v", err)
 		}
 	})
-	got, err := planPortable(runtime.GOOS, executable, configDir)
+	got, err := planPortable(runtime.GOOS, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +106,7 @@ func TestPlanPortableRejectsSymlinkedAncestor(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(realRoot, "animeportable"), []byte("app"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := planPortable(runtime.GOOS, executable, filepath.Join(root, "config")); err == nil {
+	if _, err := planPortable(runtime.GOOS, executable); err == nil {
 		t.Fatal("symlinked executable ancestor was accepted")
 	}
 }
@@ -208,7 +129,7 @@ func TestPortableFreshCreationIsExclusive(t *testing.T) {
 		switch {
 		case err == nil:
 			created++
-		case IsPortableImportConflict(err):
+		case IsDatabaseExists(err):
 			conflicts++
 		default:
 			t.Fatalf("unexpected concurrent creation error: %v", err)

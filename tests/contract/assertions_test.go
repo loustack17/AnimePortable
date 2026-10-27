@@ -80,7 +80,7 @@ func TestForbiddenValidatorChecksPlusVFormatting(t *testing.T) {
 
 func TestMetadataDisplayValidatorsRejectUnsafeOrNoncanonicalFields(t *testing.T) {
 	ref := core.MetadataRef{Provider: "metadata", ID: "anime"}
-	candidate := core.MetadataCandidate{Ref: ref, Title: "Anime", NativeTitle: "アニメ", Season: "WINTER"}
+	candidate := core.MetadataCandidate{Ref: ref, Title: "Anime", NativeTitle: "アニメ"}
 	metadata := core.AnimeMetadata{
 		Ref:         ref,
 		Title:       "Anime",
@@ -104,11 +104,6 @@ func TestMetadataDisplayValidatorsRejectUnsafeOrNoncanonicalFields(t *testing.T)
 		"candidate native title control": func() error {
 			value := candidate
 			value.NativeTitle = "ア\x00ニメ"
-			return validateMetadataCandidate(value)
-		},
-		"candidate season whitespace": func() error {
-			value := candidate
-			value.Season = " WINTER "
 			return validateMetadataCandidate(value)
 		},
 		"metadata title markup": func() error {

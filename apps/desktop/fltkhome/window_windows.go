@@ -447,7 +447,7 @@ func (ui *view) finishStartup(err error, settings backend.Settings, settingsErr 
 	}
 	if err != nil {
 		ui.startupGroup.Activate()
-		ui.showStartupError(startupErrorMessage(err, false, false))
+		ui.showStartupError(startupErrorMessage(err))
 		return
 	}
 	ui.startupGroup.Hide()

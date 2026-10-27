@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,8 +46,7 @@ func main() {
 			restartAfterShutdown(executable, executableErr, startAgain, showNativeError)
 		}
 	}()
-	configDir, _ := os.UserConfigDir()
-	plan, planErr := backend.PlanPortable(executable, configDir)
+	plan, planErr := backend.PlanPortable(executable)
 	if executableErr != nil {
 		planErr = executableErr
 	}
@@ -544,10 +542,6 @@ func main() {
 				current := 0
 				for index, item := range items {
 					labels[index] = fltkhome.EpisodeLabel(item.Number)
-					// The overlay splits labels on newlines, so a title keeps to one line.
-					if title := strings.Join(strings.Fields(item.Title), " "); title != "" {
-						labels[index] += " · " + title
-					}
 					if item.ID == request.EpisodeID {
 						current = index
 					}

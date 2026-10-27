@@ -61,8 +61,7 @@ func (service *Service) ingestEpisodes(ctx context.Context, store core.Store, an
 			return nil, ErrInvalidInput
 		}
 		number, numberOK := metadata.NormalizePlainText(item.Number, metadata.TitleLimits())
-		title, titleOK := metadata.NormalizePlainText(item.Title, metadata.TitleLimits())
-		if !numberOK || !titleOK || number == "" || len(number) > 128 || len(title) > 4096 {
+		if !numberOK || number == "" || len(number) > 128 {
 			return nil, ErrInvalidInput
 		}
 		mapping, ok := known[item.Ref]
@@ -83,7 +82,7 @@ func (service *Service) ingestEpisodes(ctx context.Context, store core.Store, an
 
 			known[item.Ref] = mapping
 		}
-		result = append(result, Episode{ID: string(mapping.EpisodeID), AnimeID: string(animeID), Number: number, Title: title})
+		result = append(result, Episode{ID: string(mapping.EpisodeID), AnimeID: string(animeID), Number: number})
 	}
 	return result, nil
 }

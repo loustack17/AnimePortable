@@ -166,9 +166,8 @@ func TestDatabaseDSNUsesNoFollow(t *testing.T) {
 func TestSQLiteDSNsAreExact(t *testing.T) {
 	path := `C:\Data Folder\anime.sqlite`
 	for name, test := range map[string]struct{ got, want string }{
-		"database":   {databaseDSN(path), "file:///C:/Data%20Folder/anime.sqlite?_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL&nofollow=1"},
-		"read-only":  {readOnlySQLiteDSN(path), "file:///C:/Data%20Folder/anime.sqlite?_busy_timeout=5000&mode=ro&nofollow=1"},
-		"read-write": {readWriteSQLiteDSN(path), "file:///C:/Data%20Folder/anime.sqlite?_busy_timeout=5000&mode=rwc&nofollow=1"},
+		"database":  {databaseDSN(path), "file:///C:/Data%20Folder/anime.sqlite?_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL&nofollow=1"},
+		"read-only": {readOnlySQLiteDSN(path), "file:///C:/Data%20Folder/anime.sqlite?_busy_timeout=5000&mode=ro&nofollow=1"},
 	} {
 		if test.got != test.want {
 			t.Errorf("%s DSN = %q, want %q", name, test.got, test.want)
@@ -191,5 +190,23 @@ func TestOpenRejectsMalformedDatabaseWithoutLeakingDetails(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), path) || strings.Contains(err.Error(), contents) {
 		t.Fatalf("malformed database error leaked details: %v", err)
+	}
+}
+
+func TestValidatePortablePathRejectsSymlinkAncestor(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "real")
+	linked := filepath.Join(root, "linked")
+	if err := os.Mkdir(real, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, linked); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink creation unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	if err := ValidatePortablePath(filepath.Join(linked, "data", "animeportable.db")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("linked ancestor error = %v, want ErrInvalidInput", err)
 	}
 }

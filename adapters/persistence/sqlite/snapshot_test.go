@@ -75,8 +75,8 @@ func TestSnapshotToRefusesExistingAndInvalidTargets(t *testing.T) {
 	if err := os.WriteFile(existing, []byte("keep me"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SnapshotTo(ctx, existing); !errors.Is(err, ErrImportConflict) {
-		t.Fatalf("existing target error = %v, want ErrImportConflict", err)
+	if err := store.SnapshotTo(ctx, existing); !errors.Is(err, ErrTargetExists) {
+		t.Fatalf("existing target error = %v, want ErrTargetExists", err)
 	}
 	if got, err := os.ReadFile(existing); err != nil || string(got) != "keep me" {
 		t.Fatalf("existing target changed: %q %v", got, err)
@@ -84,6 +84,93 @@ func TestSnapshotToRefusesExistingAndInvalidTargets(t *testing.T) {
 	for _, target := range []string{"relative.db", `\\server\share\x.db`, `\\.\pipe\x`, filepath.Join(t.TempDir(), "missing", "x.db")} {
 		if err := store.SnapshotTo(ctx, target); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("target %q error = %v, want ErrInvalidInput", target, err)
+		}
+	}
+}
+
+func TestSnapshotToConcurrentTargetHasSingleWinner(t *testing.T) {
+	ctx := context.Background()
+	stores := make([]*Store, 2)
+	for i := range stores {
+		store, err := Open(ctx, filepath.Join(t.TempDir(), "live.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer store.Close()
+		stores[i] = store
+	}
+	target := filepath.Join(t.TempDir(), "copy.db")
+	start := make(chan struct{})
+	results := make(chan error, len(stores))
+	for _, store := range stores {
+		go func() {
+			<-start
+			results <- store.SnapshotTo(ctx, target)
+		}()
+	}
+	close(start)
+	succeeded, refused := 0, 0
+	for range stores {
+		switch err := <-results; {
+		case err == nil:
+			succeeded++
+		case errors.Is(err, ErrTargetExists):
+			refused++
+		default:
+			t.Fatalf("concurrent snapshot error = %v", err)
+		}
+	}
+	if succeeded != 1 || refused != 1 {
+		t.Fatalf("succeeded = %d, refused = %d; want one each", succeeded, refused)
+	}
+	if err := ValidateDatabase(ctx, target); err != nil {
+		t.Fatalf("winning snapshot does not validate: %v", err)
+	}
+}
+
+func TestSnapshotToCanceledLeavesNoStagingFiles(t *testing.T) {
+	store, err := Open(context.Background(), filepath.Join(t.TempDir(), "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := store.SnapshotTo(ctx, filepath.Join(dir, "copy.db")); err == nil {
+		t.Fatal("canceled snapshot succeeded")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("canceled snapshot left %q behind", entries[0].Name())
+	}
+}
+
+func TestValidateDatabaseRejectsNonRegularFiles(t *testing.T) {
+	ctx := context.Background()
+	folder := t.TempDir()
+	if err := ValidateDatabase(ctx, folder); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("folder error = %v, want ErrInvalidInput", err)
+	}
+
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	for _, sidecar := range []string{"-wal", "-shm"} {
+		target := filepath.Join(t.TempDir(), "copy.db")
+		if err := store.SnapshotTo(ctx, target); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(target+sidecar, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := ValidateDatabase(ctx, target); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("%s folder error = %v, want ErrInvalidInput", sidecar, err)
 		}
 	}
 }

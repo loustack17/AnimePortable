@@ -66,8 +66,7 @@ type Strings struct {
 	SearchSource, SearchSourceTooltip        string
 	LoadAnimeFailed, AnimeLoadFailed         string
 	FollowFailed                             string
-	DataExists, DataCopiedUnopenable         string
-	DataCopyFailed, DataFolderUnwritable     string
+	DataExists, DataFolderUnwritable         string
 	StartupFolderUnusable                    string
 	PreparingData, SettingsDefaultsUsed      string
 	OfflineNotice                            string
@@ -83,9 +82,9 @@ type Strings struct {
 
 	// Search and the anime page.
 	SearchButton, Searching                  string
-	PreparingPlayback, LoadingAnime          string
+	LoadingAnime                             string
 	CancellingForPreview, CancellingPrevious string
-	NoPlayableEpisodes, AnimeLoadFailedBack  string
+	AnimeLoadFailedBack                      string
 	Studio, EpisodeCount                     string
 	LoadingStored, StoredLoadFailed          string
 	SearchFailed, SearchIdle                 string

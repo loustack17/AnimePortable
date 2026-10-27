@@ -16,7 +16,7 @@ import (
 	fltk "github.com/pwiecz/go-fltk"
 )
 
-func TestNativeStartupOpensHomeWithoutRecordChoiceAndKeepsLegacyUntouched(t *testing.T) {
+func TestNativeStartupOpensHomeWithoutRecordChoice(t *testing.T) {
 	runtime.LockOSThread()
 	if !fltk.Lock() {
 		runtime.UnlockOSThread()
@@ -28,16 +28,8 @@ func TestNativeStartupOpensHomeWithoutRecordChoiceAndKeepsLegacyUntouched(t *tes
 	if err := os.WriteFile(executable, []byte("fixture"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	configDir := t.TempDir()
-	legacy := filepath.Join(configDir, "AnimePortable", "animeportable.db")
-	if err := os.MkdirAll(filepath.Dir(legacy), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(legacy, []byte("legacy data stays unchanged"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	plan, err := backend.PlanPortable(executable, configDir)
-	if err != nil || !plan.OfferImport {
+	plan, err := backend.PlanPortable(executable)
+	if err != nil {
 		t.Fatalf("portable plan=%#v, err=%v", plan, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -59,10 +51,6 @@ func TestNativeStartupOpensHomeWithoutRecordChoiceAndKeepsLegacyUntouched(t *tes
 	}
 	if _, err := os.Stat(plan.DatabasePath); err != nil {
 		t.Fatalf("portable state not created: %v", err)
-	}
-	data, err := os.ReadFile(legacy)
-	if err != nil || string(data) != "legacy data stays unchanged" {
-		t.Fatal("normal startup modified legacy data")
 	}
 }
 

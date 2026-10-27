@@ -79,7 +79,7 @@ func addSeasonCandidates(ctx context.Context, query MetadataQuery, catalog Catal
 	if catalog.Year == 0 || catalog.AiringSeason == "" {
 		return candidates
 	}
-	queryTitle, queryNative, _ := metadataFields(query.Title, query.NativeTitle, query.Season)
+	queryTitle, queryNative, _ := metadataFields(query.Title, query.NativeTitle)
 	series := metadataSeriesNames(queryTitle, queryNative, candidates)
 	known := make(map[MetadataRef]bool, len(candidates))
 	for _, candidate := range candidates {

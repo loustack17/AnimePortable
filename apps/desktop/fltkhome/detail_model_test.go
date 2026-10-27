@@ -119,7 +119,7 @@ func TestDetailModelReordersNoEpisodesAndClearsOnClose(t *testing.T) {
 
 func TestDetailModelShowsTheStoredListUntilAnime1Answers(t *testing.T) {
 	stored := []backend.Episode{{ID: "episode:1", Number: "01"}, {ID: "episode:2", Number: "02"}}
-	fresh := []backend.Episode{{ID: "episode:1", Number: "01", Title: "出發"}, {ID: "episode:2", Number: "02"}, {ID: "episode:3", Number: "03"}}
+	fresh := []backend.Episode{{ID: "episode:1", Number: "01"}, {ID: "episode:2", Number: "02"}, {ID: "episode:3", Number: "03"}}
 	failure := errors.New("anime1 unreachable")
 
 	model := detailModel{}
@@ -128,7 +128,7 @@ func TestDetailModelShowsTheStoredListUntilAnime1Answers(t *testing.T) {
 		t.Fatalf("stored list not shown: %#v", model.episodes)
 	}
 	model.selected = 1
-	if failed := model.applyRefresh(fresh, nil); failed || len(model.episodes) != 3 || model.episodes[0].Title != "出發" || model.selected != 1 {
+	if failed := model.applyRefresh(fresh, nil); failed || len(model.episodes) != 3 || model.episodes[2].ID != "episode:3" || model.selected != 1 {
 		t.Fatalf("refresh: failed=%t episodes=%#v selected=%d", failed, model.episodes, model.selected)
 	}
 	if model.applyStored(stored) || len(model.episodes) != 3 {

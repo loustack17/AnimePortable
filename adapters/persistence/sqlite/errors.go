@@ -10,6 +10,8 @@ import (
 )
 
 var (
+	// ErrTargetExists means a snapshot or new database would replace an existing file.
+	ErrTargetExists     = errors.New("target already exists")
 	ErrInvalidInput     = errors.New("invalid input")
 	ErrIdentityConflict = errors.New("identity conflict")
 	ErrMigration        = errors.New("migration failed")

@@ -589,7 +589,7 @@ func (source *fallbackEpisodeSource) Episodes(_ context.Context, ref core.Source
 		return nil, errors.New("unexpected source ref")
 	}
 	source.secondCalls++
-	return []core.SourceEpisode{{Ref: core.EpisodeRef{Anime: source.second, ID: "episode"}, Number: "1", Title: "Episode"}}, nil
+	return []core.SourceEpisode{{Ref: core.EpisodeRef{Anime: source.second, ID: "episode"}, Number: "1"}}, nil
 }
 
 func (*fallbackEpisodeSource) Resolve(context.Context, core.EpisodeRef) (core.PlaybackSource, error) {

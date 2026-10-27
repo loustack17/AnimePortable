@@ -56,32 +56,7 @@ func (*fakeAnimeSource) Resolve(ctx context.Context, ref core.EpisodeRef) (core.
 	return core.NewPlaybackSource("https://media.example/episode?token=raw-secret", http.Header{"Cookie": {"raw-secret"}}), nil
 }
 
-type unsupportedAnimeSource struct{}
-
-func (*unsupportedAnimeSource) Catalog(context.Context) ([]core.SourceAnime, error) {
-	return nil, core.ErrUnsupported
-}
-func (*unsupportedAnimeSource) Search(context.Context, string) ([]core.SourceAnime, error) {
-	return nil, core.ErrUnsupported
-}
-func (*unsupportedAnimeSource) Episodes(context.Context, core.SourceRef) ([]core.SourceEpisode, error) {
-	return nil, core.ErrUnsupported
-}
-func (*unsupportedAnimeSource) Resolve(context.Context, core.EpisodeRef) (core.PlaybackSource, error) {
-	return core.PlaybackSource{}, core.ErrUnsupported
-}
-
 type fakeMetadataProvider struct{}
-
-type unsupportedMetadataProvider struct{}
-
-func (*unsupportedMetadataProvider) Search(context.Context, core.MetadataQuery) ([]core.MetadataCandidate, error) {
-	return nil, core.ErrUnsupported
-}
-
-func (*unsupportedMetadataProvider) Get(context.Context, core.MetadataRef) (core.AnimeMetadata, error) {
-	return core.AnimeMetadata{}, core.ErrUnsupported
-}
 
 func (*fakeMetadataProvider) Search(ctx context.Context, _ core.MetadataQuery) ([]core.MetadataCandidate, error) {
 	if err := ctx.Err(); err != nil {
@@ -287,10 +262,6 @@ func (store *memoryStore) Following(context.Context) ([]core.FollowedAnime, erro
 	}
 	return items, nil
 }
-func (store *memoryStore) AddHistory(_ context.Context, entry core.HistoryEntry) error {
-	store.history = append(store.history, entry)
-	return nil
-}
 func (store *memoryStore) History(context.Context) ([]core.HistoryEntry, error) {
 	return append([]core.HistoryEntry(nil), store.history...), nil
 }
@@ -311,10 +282,6 @@ func (store *memoryStore) RemoveHistory(_ context.Context, id core.AnimeID) erro
 }
 func progressKey(animeID core.AnimeID, episodeID core.EpisodeID) [2]string {
 	return [2]string{string(animeID), string(episodeID)}
-}
-func (store *memoryStore) SaveProgress(_ context.Context, progress core.PlaybackProgress) error {
-	store.progress[progressKey(progress.AnimeID, progress.EpisodeID)] = progress
-	return nil
 }
 func (store *memoryStore) SavePlaybackCheckpoint(_ context.Context, entry core.HistoryEntry) error {
 	store.progress[progressKey(entry.Progress.AnimeID, entry.Progress.EpisodeID)] = entry.Progress
@@ -345,9 +312,7 @@ func (store *memoryStore) Settings(context.Context) (core.Settings, error) {
 
 var (
 	_ core.AnimeSource      = (*fakeAnimeSource)(nil)
-	_ core.AnimeSource      = (*unsupportedAnimeSource)(nil)
 	_ core.MetadataProvider = (*fakeMetadataProvider)(nil)
-	_ core.MetadataProvider = (*unsupportedMetadataProvider)(nil)
 	_ core.Player           = (*fakePlayer)(nil)
 	_ core.PlaybackSession  = (*fakePlaybackSession)(nil)
 	_ core.Store            = (*memoryStore)(nil)
@@ -356,30 +321,22 @@ var (
 func TestAnimeSourceContract(t *testing.T) {
 	RunAnimeSource(t, AnimeSourceSuite{
 		New:              func(*testing.T) core.AnimeSource { return &fakeAnimeSource{} },
-		Catalog:          SourceListCase{Supported: true, Expected: []core.SourceRef{fakeAnimeRef}},
-		Search:           SourceSearchCase{Supported: true, Query: "Anime", Expected: []core.SourceRef{fakeAnimeRef}},
-		Episodes:         SourceEpisodesCase{Supported: true, Anime: fakeAnimeRef, Expected: []core.EpisodeRef{fakeEpisode1, fakeEpisode2}},
-		Resolve:          SourceResolveCase{Supported: true, Episode: fakeEpisode1},
+		Catalog:          SourceListCase{Expected: []core.SourceRef{fakeAnimeRef}},
+		Search:           SourceSearchCase{Query: "Anime", Expected: []core.SourceRef{fakeAnimeRef}},
+		Episodes:         SourceEpisodesCase{Anime: fakeAnimeRef, Expected: []core.EpisodeRef{fakeEpisode1, fakeEpisode2}},
+		Resolve:          SourceResolveCase{Episode: fakeEpisode1},
 		ForbiddenStrings: []string{"raw-secret"},
 	})
-}
-
-func TestUnsupportedAnimeSourceContract(t *testing.T) {
-	RunAnimeSource(t, AnimeSourceSuite{New: func(*testing.T) core.AnimeSource { return &unsupportedAnimeSource{} }})
 }
 
 func TestMetadataProviderContract(t *testing.T) {
 	RunMetadataProvider(t, MetadataProviderSuite{
 		New:              func(*testing.T) core.MetadataProvider { return &fakeMetadataProvider{} },
-		Search:           MetadataSearchCase{Supported: true, Query: core.MetadataQuery{Title: "Anime"}, Expected: []core.MetadataRef{fakeMetaRef}},
-		Get:              MetadataGetCase{Supported: true, Ref: fakeMetaRef, Expected: fakeMetadata()},
+		Search:           MetadataSearchCase{Query: core.MetadataQuery{Title: "Anime"}, Expected: []core.MetadataRef{fakeMetaRef}},
+		Get:              MetadataGetCase{Ref: fakeMetaRef, Expected: fakeMetadata()},
 		Missing:          &MetadataMissingCase{Ref: core.MetadataRef{Provider: fakeMetaRef.Provider, ID: "missing"}, Expected: core.ErrNotFound},
 		ForbiddenStrings: []string{"raw-secret", "<script>"},
 	})
-}
-
-func TestUnsupportedMetadataProviderContract(t *testing.T) {
-	RunMetadataProvider(t, MetadataProviderSuite{New: func(*testing.T) core.MetadataProvider { return &unsupportedMetadataProvider{} }})
 }
 
 func TestPlayerContract(t *testing.T) {

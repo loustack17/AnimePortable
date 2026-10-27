@@ -21,7 +21,7 @@ Platform: Windows amd64 only. The full native suite, including the window and re
 
 | Item | Next action |
 | --- | --- |
-| Loop 38R owner decisions O4-O8 | Owner to decide: remove the legacy AppData import (O4), unused UI text keys (O5) and test-only port fields (O6); split `main()` (O7); move shared limits into core (O8). Details in [loops/LOOP38R.md](loops/LOOP38R.md). |
+| Loop 38R owner decisions O7-O8 | Owner to decide: split `main()` (O7); move shared limits into core (O8). O4-O6 removed 2026-10-27. Details in [loops/LOOP38R.md](loops/LOOP38R.md). |
 | 追蹤 更新集數 wording; core/backend `NewEpisode` unused by the UI | Owner to decide whether to reword the refresh button and notes, and whether to remove `NewEpisode`. |
 | Playback failures (suspected intermittent Anime1 HTTP 502) | Read `playback-failures.log` after the next failure; it now names forward-proxy failures. Decide on an automatic retry from the recorded stage and status. |
 | Update check and pre-releases | 檢查更新 offers the newest release including pre-releases, so a later beta would show 有新版本 to users on 1.0.0. Owner to decide. |

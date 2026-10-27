@@ -19,7 +19,6 @@ type Episode struct {
 	ID      string `json:"id"`
 	AnimeID string `json:"animeId"`
 	Number  string `json:"number"`
-	Title   string `json:"title"`
 }
 
 type Metadata struct {

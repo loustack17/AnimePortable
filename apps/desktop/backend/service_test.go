@@ -189,19 +189,12 @@ func (s *fakeStore) Following(ctx context.Context) ([]core.FollowedAnime, error)
 	}
 	return r, nil
 }
-func (s *fakeStore) AddHistory(ctx context.Context, e core.HistoryEntry) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.history = append(s.history, e)
-	return nil
-}
 func (s *fakeStore) History(ctx context.Context) ([]core.HistoryEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]core.HistoryEntry(nil), s.history...), nil
 }
 func (s *fakeStore) RemoveHistory(context.Context, core.AnimeID) error               { return nil }
-func (s *fakeStore) SaveProgress(context.Context, core.PlaybackProgress) error       { return nil }
 func (s *fakeStore) SavePlaybackCheckpoint(context.Context, core.HistoryEntry) error { return nil }
 func (s *fakeStore) Progress(context.Context, core.AnimeID, core.EpisodeID) (core.PlaybackProgress, error) {
 	return core.PlaybackProgress{}, core.ErrNotFound
@@ -374,7 +367,7 @@ func TestIngestConcurrentAndEpisodes(t *testing.T) {
 		}
 	}
 	parent := a[0].ref
-	ep := core.SourceEpisode{Ref: core.EpisodeRef{Anime: parent, ID: "e1"}, Number: "1", Title: "E"}
+	ep := core.SourceEpisode{Ref: core.EpisodeRef{Anime: parent, ID: "e1"}, Number: "1"}
 	out, e := s.ingestEpisodes(context.Background(), st, a[0].anime.ID, parent, []core.SourceEpisode{ep})
 	if e != nil || len(out) != 1 || !strings.HasPrefix(out[0].ID, "episode:") {
 		t.Fatalf("episode %v %v", out, e)

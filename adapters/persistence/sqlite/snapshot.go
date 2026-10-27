@@ -17,7 +17,7 @@ import (
 // consistent snapshot that already includes committed pages still in the
 // -wal file, and it needs no second connection or sidecar copy. The store
 // has a single connection, so other store calls wait while it runs. The copy
-// is written to a staging file, checked with the same rules as an import, and
+// is written to a staging file, checked by validateSnapshot, and
 // then moved into place without replacing anything.
 func (store *Store) SnapshotTo(ctx context.Context, target string) error {
 	path, err := absoluteLocalPath(target)
@@ -32,7 +32,7 @@ func (store *Store) SnapshotTo(ctx context.Context, target string) error {
 		return ErrInvalidInput
 	}
 	if _, err := os.Lstat(path); err == nil {
-		return ErrImportConflict
+		return ErrTargetExists
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return ErrStorage
 	}
@@ -42,10 +42,10 @@ func (store *Store) SnapshotTo(ctx context.Context, target string) error {
 	}
 	stage := temp.Name()
 	if err := temp.Close(); err != nil {
-		removeImportStage(stage)
+		removeStagedSnapshot(stage)
 		return ErrStorage
 	}
-	defer removeImportStage(stage)
+	defer removeStagedSnapshot(stage)
 	if runtime.GOOS != "windows" {
 		if err := os.Chmod(stage, 0o600); err != nil {
 			return ErrStorage
@@ -59,7 +59,7 @@ func (store *Store) SnapshotTo(ctx context.Context, target string) error {
 	if err != nil {
 		return err
 	}
-	if err := validatePortableSnapshot(ctx, stage); err != nil {
+	if err := validateSnapshot(ctx, stage); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
@@ -70,7 +70,7 @@ func (store *Store) SnapshotTo(ctx context.Context, target string) error {
 	}
 	if err := installPortableSnapshot(stage, path); err != nil {
 		if _, statErr := os.Lstat(path); statErr == nil {
-			return ErrImportConflict
+			return ErrTargetExists
 		}
 		return ErrStorage
 	}
@@ -90,14 +90,108 @@ func ValidateDatabase(ctx context.Context, path string) error {
 	if err := ValidatePortablePath(clean); err != nil {
 		return ErrInvalidInput
 	}
-	if err := validateImportSourceFiles(clean); err != nil {
+	if err := validateDatabaseFiles(clean); err != nil {
 		return ErrInvalidInput
 	}
-	if err := validatePortableSnapshot(ctx, clean); err != nil {
+	if err := validateSnapshot(ctx, clean); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
 		return ErrMigration
 	}
 	return nil
+}
+
+// validateDatabaseFiles accepts a database whose file and any -wal or -shm sidecar are
+// regular files.
+func validateDatabaseFiles(source string) error {
+	for _, path := range []string{source, source + "-wal", source + "-shm"} {
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) && path != source {
+			continue
+		}
+		if err != nil || !info.Mode().IsRegular() {
+			return ErrInvalidInput
+		}
+	}
+	return nil
+}
+
+// validateSnapshot opens path read-only and accepts it only when it is intact, has no
+// foreign-key violations and carries this build's migrations and schema.
+func validateSnapshot(ctx context.Context, path string) error {
+	db, err := sql.Open("sqlite", readOnlySQLiteDSN(path))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	rows, err := conn.QueryContext(ctx, "PRAGMA integrity_check")
+	if err != nil {
+		return ErrMigration
+	}
+	integrityRows := 0
+	for rows.Next() {
+		var integrity string
+		if err := rows.Scan(&integrity); err != nil || integrity != "ok" {
+			_ = rows.Close()
+			return ErrMigration
+		}
+		integrityRows++
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return ErrMigration
+	}
+	if err := rows.Close(); err != nil || integrityRows != 1 {
+		return ErrMigration
+	}
+	foreignKeys, err := conn.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return ErrMigration
+	}
+	if foreignKeys.Next() {
+		_ = foreignKeys.Close()
+		return ErrMigration
+	}
+	if err := foreignKeys.Err(); err != nil {
+		_ = foreignKeys.Close()
+		return ErrMigration
+	}
+	if err := foreignKeys.Close(); err != nil {
+		return ErrMigration
+	}
+	if err := validateMigrationTable(ctx, conn); err != nil {
+		return ErrMigration
+	}
+	migrations, err := loadMigrations(embeddedMigrations)
+	if err != nil {
+		return ErrMigration
+	}
+	applied, latestChecksum, err := readAppliedMigrations(ctx, conn, migrations)
+	if err != nil || len(applied) == 0 {
+		return ErrMigration
+	}
+	if latestChecksum != "" {
+		fingerprint, err := schemaFingerprint(ctx, conn)
+		if err != nil || fingerprint != latestChecksum {
+			return ErrMigration
+		}
+	}
+	return ctx.Err()
+}
+
+// removeStagedSnapshot deletes a staging file and its sidecars, never following a link.
+func removeStagedSnapshot(path string) {
+	for _, candidate := range []string{path, path + "-wal", path + "-shm"} {
+		info, err := os.Lstat(candidate)
+		if err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
+			_ = os.Remove(candidate)
+		}
+	}
 }

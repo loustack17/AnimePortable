@@ -143,13 +143,11 @@ func TestBangumiAdapterAcceptance(t *testing.T) {
 	contract.RunMetadataProvider(t, contract.MetadataProviderSuite{
 		New: func(*testing.T) core.MetadataProvider { return newWithDo(client) },
 		Search: contract.MetadataSearchCase{
-			Supported: true,
-			Query:     core.MetadataQuery{Title: "中文標題"},
-			Expected:  []core.MetadataRef{{Provider: testProviderID, ID: "123"}},
+			Query:    core.MetadataQuery{Title: "中文標題"},
+			Expected: []core.MetadataRef{{Provider: testProviderID, ID: "123"}},
 		},
 		Get: contract.MetadataGetCase{
-			Supported: true,
-			Ref:       core.MetadataRef{Provider: testProviderID, ID: "123"},
+			Ref: core.MetadataRef{Provider: testProviderID, ID: "123"},
 			Expected: core.AnimeMetadata{
 				Ref:          core.MetadataRef{Provider: testProviderID, ID: "123"},
 				Title:        "中文標題",

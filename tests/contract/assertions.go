@@ -146,7 +146,6 @@ func validateMetadataCandidate(candidate core.MetadataCandidate) error {
 	}{
 		{name: "title", value: candidate.Title, maxBytes: metadataTitleBytes, maxRunes: metadataTitleRunes},
 		{name: "native title", value: candidate.NativeTitle, maxBytes: metadataTitleBytes, maxRunes: metadataTitleRunes},
-		{name: "season", value: candidate.Season, maxBytes: metadataSeasonBytes, maxRunes: metadataSeasonRunes},
 	} {
 		if err := validateMetadataText(field.name, field.value, field.maxBytes, field.maxRunes); err != nil {
 			return err

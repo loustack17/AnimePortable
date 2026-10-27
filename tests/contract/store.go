@@ -125,14 +125,8 @@ func RunStore(t *testing.T, suite StoreSuite) {
 		now := time.Now().UTC()
 		entryA := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: animeA.ID, EpisodeID: episodeA}, LastPlayedAt: now}
 		entryB := core.HistoryEntry{Progress: core.PlaybackProgress{AnimeID: animeB.ID, EpisodeID: episodeB}, LastPlayedAt: now.Add(time.Second)}
-		if err := store.AddHistory(ctx, entryA); err != nil {
-			t.Fatal(err)
-		}
-		if err := store.AddHistory(ctx, entryB); err != nil {
-			t.Fatal(err)
-		}
 		for _, entry := range []core.HistoryEntry{entryA, entryB} {
-			if err := store.SaveProgress(ctx, entry.Progress); err != nil {
+			if err := store.SavePlaybackCheckpoint(ctx, entry); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -162,7 +156,7 @@ func RunStore(t *testing.T, suite StoreSuite) {
 			t.Fatalf("empty progress error = %v", err)
 		}
 		progress := core.PlaybackProgress{AnimeID: animeA.ID, EpisodeID: episodeA, Position: time.Minute, Duration: 24 * time.Minute}
-		if err := store.SaveProgress(ctx, progress); err != nil {
+		if err := store.SavePlaybackCheckpoint(ctx, core.HistoryEntry{Progress: progress}); err != nil {
 			t.Fatal(err)
 		}
 		actual, err := store.Progress(ctx, animeA.ID, episodeA)
