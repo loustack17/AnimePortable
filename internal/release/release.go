@@ -11,7 +11,7 @@ import (
 
 // Version is this build's version without the leading "v"; it matches the release tag
 // (docs/05_WORKFLOW.md section 11 bumps it with each release).
-const Version = "1.0.0"
+const Version = "1.0.1"
 
 // Parsed is a version of the form [v]MAJOR.MINOR.PATCH[-STAGE], where STAGE is dot-separated
 // identifiers such as "alpha" or "alpha.1".

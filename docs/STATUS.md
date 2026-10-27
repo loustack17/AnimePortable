@@ -26,7 +26,7 @@ Platform: Windows amd64 only. The full native suite, including the window and re
 | Playback failures (suspected intermittent Anime1 HTTP 502) | Read `playback-failures.log` after the next failure; it now names forward-proxy failures. Decide on an automatic retry from the recorded stage and status. |
 | Update check and pre-releases | 檢查更新 offers the newest release including pre-releases, so a later beta would show 有新版本 to users on 1.0.0. Owner to decide. |
 | 03_SECURITY close order | The doc lists invalidating the proxy session before destroying the player; the code destroys the player first. Owner to decide which the doc states. |
-| Versions after 1.0.0 | Numbering rule not decided. |
+| Versions after 1.0.0 | Fix-only releases raise PATCH (v1.0.1, owner 2026-10-27); the rule for feature releases is not decided. |
 | Resource harness, real-libmpv scenario | Its private-bytes check (first five vs last five samples, 8 MiB) fails on this PC for v1.0.0 and the current code alike, because the first samples sit lower than the plateau. Owner to decide whether to adjust the check's warm-up. |
 | Synopsis misses left by Loop 37d | Dr.STONE 新石紀 SCIENCE FUTURE (Anime1 merges three parts), Battle Spirits [Re] 絕界之空 (絶/絕), 紫羅蘭永恆花園 外傳 (not returned by the Simplified search). Owner to decide whether to pursue. |
 
