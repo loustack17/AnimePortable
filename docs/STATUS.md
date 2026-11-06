@@ -6,7 +6,7 @@ Updated 2026-10-26. Branch `main`.
 
 ## Current state
 
-v1.0.0, the first full release, was published on 2026-10-24 ([releases/v1.0.0.md](releases/v1.0.0.md)). Loop 38R, a behaviour-preserving cleanup before version 2.0, passed on 2026-10-26: duplicated and dead code removed in every package (production Go 24,774 lines, down 572), three known bugs handled (O1-O3), and an owner check of a build with slices S1-S8 passed ([loops/LOOP38R.md](loops/LOOP38R.md)). Version 2.0 (Loops 39-46 in [04_ROADMAP.md](04_ROADMAP.md)) needs owner approval to start.
+v1.0.0, the first full release, was published on 2026-10-24 ([releases/v1.0.0.md](releases/v1.0.0.md)). Loop 38R, a behaviour-preserving cleanup before version 2.0, passed on 2026-10-26: duplicated and dead code removed in every package (production Go 24,774 lines, down 572), three known bugs handled (O1-O3), and an owner check of a build with slices S1-S8 passed ([loops/LOOP38R.md](loops/LOOP38R.md)). Version 2.0 (Loops 39-49 in [04_ROADMAP.md](04_ROADMAP.md), revised 2026-11-06: core slimming, UI boundary and a UI toolkit trial come first) needs owner approval to start.
 
 Platform: Windows amd64 only. The full native suite, including the window and real-libmpv tests, runs only locally; GitHub Windows CI runs the rest on every push.
 

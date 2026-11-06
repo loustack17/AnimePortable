@@ -13,7 +13,7 @@ observed_head: see git log  # check `gh run list --limit 1` for the latest CI re
 active_work: >
   Loop 38R (cleanup before 2.0) PASSED 2026-10-26 (docs/loops/LOOP38R.md): S1-S11 and the O2/O3 fixes done; production Go -572 lines; the real-libmpv resource check fails on this PC for v1.0.0 and the current code alike (warm-up), so no regression. v1.0.1 released 2026-10-26. O4-O6 removed 2026-10-27 (AppData import, unused UI text, test-only port fields; owner rule: remove anything legacy or not needed later). Open owner decisions: O7-O8 (LOOP38R.md) and the resource check's warm-up (STATUS.md). Owner rules 2026-10-26: light testing (focused check once, full suite at most once), no temp note files.
   Loop 38 (hardening and release) PASSED 2026-10-24 (docs/loops/LOOP38.md; v1.0.0 published, tag on 5d9c068).
-  Next: version 2.0 (Loops 39-46, docs/04_ROADMAP.md) needs owner approval to start.
+  Next: version 2.0 (Loops 39-49, docs/04_ROADMAP.md) needs owner approval to start. Plan revised by the owner 2026-11-06 (docs only, uncommitted): Loop 39 core slimming, Loop 40 UI boundary (UI imports only backend/uitext/appicon), Loop 41 Go UI toolkit trial against FLTK; the "UI stays on FLTK" decision is replaced.
   Open owner decisions: update check offers pre-releases to users on 1.0.0; 03_SECURITY close order (N8); numbering of versions after 1.0.0.
   Loop 37d passed 2026-10-23 (LOOP37D.md); v0.4.1-beta published 2026-10-23. Never drive the owner's desktop to investigate; reproduce headlessly.
 active_acceptance: none

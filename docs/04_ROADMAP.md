@@ -2,11 +2,11 @@
 
 # Roadmap
 
-Loops 1-38, 37b, 37c and 37d are complete; v1.0.0, the first full release, was published on 2026-10-24. Version 2.0 (Loops 39-46, below) is next and needs owner approval to start. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
+Loops 1-38, 37b, 37c and 37d are complete; v1.0.0, the first full release, was published on 2026-10-24. Version 2.0 (Loops 39-49, below) is next and needs owner approval to start. Requirements are in [06_ACCEPTANCE.md](06_ACCEPTANCE.md). How a loop runs is in [05_WORKFLOW.md](05_WORKFLOW.md). Old plans are in `archive/04_MVP_IMPLEMENTATION_PLAN.md` and `archive/16_FYNE_MIGRATION_PLAN.md`.
 
 Platform order: the whole Windows product first (all remaining loops), then Linux in 2.0, then macOS in 3.0 (see "Version 2.0").
 
-Every loop uses the FLTK Windows UI (FLTK is a native desktop UI toolkit) and in-process libmpv (the mpv video player library, loaded inside the app). Every UI loop must keep: all content reachable by mouse and keyboard with visible focus, cached data shown first, no raw remote HTML in the UI, and no WebView.
+Loops up to 41 use the FLTK Windows UI (FLTK is a native desktop UI toolkit); Loop 41 may choose another toolkit for the rest of 2.0. Every loop uses in-process libmpv (the mpv video player library, loaded inside the app). Every UI loop must keep: all content reachable by mouse and keyboard with visible focus, cached data shown first, no raw remote HTML in the UI, and no WebView.
 
 ## Completed loops (all PASS)
 
@@ -79,59 +79,85 @@ Every loop must also keep the requirements in [06_ACCEPTANCE.md](06_ACCEPTANCE.m
 
 ## Version 2.0 (after Loop 38 and v1.0.0)
 
-Planned with the owner on 2026-10-23. Not started; each loop still needs owner approval to start.
+Planned with the owner on 2026-10-23 and revised on 2026-11-06. Not started; each loop still needs owner approval to start.
 
 Owner decisions for 2.0:
 
-- The UI stays on FLTK. No toolkit change and no second UI codebase; the modern look comes from custom-drawn FLTK widgets, SVG icons and timer-driven animation.
+- Core first (owner, 2026-11-06): 2.0 starts by making the core, adapters and backend smaller and simpler, then by cutting the UI off from them so the UI can be replaced at any time. UI work comes after both.
+- UI toolkit is open (owner, 2026-11-06, replaces the 2026-10-23 "UI stays on FLTK" decision): a pure-Go UI is preferred. Any Go UI the community recommends may be tried if it meets the Loop 41 criteria; FLTK stays until a candidate beats it there. Only one UI codebase ships at a time. A non-Go UI (for example Rust) is not planned; the owner decides after Loop 41 if no Go candidate passes.
 - Sources are hot-swappable: every source implements the same core source port, so adding or removing one never touches the UI, player or storage.
 - Out of scope: HiAnime and similar aggregator sources, YouTube playback through yt-dlp, and any region-lock bypass. The assistant does not research or implement new unlicensed sources; the owner may add sources through the source port.
 - Linux is the 2.0 platform. macOS moves to 3.0 (code signing and notarization, two CPU architectures, deprecated OpenGL).
 - The 06_ACCEPTANCE.md requirements still apply, including the idle resource target, no WebView and no video downloads.
 
-### Loop 39 - 2.0 design
+### Loop 39 - Core slimming
 
-- Goal: An owner-approved visual design for the player, Home, detail page and the menu-to-player transition.
-- In scope: Mockups of player controls (buttons, icons, seek bar with hover time, volume, subtitle and audio menus), Home and detail; a transition spec; one FLTK prototype of the player control bar proving the design can be built.
-- Done when: The owner approves the mockups in writing, and the FLTK prototype control bar matches them while the app stays under the idle memory target in 06_ACCEPTANCE.md.
+- Goal: The same behaviour with clearly less code in `core/`, `adapters/`, `apps/desktop/backend/` and their tests.
+- In scope: A read-only audit first: lines per feature, duplicated logic, defensive code that no trust boundary in 03_SECURITY.md needs, settings or features nobody uses, and tests that check the same behaviour more than once. The owner picks what to cut or merge from that list. Then one slice per package group, each with the full test suite green. FLTK UI code is out of scope (Loop 40 and 41 decide its future).
+- Out of scope: New features, behaviour changes the owner did not pick, edits to applied migrations, weakening any 03_SECURITY.md rule.
+- Done when: Every picked item is done, the line counts before and after are recorded per package, the full native suite passes, and the owner's normal-session check of a test build passes.
 
-### Loop 40 - Player UI
+### Loop 40 - UI boundary
 
-- Goal: The player looks and behaves like the approved Loop 39 mockups.
-- In scope: The control bar (play/pause, previous and next episode, seek bar with hover time, volume, fullscreen), the subtitle and audio menus (empty until Loop 43), SVG icons, and the episode title shown on the video.
-- Done when: A side-by-side comparison with the Loop 39 mockups shows no difference the owner rejects; every control works by mouse and by keyboard; controls still auto-hide after 3 seconds; and no dropped frames are added compared with v1.0 on the same episode.
+- Goal: A new UI needs only the backend API, so the UI can be swapped without touching core, adapters or playback policy.
+- In scope:
+  - One UI-facing API: UI packages import only `apps/desktop/backend`, `apps/desktop/uitext` and `apps/desktop/appicon`. Today `fltkhome` builds its own `core.Refresher` and timeouts, `fltkplayer` reads `core.PlaybackSpeedSteps`, and `fltkengine` imports core and the libmpv adapter; those move behind the backend.
+  - Playback flow out of the UI entry: autoplay, follow, skip-opening, start-watch and play-queue rules (about 300 lines in `apps/desktop`) move into the backend or core, so every UI reuses them.
+  - libmpv split: session control (commands, properties, snapshots, events) becomes UI-neutral in `adapters/player/libmpv`; only "draw the current frame into this toolkit's OpenGL context" stays per UI.
+  - A small composition root wires the adapters once; the UI entry only starts a window with the backend.
+  - `tests/architecture` enforces the UI import rule.
+- Done when: A headless fake UI in a test drives search, detail, play, autoplay and history through the backend API alone; the import rule test passes; the FLTK app works as before (owner check).
 
-### Loop 41 - Main UI and transitions
+### Loop 41 - UI toolkit trial
 
-- Goal: Home, detail and the list pages match the Loop 39 mockups, and moving between a page and the player fades instead of cutting.
-- In scope: The Loop 39 design for Home, detail, 追蹤, 歷史紀錄 and 時間表; opening an episode fades from the page to the player in the same window, showing the cover and a loading indicator while the episode resolves; leaving the player fades back to the page it came from.
+- Goal: Decide with measurements whether 2.0 keeps FLTK or moves to a better Go UI.
+- In scope: The owner and the assistant list candidates (community recommendations welcome; Giu/cimgui-go is the first known one; Gio was tried by the owner and rejected for look and resource use). Each candidate gets the same small prototype on the Loop 40 backend: a Home cover grid, a Chinese search box, and an episode playing through libmpv with on-video controls that auto-hide. FLTK is measured with the same scenario.
+- Criteria: modern look the owner accepts; idle private working set and CPU close to FLTK v1.x (Loop 38 measured 10.3 MiB idle) and below OneAnime in comparable states; libmpv video with controls drawn over it; Chinese text and IME input; keyboard focus everywhere; no WebView; Windows now and Linux in Loop 48; maintained upstream; licence fits the portable ZIP. Pure Go is preferred; cgo is accepted only with the msvcrt MinGW toolchain already used.
+- Done when: A table of measurements and screenshots per candidate exists, and the owner chooses the 2.0 UI in writing (recorded as an ADR).
+
+### Loop 42 - 2.0 design
+
+- Goal: An owner-approved visual design for the player, Home, detail page and the menu-to-player transition, in the Loop 41 toolkit.
+- In scope: Mockups of player controls (buttons, icons, seek bar with hover time, volume, subtitle and audio menus), Home and detail; a transition spec; one prototype of the player control bar in the chosen toolkit proving the design can be built.
+- Done when: The owner approves the mockups in writing, and the prototype control bar matches them while the app stays under the idle memory target in 06_ACCEPTANCE.md.
+
+### Loop 43 - Player UI
+
+- Goal: The player looks and behaves like the approved Loop 42 mockups.
+- In scope: The control bar (play/pause, previous and next episode, seek bar with hover time, volume, fullscreen), the subtitle and audio menus (empty until Loop 46), SVG icons, and the episode title shown on the video.
+- Done when: A side-by-side comparison with the Loop 42 mockups shows no difference the owner rejects; every control works by mouse and by keyboard; controls still auto-hide after 3 seconds; and no dropped frames are added compared with v1.0 on the same episode.
+
+### Loop 44 - Main UI and transitions
+
+- Goal: Home, detail and the list pages match the Loop 42 mockups, and moving between a page and the player fades instead of cutting.
+- In scope: The Loop 42 design for Home, detail, 追蹤, 歷史紀錄 and 時間表; opening an episode fades from the page to the player in the same window, showing the cover and a loading indicator while the episode resolves; leaving the player fades back to the page it came from.
 - Done when: The owner approves the pages against the mockups; every page-to-player and player-to-page switch fades over 150 to 300 ms with no blank or black frame; and focus and Esc behave as in Loop 34.
 
-### Loop 42 - Hot-swappable sources and local files
+### Loop 45 - Hot-swappable sources and local files
 
 - Goal: More than one source, selectable at runtime, plus local video files.
 - In scope: Source selection; a local-files source (folders and files, episode order from file names); an out-of-process source format (a separate executable in `sources/` that answers catalog, search, episodes, stream and subtitles as JSON), with every reply treated as untrusted and streams still going through the playback proxy. Anime1 stays built in.
 - Done when: Sources can be added and removed without rebuilding the app, a broken source cannot crash or hang the app, and local files play with progress and history.
 
-### Loop 43 - Subtitles
+### Loop 46 - Subtitles
 
 - Goal: Chinese, English and Japanese subtitles where the video allows it.
-- In scope: Subtitle and audio track menus, external subtitle files (SRT, ASS, VTT), two subtitles at once (for language study), language preference, per-anime remembered choice, timing offset. Hard-coded subtitles (as on Anime1) cannot be switched off; the UI says so.
+- In scope: Subtitle and audio track menus (added to the Loop 43 player), external subtitle files (SRT, ASS, VTT), two subtitles at once (for language study), language preference, per-anime remembered choice, timing offset. Hard-coded subtitles (as on Anime1) cannot be switched off; the UI says so.
 - Done when: A local video with external subtitle files shows any one or two tracks, and the choices survive a restart.
 
-### Loop 44 - Online subtitle search
+### Loop 47 - Online subtitle search
 
 - Goal: Find subtitles for a local video without leaving the app.
 - In scope: OpenSubtitles and Jimaku with the user's own API keys entered in Settings (no bundled keys), results ranked by anime and episode, download into the portable data folder, timing offset for releases that do not match.
 - Done when: A search returns usable subtitles for a known episode, keys are never logged, and the app works with no keys.
 
-### Loop 45 - Linux
+### Loop 48 - Linux
 
 - Goal: A supported Linux build.
-- In scope: The FLTK and libmpv build on Linux, keyboard, portable data, a portable package (AppImage or tar.gz with libmpv), Linux CI.
+- In scope: The Loop 41 UI toolkit and libmpv build on Linux, keyboard, portable data, a portable package (AppImage or tar.gz with libmpv), Linux CI.
 - Done when: The owner's Linux check passes on a real machine. Windows evidence never counts for Linux.
 
-### Loop 46 - 2.0 hardening and release
+### Loop 49 - 2.0 hardening and release
 
 - Goal: Release 2.0.0 for Windows and Linux.
 - In scope: A security pass over the new trust boundaries in 03_SECURITY.md terms (source executables, subtitle files, subtitle APIs and their keys); the Loop 38 resource pass repeated with source switching and subtitle loading; CI-built Windows ZIP and Linux package published as a GitHub Release.
