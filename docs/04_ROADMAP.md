@@ -90,7 +90,17 @@ Owner decisions for 2.0:
 - Linux is the 2.0 platform. macOS moves to 3.0 (code signing and notarization, two CPU architectures, deprecated OpenGL).
 - The 06_ACCEPTANCE.md requirements still apply, including the idle resource target, no WebView and no video downloads.
 
+Rules for every 2.0 loop (owner, 2026-11-06). They exist so the project gets smaller and clearer, not bigger:
+
+1. Loops run strictly in order. A loop starts only after the previous one is PASS and the owner says go.
+2. A loop does only what its `docs/loops/LOOPNN.md` lists. That file names the paths it may touch; everything else is read-only.
+3. No new feature, setting, package, dependency or abstraction unless the loop's goal names it. Work for a later loop is not done early.
+4. Anything noticed outside scope goes into the loop file's "Noticed, not done" list. It is never fixed in passing.
+5. When unsure, stop and ask the owner. Do not choose for the owner.
+
 ### Loop 39 - Core slimming
+
+Detailed rules, phases and the line-count baseline: [loops/LOOP39.md](loops/LOOP39.md).
 
 - Goal: The same behaviour with clearly less code in `core/`, `adapters/`, `apps/desktop/backend/` and their tests.
 - In scope: A read-only audit first: lines per feature, duplicated logic, defensive code that no trust boundary in 03_SECURITY.md needs, settings or features nobody uses, and tests that check the same behaviour more than once. The owner picks what to cut or merge from that list. Then one slice per package group, each with the full test suite green. FLTK UI code is out of scope (Loop 40 and 41 decide its future).
@@ -106,6 +116,7 @@ Owner decisions for 2.0:
   - libmpv split: session control (commands, properties, snapshots, events) becomes UI-neutral in `adapters/player/libmpv`; only "draw the current frame into this toolkit's OpenGL context" stays per UI.
   - A small composition root wires the adapters once; the UI entry only starts a window with the backend.
   - `tests/architecture` enforces the UI import rule.
+- Out of scope: Any visible change, new backend actions beyond those the moved code needs (each one listed in LOOP40.md and owner-approved), a second UI, code for a specific new toolkit.
 - Done when: A headless fake UI in a test drives search, detail, play, autoplay and history through the backend API alone; the import rule test passes; the FLTK app works as before (owner check).
 
 ### Loop 41 - UI toolkit trial
@@ -113,6 +124,7 @@ Owner decisions for 2.0:
 - Goal: Decide with measurements whether 2.0 keeps FLTK or moves to a better Go UI.
 - In scope: The owner and the assistant list candidates (community recommendations welcome; Giu/cimgui-go is the first known one; Gio was tried by the owner and rejected for look and resource use). Each candidate gets the same small prototype on the Loop 40 backend: a Home cover grid, a Chinese search box, and an episode playing through libmpv with on-video controls that auto-hide. FLTK is measured with the same scenario.
 - Criteria: modern look the owner accepts; idle private working set and CPU close to FLTK v1.x (Loop 38 measured 10.3 MiB idle) and below OneAnime in comparable states; libmpv video with controls drawn over it; Chinese text and IME input; keyboard focus everywhere; no WebView; Windows now and Linux in Loop 48; maintained upstream; licence fits the portable ZIP. Pure Go is preferred; cgo is accepted only with the msvcrt MinGW toolchain already used.
+- Out of scope: Changing the shipped app. Prototypes live under `artifacts/` (git-ignored, own `go.mod`), never in the main module, and are deleted after the decision; no candidate dependency enters the main `go.mod` in this loop. At most three candidates besides FLTK unless the owner adds more.
 - Done when: A table of measurements and screenshots per candidate exists, and the owner chooses the 2.0 UI in writing (recorded as an ADR).
 
 ### Loop 42 - 2.0 design

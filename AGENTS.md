@@ -17,7 +17,7 @@ The full process is [docs/05_WORKFLOW.md](docs/05_WORKFLOW.md). It overrides any
 
 ## Hard rules
 
-- Work only on the active loop's scope. One coherent slice per loop.
+- Work only on the active loop's scope. One coherent slice per loop. Do only what the loop file lists and touch only the paths it allows; anything else you notice goes into its "Noticed, not done" list, never into code. No new feature, setting, package, dependency or abstraction the loop does not name.
 - Persistent writes only inside this repository. No global installs, sudo, host config, credential stores or other repositories. Never widen permissions to make something pass; report `ENVIRONMENT_BLOCKED` instead.
 - Commit, push, workflow edits (`.github/**`), CI reruns, releases, new dependencies, and changes to product, architecture, security or acceptance meaning need explicit owner approval first. Default push target is `main`.
 - Never weaken, skip or special-case a test, check or criterion to get PASS.
