@@ -35,32 +35,6 @@ func TestDatabasePathRejectsUnsafeInputs(t *testing.T) {
 	}
 }
 
-func TestDatabasePathRejectsSymlinkAndNonRegularPath(t *testing.T) {
-	root := t.TempDir()
-	directory := filepath.Join(root, "directory")
-	if err := os.Mkdir(directory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := databasePath(directory); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("directory path error = %v, want ErrInvalidInput", err)
-	}
-
-	target := filepath.Join(root, "target.sqlite")
-	if err := os.WriteFile(target, []byte("sqlite target"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(root, "link.sqlite")
-	if err := os.Symlink(target, link); err != nil {
-		if runtime.GOOS == "windows" {
-			t.Skipf("creating a symlink requires additional Windows privileges: %v", err)
-		}
-		t.Fatal(err)
-	}
-	if _, err := databasePath(link); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("symlink path error = %v, want ErrInvalidInput", err)
-	}
-}
-
 func TestOpenRoundTripsSpecialDatabasePath(t *testing.T) {
 	name := "anime space 資料 ?#%.sqlite"
 	if runtime.GOOS == "windows" {

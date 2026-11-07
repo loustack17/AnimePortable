@@ -532,16 +532,6 @@ func TestOpenDisablesOverallTimeoutButDoRemainsBounded(t *testing.T) {
 	}
 }
 
-func TestCloseIdleConnectionsDelegatesToTransport(t *testing.T) {
-	transport := &idleClosingTransport{}
-	c := newTestClient(t, []string{"https://example.com"}, nil, nil)
-	c.httpClient.Transport = transport
-	c.CloseIdleConnections()
-	if !transport.closed {
-		t.Fatal("transport was not asked to close idle connections")
-	}
-}
-
 func newTestClient(t *testing.T, origins []string, resolver func(context.Context, string) ([]netip.Addr, error), dialer func(context.Context, string, string) (net.Conn, error)) *Client {
 	t.Helper()
 	c, err := newClient(Config{AllowedOrigins: origins}, resolver, dialer)

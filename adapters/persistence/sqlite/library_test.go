@@ -8,12 +8,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 
 	"animeportable/core"
-	metadatapolicy "animeportable/internal/metadata"
 )
 
 func TestLibraryStatePersistsAcrossAnimeUpdatesAndReopen(t *testing.T) {
@@ -132,62 +130,6 @@ func TestLibraryValidationAndParameterizedInput(t *testing.T) {
 	}
 }
 
-func TestLibraryReferenceValidationBounds(t *testing.T) {
-	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
-	defer store.Close()
-	ctx := context.Background()
-	if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
-		t.Fatal(err)
-	}
-	tooLargeIdentity := strings.Repeat("x", maxIdentityBytes+1)
-	tooLargeTitle := strings.Repeat("x", maxTitleBytes+1)
-	tooLargeDescription := strings.Repeat("x", maxDescriptionBytes+1)
-	tooLargeCoverURL := strings.Repeat("x", metadatapolicy.MaxCoverURLBytes+1)
-	tooLargeSeason := strings.Repeat("x", metadatapolicy.MaxSeasonTextBytes+1)
-	for name, save := range map[string]func() error{
-		"source empty provider": func() error { return store.SaveSourceRef(ctx, "anime", core.SourceRef{ID: "id"}) },
-		"source empty ID":       func() error { return store.SaveSourceRef(ctx, "anime", core.SourceRef{Provider: "provider"}) },
-		"source provider bounds": func() error {
-			return store.SaveSourceRef(ctx, "anime", core.SourceRef{Provider: tooLargeIdentity, ID: "id"})
-		},
-		"source ID bounds": func() error {
-			return store.SaveSourceRef(ctx, "anime", core.SourceRef{Provider: "provider", ID: tooLargeIdentity})
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := save(); !errors.Is(err, ErrInvalidInput) {
-				t.Fatalf("error = %v, want ErrInvalidInput", err)
-			}
-		})
-	}
-	base := core.AnimeMetadata{Ref: core.MetadataRef{Provider: "provider", ID: "id"}}
-	for name, mutate := range map[string]func(*core.AnimeMetadata){
-		"empty provider":      func(metadata *core.AnimeMetadata) { metadata.Ref.Provider = "" },
-		"empty ID":            func(metadata *core.AnimeMetadata) { metadata.Ref.ID = "" },
-		"provider bounds":     func(metadata *core.AnimeMetadata) { metadata.Ref.Provider = tooLargeIdentity },
-		"ID bounds":           func(metadata *core.AnimeMetadata) { metadata.Ref.ID = tooLargeIdentity },
-		"title bounds":        func(metadata *core.AnimeMetadata) { metadata.Title = tooLargeTitle },
-		"native title bounds": func(metadata *core.AnimeMetadata) { metadata.NativeTitle = tooLargeTitle },
-		"description bounds":  func(metadata *core.AnimeMetadata) { metadata.Description = tooLargeDescription },
-		"cover URL bounds":    func(metadata *core.AnimeMetadata) { metadata.CoverURL = tooLargeCoverURL },
-		"season bounds":       func(metadata *core.AnimeMetadata) { metadata.Season = tooLargeSeason },
-		"studio bounds":       func(metadata *core.AnimeMetadata) { metadata.Studio = tooLargeIdentity },
-		"negative year":       func(metadata *core.AnimeMetadata) { metadata.Year = -1 },
-		"year bounds":         func(metadata *core.AnimeMetadata) { metadata.Year = 10000 },
-		"negative episode count": func(metadata *core.AnimeMetadata) {
-			metadata.EpisodeCount = -1
-		},
-	} {
-		t.Run("metadata "+name, func(t *testing.T) {
-			metadata := base
-			mutate(&metadata)
-			if err := store.SaveMetadata(ctx, "anime", metadata); !errors.Is(err, ErrInvalidInput) {
-				t.Fatalf("error = %v, want ErrInvalidInput", err)
-			}
-		})
-	}
-}
-
 func TestLibraryIdentityWritesAreAtomic(t *testing.T) {
 	for _, handles := range []struct {
 		name     string
@@ -249,29 +191,6 @@ func TestMetadataIdentityReleaseNeverLeaksStorageError(t *testing.T) {
 		if err := second.SaveMetadata(ctx, "anime-b", core.AnimeMetadata{Ref: core.MetadataRef{Provider: "metadata", ID: fmt.Sprintf("released-b-%d", iteration)}}); err != nil {
 			t.Fatal(err)
 		}
-	}
-}
-
-func TestLibraryEmptyListsAreNonNil(t *testing.T) {
-	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
-	defer store.Close()
-	ctx := context.Background()
-	for name, list := range map[string]func() (any, error){
-		"anime": func() (any, error) { return store.ListAnime(ctx) },
-		"source refs": func() (any, error) {
-			return store.SourceRefs(ctx, "missing")
-		},
-		"following": func() (any, error) { return store.Following(ctx) },
-	} {
-		t.Run(name, func(t *testing.T) {
-			items, err := list()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if reflect.ValueOf(items).IsNil() || reflect.ValueOf(items).Len() != 0 {
-				t.Fatalf("items = %#v, want nonnil empty list", items)
-			}
-		})
 	}
 }
 

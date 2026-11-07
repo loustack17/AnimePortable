@@ -93,26 +93,6 @@ func TestBangumiScheduleNeverShowsSimplifiedChinese(t *testing.T) {
 	}
 }
 
-func TestBangumiScheduleMapsEveryWeekday(t *testing.T) {
-	items := make([]any, 0, 7)
-	for weekday := 1; weekday <= 7; weekday++ {
-		items = append(items, calendarItemFor(weekday, "標題", "title", weekday))
-	}
-	entries, err := scheduleOf(t, calendarDays(items))
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []time.Weekday{time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday, time.Saturday, time.Sunday}
-	if len(entries) != len(want) {
-		t.Fatalf("entries = %#v", entries)
-	}
-	for index, entry := range entries {
-		if entry.Weekday != want[index] || entry.AnimeID != "" {
-			t.Fatalf("entry %d = %#v, want weekday %v and no anime", index, entry, want[index])
-		}
-	}
-}
-
 func TestBangumiScheduleSkipsInvalidItems(t *testing.T) {
 	badType := calendarItemFor(2, "標題", "title", 1)
 	badType["type"] = 1
@@ -138,42 +118,6 @@ func TestBangumiScheduleSkipsInvalidItems(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Ref.ID != "1" || entries[0].Weekday != time.Wednesday {
 		t.Fatalf("entries = %#v", entries)
-	}
-}
-
-func TestBangumiScheduleSkipsDuplicateIDAndWeekday(t *testing.T) {
-	entries, err := scheduleOf(t, calendarDays(
-		[]any{calendarItemFor(1, "第一", "one", 1), calendarItemFor(1, "重複", "dup", 1)},
-		[]any{calendarItemFor(1, "第一", "one", 2)},
-	))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 2 || entries[0].Title != "第一" || entries[0].Weekday != time.Monday || entries[1].Weekday != time.Tuesday {
-		t.Fatalf("entries = %#v", entries)
-	}
-}
-
-func TestBangumiScheduleLimit(t *testing.T) {
-	build := func(count int) []any {
-		items := make([]any, 0, count)
-		for index := 1; index <= count; index++ {
-			items = append(items, calendarItemFor(index, "標題", "t", index%7+1))
-		}
-		return items
-	}
-	entries, err := scheduleOf(t, calendarDays(build(core.MaxScheduleEntries)))
-	if err != nil || len(entries) != core.MaxScheduleEntries {
-		t.Fatalf("at limit: %d entries, error = %v", len(entries), err)
-	}
-	entries, err = scheduleOf(t, calendarDays(build(core.MaxScheduleEntries+1)))
-	if !errors.Is(err, errMetadataMalformed) || entries != nil {
-		t.Fatalf("over limit: entries = %d, error = %v", len(entries), err)
-	}
-	// Skipped and duplicate items do not count toward the limit.
-	items := append(build(core.MaxScheduleEntries), calendarItemFor(1, "標題", "t", 2), map[string]any{"id": 0})
-	if entries, err = scheduleOf(t, calendarDays(items)); err != nil || len(entries) != core.MaxScheduleEntries {
-		t.Fatalf("skipped items counted: %d entries, error = %v", len(entries), err)
 	}
 }
 
@@ -291,12 +235,5 @@ func TestBangumiScheduleIgnoresRemoteMediaAndText(t *testing.T) {
 		if strings.Contains(text, "evil") || strings.Contains(text, "summary") {
 			t.Fatalf("remote text leaked: %#v", entry)
 		}
-	}
-}
-
-func TestBangumiScheduleUnavailableClient(t *testing.T) {
-	var client *Client
-	if _, err := client.Schedule(context.Background()); !errors.Is(err, errMetadataUnavailable) {
-		t.Fatalf("nil client error = %v", err)
 	}
 }

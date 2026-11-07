@@ -162,31 +162,6 @@ func (ctx *cancelAfterChecksContext) Value(any) any {
 	return nil
 }
 
-func episodeBodyWithCount(count int) string {
-	var builder strings.Builder
-	builder.WriteString(`<html><body><main id="main">`)
-	for index := 0; index < count; index++ {
-		postID := 10000 + index
-		fmt.Fprintf(&builder, `<article id="post-%d" class="category-42"><h2 class="entry-title"><a href="/%d">Show [%d]</a></h2></article>`, postID, postID, index+1)
-	}
-	builder.WriteString(`</main></body></html>`)
-	return builder.String()
-}
-
-func episodePageBody(postID, page, nextPage int) string {
-	navigation := ""
-	if nextPage > 0 {
-		navigation = fmt.Sprintf(`<nav class="navigation"><div class="nav-previous"><a href="/category/example/page/%d">Older</a></div></nav>`, nextPage)
-	}
-	return fmt.Sprintf(`<html><body><main id="main"><article id="post-%d" class="category-42"><h2 class="entry-title"><a href="/%d">Show [%d]</a></h2></article></main>%s</body></html>`, postID, postID, page, navigation)
-}
-
-func episodeTextNode(value string) *html.Node {
-	root := &html.Node{Type: html.ElementNode, Data: "a"}
-	root.AppendChild(&html.Node{Type: html.TextNode, Data: value})
-	return root
-}
-
 func documentWithNodeCount(count int) *html.Node {
 	root := &html.Node{Type: html.DocumentNode}
 	main := &html.Node{Type: html.ElementNode, Data: "main", Attr: []html.Attribute{{Key: "id", Val: "main"}}}
@@ -289,31 +264,6 @@ func TestParseCatalogRejectsMalformedTopLevelAndExcessRows(t *testing.T) {
 	}
 	if _, err := parseCatalog(context.Background(), body); !errors.Is(err, errCatalogMalformed) {
 		t.Fatalf("excess rows error = %v", err)
-	}
-}
-
-func TestParseRowEnforcesRawAndNormalizedTitleLimits(t *testing.T) {
-	for _, fragment := range []string{
-		strings.Repeat("x", maxTitleFragmentBytes+1),
-		"<span>" + strings.Repeat("x", maxTitleTextBytes+1) + "</span>",
-	} {
-		row, err := json.Marshal([]any{1, fragment})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, ok := parseRow(context.Background(), row); ok {
-			t.Fatal("over-limit row accepted")
-		}
-	}
-}
-
-func TestNormalizeTitleEnforcesRuneLimitBelowByteLimit(t *testing.T) {
-	fragment := strings.Repeat("界", maxTitleTextRunes+1)
-	if len(fragment) >= maxTitleTextBytes {
-		t.Fatalf("fragment bytes = %d", len(fragment))
-	}
-	if _, err := normalizeTitle(context.Background(), fragment); !errors.Is(err, errCatalogMalformed) {
-		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -699,148 +649,6 @@ func TestEpisodesRejectsBoundsAndMIMEViolations(t *testing.T) {
 	}
 }
 
-func TestEpisodesEnforcesLabelLimitsAndSkipsMalformedEntries(t *testing.T) {
-	base := `<html><body><main id="main">%s</main></body></html>`
-	article := func(postID, label string) string {
-		return `<article id="post-` + postID + `" class="category-42"><h2 class="entry-title"><a href="/` + postID + `">Show [` + label + `]</a></h2></article>`
-	}
-	exact := strings.Repeat("é", maxEpisodeLabelRunes)
-	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(fmt.Sprintf(base, article("1", exact)))}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-	if err != nil || len(items) != 1 || items[0].Number != exact {
-		t.Fatalf("exact label items = %#v error = %v", items, err)
-	}
-	tooManyBytes := strings.Repeat("é", maxEpisodeLabelRunes-1) + "界"
-	items, err = newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(fmt.Sprintf(base, article("2", tooManyBytes)))}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-	if !errors.Is(err, errEpisodesMalformed) || items != nil {
-		t.Fatalf("large label items = %#v error = %v", items, err)
-	}
-	validArticle := article("3", "1")
-	malformedArticle := strings.Replace(article("4", ""), "Show []", "Show [", 1)
-	body := fmt.Sprintf(base, malformedArticle+validArticle)
-	items, err = newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-	if err != nil || len(items) != 1 || items[0].Ref.ID != "3" {
-		t.Fatalf("skipped malformed items = %#v error = %v", items, err)
-	}
-}
-
-func TestEpisodeBodyAndDOMExactLimits(t *testing.T) {
-	base := episodeBodyWithCount(1)
-	exactBody := base + strings.Repeat(" ", maxEpisodeBodyBytes-len(base))
-	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(exactBody)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-	if err != nil || len(items) != 1 {
-		t.Fatalf("exact body items = %d error = %v", len(items), err)
-	}
-	items, err = newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(exactBody + " ")}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-	if !errors.Is(err, errEpisodesMalformed) || items != nil {
-		t.Fatalf("body +1 items = %#v error = %v", items, err)
-	}
-	if _, err := inspectEpisodeDocument(context.Background(), documentWithNodeCount(maxEpisodeDOMNodes)); err != nil {
-		t.Fatalf("exact DOM error = %v", err)
-	}
-	if _, err := inspectEpisodeDocument(context.Background(), documentWithNodeCount(maxEpisodeDOMNodes+1)); !errors.Is(err, errEpisodesMalformed) {
-		t.Fatalf("DOM +1 error = %v", err)
-	}
-}
-
-func TestEpisodePageAndCountExactLimits(t *testing.T) {
-	responses := make([]*securehttp.Response, 0, maxEpisodePages)
-	for page := 1; page <= maxEpisodePages; page++ {
-		next := 0
-		if page < maxEpisodePages {
-			next = page + 1
-		}
-		responses = append(responses, episodeResponse(episodePageBody(10000+page, page, next)))
-	}
-	items, err := newWithDo(&sequenceEpisodeClient{responses: responses}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-	if err != nil || len(items) != maxEpisodePages {
-		t.Fatalf("exact pages items = %d error = %v", len(items), err)
-	}
-	responses[maxEpisodePages-1] = episodeResponse(episodePageBody(10000+maxEpisodePages, maxEpisodePages, maxEpisodePages+1))
-	items, err = newWithDo(&sequenceEpisodeClient{responses: responses}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-	if !errors.Is(err, errEpisodesMalformed) || items != nil {
-		t.Fatalf("pages +1 items = %#v error = %v", items, err)
-	}
-	exactEpisodes := episodeBodyWithCount(maxEpisodeCount)
-	items, err = newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(exactEpisodes)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-	if err != nil || len(items) != maxEpisodeCount {
-		t.Fatalf("exact episodes items = %d error = %v", len(items), err)
-	}
-	items, err = newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(episodeBodyWithCount(maxEpisodeCount + 1))}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-	if !errors.Is(err, errEpisodesMalformed) || items != nil {
-		t.Fatalf("episodes +1 items = %#v error = %v", items, err)
-	}
-}
-
-func TestEpisodeTextLabelAndIDExactLimits(t *testing.T) {
-	exactTitle := strings.Repeat("😀", maxEpisodeTitleRunes)
-	if len(exactTitle) != maxEpisodeTitleBytes {
-		t.Fatalf("exact title bytes = %d", len(exactTitle))
-	}
-	if got, err := normalizeEpisodeText(context.Background(), episodeTextNode(exactTitle)); err != nil || got != exactTitle {
-		t.Fatalf("exact title length = %d error = %v", len(got), err)
-	}
-	for name, value := range map[string]string{
-		"bytes +1": exactTitle + "x",
-		"runes +1": strings.Repeat("x", maxEpisodeTitleRunes+1),
-	} {
-		if _, err := normalizeEpisodeText(context.Background(), episodeTextNode(value)); !errors.Is(err, errEpisodesMalformed) {
-			t.Fatalf("%s error = %v", name, err)
-		}
-	}
-	exactLabel := strings.Repeat("é", maxEpisodeLabelRunes)
-	if len(exactLabel) != maxEpisodeLabelBytes {
-		t.Fatalf("exact label bytes = %d", len(exactLabel))
-	}
-	if got, ok, overLimit := episodeNumberResult("Show [" + exactLabel + "]"); !ok || overLimit || got != exactLabel {
-		t.Fatalf("exact label = %q ok=%v over=%v", got, ok, overLimit)
-	}
-	for name, value := range map[string]string{
-		"bytes +1": strings.Repeat("é", maxEpisodeLabelRunes-1) + "界",
-		"runes +1": strings.Repeat("x", maxEpisodeLabelRunes+1),
-	} {
-		if _, ok, overLimit := episodeNumberResult("Show [" + value + "]"); ok || !overLimit {
-			t.Fatalf("%s ok=%v over=%v", name, ok, overLimit)
-		}
-	}
-	exactPostID := strings.Repeat("9", maxEpisodeIDDigits)
-	if got, ok, overLimit := parsePostIDResult("post-" + exactPostID); !ok || overLimit || got != exactPostID {
-		t.Fatalf("exact post ID = %q ok=%v over=%v", got, ok, overLimit)
-	}
-	if _, ok, overLimit := parsePostIDResult("post-" + exactPostID + "9"); ok || !overLimit {
-		t.Fatalf("post ID +1 ok=%v over=%v", ok, overLimit)
-	}
-	exactCategory := strings.Repeat("9", maxCategoryIDDigits)
-	if got, ok := parseEpisodeCategoryID(core.SourceRef{Provider: providerID, ID: exactCategory}); !ok || got != exactCategory {
-		t.Fatalf("exact category = %q ok=%v", got, ok)
-	}
-	if _, ok := parseEpisodeCategoryID(core.SourceRef{Provider: providerID, ID: exactCategory + "9"}); ok {
-		t.Fatal("category ID +1 accepted")
-	}
-}
-
-func TestEpisodesRejectsOverLimitArticleBesideValidSibling(t *testing.T) {
-	valid := `<article id="post-1" class="category-42"><h2 class="entry-title"><a href="/1">Show [01]</a></h2></article>`
-	article := func(postID, title string) string {
-		return `<article id="post-` + postID + `" class="category-42"><h2 class="entry-title"><a href="/` + postID + `">` + title + `</a></h2></article>`
-	}
-	cases := map[string]string{
-		"title bytes +1": article("2", strings.Repeat("😀", maxEpisodeTitleRunes)+"x"),
-		"title runes +1": article("3", strings.Repeat("x", maxEpisodeTitleRunes+1)),
-		"label bytes +1": article("4", "Show ["+strings.Repeat("é", maxEpisodeLabelRunes-1)+"界]"),
-		"label runes +1": article("5", "Show ["+strings.Repeat("x", maxEpisodeLabelRunes+1)+"]"),
-		"post ID +1":     article(strings.Repeat("9", maxEpisodeIDDigits+1), "Show [02]"),
-	}
-	for name, overLimit := range cases {
-		t.Run(name, func(t *testing.T) {
-			body := `<html><body><main id="main">` + valid + overLimit + `</main></body></html>`
-			items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
-			if !errors.Is(err, errEpisodesMalformed) || items != nil {
-				t.Fatalf("items = %#v error = %v", items, err)
-			}
-		})
-	}
-}
-
 func TestEpisodeTitleExcludesRawTextTokens(t *testing.T) {
 	const token = "playback-secret-token"
 	excluded := ""
@@ -855,20 +663,6 @@ func TestEpisodeTitleExcludesRawTextTokens(t *testing.T) {
 	expected := []core.SourceEpisode{{Ref: episodeRef("123"), Number: "SP"}}
 	if !reflect.DeepEqual(items, expected) || strings.Contains(fmt.Sprintf("%#v", items), token) {
 		t.Fatalf("items = %#v", items)
-	}
-}
-
-func TestEpisodesRejectsNilInputsAndNilResponse(t *testing.T) {
-	ref := core.SourceRef{Provider: providerID, ID: "42"}
-	if items, err := newWithDo(&fakeClient{}).Episodes(nil, ref); !errors.Is(err, errEpisodesUnavailable) || items != nil {
-		t.Fatalf("nil context items = %#v error = %v", items, err)
-	}
-	var client *Client
-	if items, err := client.Episodes(context.Background(), ref); !errors.Is(err, errEpisodesUnavailable) || items != nil {
-		t.Fatalf("nil client items = %#v error = %v", items, err)
-	}
-	if items, err := newWithDo(&fakeClient{}).Episodes(context.Background(), ref); !errors.Is(err, errEpisodesUnavailable) || items != nil {
-		t.Fatalf("nil response items = %#v error = %v", items, err)
 	}
 }
 
@@ -946,16 +740,6 @@ func TestAnime1AdapterAcceptanceContract(t *testing.T) {
 		Resolve:          contract.SourceResolveCase{Episode: episodeRef("101")},
 		ForbiddenStrings: []string{"do-not-return", "secret", "<script>"},
 	})
-}
-
-func TestUnsupportedMethods(t *testing.T) {
-	client := New(nil)
-	if _, err := client.Episodes(context.Background(), core.SourceRef{}); !errors.Is(err, errEpisodesInvalidRef) {
-		t.Fatal(err)
-	}
-	if _, err := client.Resolve(context.Background(), core.EpisodeRef{}); !errors.Is(err, errResolverInvalidRef) {
-		t.Fatal(err)
-	}
 }
 
 func TestCatalogRowsGiveYearSeasonAndEpisodeCountOnlyWhenClear(t *testing.T) {

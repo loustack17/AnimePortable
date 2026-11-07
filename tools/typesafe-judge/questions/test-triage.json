@@ -1,0 +1,10 @@
+{
+ "verdict": {
+  "type": "choice",
+  "instructions": "Given `test` (a Go test's package, name, doc comment and first lines) and `rule` (the owner's test policy), should the project keep this test?",
+  "criteria": {
+   "KEEP": "It checks something that happens in real use: a user flow, a real outside event (offline, server error or changed page, bad proxy, failed move, database upgrade) or an attack that can really reach this code",
+   "DELETE": "It checks a case that cannot happen in real use (nil or invalid input from our own code, impossible timing, exact boundary plus one, tampered or foreign database), a single detail that another test already walks, or exists only for coverage"
+  }
+ }
+}

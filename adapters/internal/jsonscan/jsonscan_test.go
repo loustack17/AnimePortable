@@ -35,18 +35,6 @@ func TestObject(t *testing.T) {
 	}
 }
 
-func TestObjectNestingLimitIsInclusive(t *testing.T) {
-	nested := func(depth int) string {
-		return `{"a":` + strings.Repeat("[", depth) + strings.Repeat("]", depth) + `}`
-	}
-	if !Object(json.NewDecoder(strings.NewReader(nested(3))), 3) {
-		t.Fatal("value at the depth limit rejected")
-	}
-	if Object(json.NewDecoder(strings.NewReader(nested(4))), 3) {
-		t.Fatal("value past the depth limit accepted")
-	}
-}
-
 func TestObjectLeavesNumberHandlingToTheDecoder(t *testing.T) {
 	body := []byte(`{"n":1e400}`)
 	if Object(json.NewDecoder(bytes.NewReader(body)), 8) {

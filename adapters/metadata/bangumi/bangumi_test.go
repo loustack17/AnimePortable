@@ -440,29 +440,6 @@ func mustJSONForName(value any) []byte {
 	return body
 }
 
-func TestBangumiEpisodeValidationIsAtomic(t *testing.T) {
-	cases := []struct {
-		name  string
-		field string
-		value any
-	}{
-		{name: "negative total", field: "total_episodes", value: -1},
-		{name: "oversized total", field: "total_episodes", value: testMaxEpisodeCount + 1},
-		{name: "negative eps", field: "eps", value: -1},
-		{name: "oversized eps", field: "eps", value: testMaxEpisodeCount + 1},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			subject := validSubject()
-			subject[test.field] = test.value
-			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, subject)}).Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"})
-			if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
-				t.Fatalf("metadata = %#v, error = %v", metadata, err)
-			}
-		})
-	}
-}
-
 func TestBangumiSearchRejectsInvalidCandidateAtomically(t *testing.T) {
 	invalid := validSubject()
 	invalid["id"] = 0
@@ -476,19 +453,6 @@ func TestBangumiSearchRejectsInvalidCandidateAtomically(t *testing.T) {
 	items, err = newWithDo(&fakeClient{response: jsonResponse(t, searchPayload(invalid))}).Search(context.Background(), core.MetadataQuery{Title: "Anime"})
 	if !errors.Is(err, errMetadataMalformed) || items != nil {
 		t.Fatalf("non-anime items = %#v, error = %v", items, err)
-	}
-}
-
-func TestBangumiSearchRejectsExcessiveResultsAtomically(t *testing.T) {
-	subjects := make([]any, 0, testMaxSearchResults+1)
-	for index := 0; index < testMaxSearchResults+1; index++ {
-		subject := validSubject()
-		subject["id"] = index + 1
-		subjects = append(subjects, subject)
-	}
-	items, err := newWithDo(&fakeClient{response: jsonResponse(t, searchPayload(subjects...))}).Search(context.Background(), core.MetadataQuery{Title: "Anime"})
-	if !errors.Is(err, errMetadataMalformed) || items != nil {
-		t.Fatalf("items = %#v, error = %v", items, err)
 	}
 }
 
@@ -552,26 +516,6 @@ func TestBangumiResponseValidation(t *testing.T) {
 
 func nestedJSON(depth int) []byte {
 	return []byte(`{"id":123,"type":2,"name":"日本語タイトル","name_cn":"中文標題","summary":"","date":"","eps":0,"total_episodes":0,"images":null,"future":` + strings.Repeat("[", depth) + "0" + strings.Repeat("]", depth) + "}")
-}
-
-func TestBangumiRejectsOversizedTextAtomically(t *testing.T) {
-	for _, test := range []struct {
-		name  string
-		field string
-		value string
-	}{
-		{name: "title", field: "name_cn", value: strings.Repeat("x", testMaxTitleTextBytes+1)},
-		{name: "summary", field: "summary", value: strings.Repeat("x", testMaxDescriptionBytes+1)},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			subject := validSubject()
-			subject[test.field] = test.value
-			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, subject)}).Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"})
-			if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
-				t.Fatalf("metadata = %#v, error = %v", metadata, err)
-			}
-		})
-	}
 }
 
 func TestBangumiDescriptionNormalization(t *testing.T) {
@@ -727,30 +671,6 @@ func TestBangumiHTTPStatusMappingAndRedaction(t *testing.T) {
 		if !errors.Is(err, errMetadataUnavailable) || metadata != (core.AnimeMetadata{}) || strings.Contains(err.Error(), "remote-secret") {
 			t.Fatalf("status %d metadata = %#v, error = %v", status, metadata, err)
 		}
-	}
-}
-
-func TestBangumiReferenceValidation(t *testing.T) {
-	client := &fakeClient{response: jsonResponse(t, validSubject())}
-	provider := newWithDo(client)
-	refs := []core.MetadataRef{
-		{Provider: "other", ID: "123"},
-		{Provider: testProviderID, ID: ""},
-		{Provider: testProviderID, ID: "0"},
-		{Provider: testProviderID, ID: "01"},
-		{Provider: testProviderID, ID: "-1"},
-		{Provider: testProviderID, ID: "12.3"},
-		{Provider: testProviderID, ID: "not-an-id"},
-		{Provider: testProviderID, ID: strings.Repeat("9", testMaxMetadataIDDigits+1)},
-	}
-	for _, ref := range refs {
-		metadata, err := provider.Get(context.Background(), ref)
-		if !errors.Is(err, errMetadataInvalidRef) || metadata != (core.AnimeMetadata{}) {
-			t.Fatalf("ref %#v = %#v, %v", ref, metadata, err)
-		}
-	}
-	if len(client.requests) != 0 {
-		t.Fatalf("invalid refs made requests: %d", len(client.requests))
 	}
 }
 

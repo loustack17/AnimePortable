@@ -107,18 +107,6 @@ func TestOpeningsRejectMalformedAnswers(t *testing.T) {
 	}
 }
 
-func TestOpeningsRefuseInvalidInputWithoutARequest(t *testing.T) {
-	for _, input := range []struct {
-		id, episode int
-		length      time.Duration
-	}{{0, 1, time.Minute}, {1, 0, time.Minute}, {1, 1, 0}, {1, 1, 400 * time.Millisecond}, {1, 1, 25 * time.Hour}} {
-		do := &fakeDo{status: http.StatusOK, body: twoOpenings}
-		if _, err := newWithDo(do, "1").Openings(context.Background(), input.id, input.episode, input.length); err == nil || len(do.requests) != 0 {
-			t.Errorf("%+v: err %v, %d requests", input, err, len(do.requests))
-		}
-	}
-}
-
 func TestAllowedOriginsIsAniSkipOnly(t *testing.T) {
 	if got := AllowedOrigins(); len(got) != 1 || got[0] != "https://api.aniskip.com" {
 		t.Fatal(got)

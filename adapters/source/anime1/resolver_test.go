@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"animeportable/adapters/network/securehttp"
 	"animeportable/core"
@@ -136,34 +135,6 @@ func TestResolveExactProtocolAndOpaqueOutput(t *testing.T) {
 	}
 }
 
-func TestResolveValidatesInputsBeforeRequest(t *testing.T) {
-	for _, ref := range []core.EpisodeRef{
-		{},
-		{Anime: core.SourceRef{Provider: "other", ID: "42"}, ID: "101"},
-		{Anime: core.SourceRef{Provider: providerID, ID: "0"}, ID: "101"},
-		{Anime: core.SourceRef{Provider: providerID, ID: "42"}, ID: "0"},
-		{Anime: core.SourceRef{Provider: providerID, ID: "42"}, ID: "01"},
-		{Anime: core.SourceRef{Provider: providerID, ID: "42"}, ID: strings.Repeat("9", maxEpisodeIDDigits+1)},
-	} {
-		fake := &resolverClient{}
-		if _, err := newWithDo(fake).Resolve(context.Background(), ref); !errors.Is(err, errResolverInvalidRef) || len(fake.requests) != 0 {
-			t.Fatalf("ref %#v requests=%d error=%v", ref, len(fake.requests), err)
-		}
-	}
-	if _, err := newWithDo(&resolverClient{}).Resolve(nil, resolverRef()); !errors.Is(err, errResolverUnavailable) {
-		t.Fatalf("nil context error = %v", err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := newWithDo(&resolverClient{}).Resolve(ctx, resolverRef()); !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled error = %v", err)
-	}
-	var client *Client
-	if _, err := client.Resolve(context.Background(), resolverRef()); !errors.Is(err, errResolverUnavailable) {
-		t.Fatalf("nil client error = %v", err)
-	}
-}
-
 func TestResolveRejectsMalformedEpisodePages(t *testing.T) {
 	valid := string(resolverPage(resolverTestToken).Body)
 	cases := map[string]string{
@@ -188,39 +159,6 @@ func TestResolveRejectsMalformedEpisodePages(t *testing.T) {
 				t.Fatalf("source=%v requests=%d error=%v", source, len(fake.requests), err)
 			}
 		})
-	}
-}
-
-func TestResolverTokenExactLimit(t *testing.T) {
-	prefix := `%7B%22x%22%3A%22`
-	suffix := `%22%7D`
-	exact := prefix + strings.Repeat("a", maxResolverTokenBytes-len(prefix)-len(suffix)) + suffix
-	if len(exact) != maxResolverTokenBytes || !validResolverToken(exact) {
-		t.Fatal("exact token limit rejected")
-	}
-	if validResolverToken(exact + "a") {
-		t.Fatal("token limit +1 accepted")
-	}
-	if validResolverToken(`%7B%22x%22%3A%22%FF%22%7D`) {
-		t.Fatal("invalid decoded UTF-8 accepted")
-	}
-}
-
-func TestResolverBodyAndDOMExactLimits(t *testing.T) {
-	exactBody := make([]byte, maxResolverBodyBytes)
-	client := newWithDo(&resolverClient{responses: []*securehttp.Response{{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html"}}, Body: exactBody}}})
-	if _, err := client.fetchResolver(context.Background(), http.MethodGet, episodesOrigin+"/101", "", "", ""); err != nil {
-		t.Fatalf("exact body rejected: %v", err)
-	}
-	client = newWithDo(&resolverClient{responses: []*securehttp.Response{{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html"}}, Body: append(exactBody, 0)}}})
-	if _, err := client.fetchResolver(context.Background(), http.MethodGet, episodesOrigin+"/101", "", "", ""); !errors.Is(err, errResolverMalformed) {
-		t.Fatalf("body limit +1 error = %v", err)
-	}
-	if _, err := resolverMain(context.Background(), documentWithNodeCount(maxResolverDOMNodes)); err != nil {
-		t.Fatalf("exact DOM rejected: %v", err)
-	}
-	if _, err := resolverMain(context.Background(), documentWithNodeCount(maxResolverDOMNodes+1)); !errors.Is(err, errResolverMalformed) {
-		t.Fatalf("DOM limit +1 error = %v", err)
 	}
 }
 
@@ -321,67 +259,6 @@ func TestResolverSourceURLPolicy(t *testing.T) {
 	overHost := strings.Repeat("a", 61) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 52) + ".v.anime1.me"
 	if len(overHost) != 254 || validResolverHost(overHost) {
 		t.Fatal("hostname limit +1 accepted")
-	}
-}
-
-func TestResolverSourceCountExactLimit(t *testing.T) {
-	sources := make([]string, 0, maxResolverSources)
-	for index := 0; index < maxResolverSources-1; index++ {
-		sources = append(sources, `{"src":"https://bad.example/video.webm","type":"video/webm"}`)
-	}
-	sources = append(sources, `{"src":"https://cdn.v.anime1.me/video.mp4","type":"video/mp4"}`)
-	body := []byte(`{"metadata":"ignored","s":[` + strings.Join(sources, ",") + `]}`)
-	if _, err := parseResolverAPI(context.Background(), body); err != nil {
-		t.Fatalf("exact source count rejected: %v", err)
-	}
-	sources = append(sources, `{"src":"https://cdn.v.anime1.me/extra.mp4","type":"video/mp4"}`)
-	if _, err := parseResolverAPI(context.Background(), []byte(`{"s":[`+strings.Join(sources, ",")+`]}`)); !errors.Is(err, errResolverMalformed) {
-		t.Fatalf("source count +1 error = %v", err)
-	}
-}
-
-func TestResolverJSONNestingExactLimit(t *testing.T) {
-	nested := func(levels int) []byte {
-		return []byte(`{"x":` + strings.Repeat("[", levels) + strings.Repeat("]", levels) + `,"s":[{"src":"https://cdn.v.anime1.me/video.mp4","type":"video/mp4"}]}`)
-	}
-	if _, err := parseResolverAPI(context.Background(), nested(maxResolverJSONDepth)); err != nil {
-		t.Fatalf("exact nesting depth rejected: %v", err)
-	}
-	if _, err := parseResolverAPI(context.Background(), nested(maxResolverJSONDepth+1)); !errors.Is(err, errResolverMalformed) {
-		t.Fatalf("nesting depth +1 error = %v", err)
-	}
-	deep := nested((maxResolverBodyBytes - 200) / 2)
-	if len(deep) > maxResolverBodyBytes {
-		t.Fatalf("deep body is %d bytes, over the body limit", len(deep))
-	}
-	if _, err := parseResolverAPI(context.Background(), deep); !errors.Is(err, errResolverMalformed) {
-		t.Fatalf("deeply nested body error = %v", err)
-	}
-}
-
-func TestResolverCookiesExactLimitsAndFailures(t *testing.T) {
-	exact := strings.Repeat("a", maxResolverCookieBytes)
-	header := http.Header{"Set-Cookie": {"e=" + exact, "h=" + exact, "p=" + exact, "ignored=value"}}
-	value, err := resolverCookieHeader(header)
-	if err != nil || !strings.HasPrefix(value, "e=") || !strings.Contains(value, "; h=") || !strings.Contains(value, "; p=") {
-		t.Fatalf("exact cookies rejected: %v", err)
-	}
-	cases := []http.Header{
-		{"Set-Cookie": {"e=" + strings.Repeat("a", maxResolverCookieBytes+1), "h=h", "p=p"}},
-		{"Set-Cookie": {"e=e", "e=duplicate", "h=h", "p=p"}},
-		{"Set-Cookie": {`e="quoted"`, "h=h", "p=p"}},
-		{"Set-Cookie": {"e=e; Max-Age=0", "h=h", "p=p"}},
-		{"Set-Cookie": {"e=e; Expires=" + time.Now().UTC().Format(http.TimeFormat), "h=h", "p=p"}},
-		{"Set-Cookie": {"e", "e=valid", "h=h", "p=p"}},
-		{"Set-Cookie": {"e=e; Max-Age=abc", "h=h", "p=p"}},
-		{"Set-Cookie": {"e=e; Expires=garbage", "h=h", "p=p"}},
-		{"Set-Cookie": {"e=e", "h=h"}},
-		{"Set-Cookie": {"e=bad,value", "h=h", "p=p"}},
-	}
-	for _, candidate := range cases {
-		if _, err := resolverCookieHeader(candidate); !errors.Is(err, errResolverMalformed) {
-			t.Fatalf("invalid cookie accepted: %#v", candidate)
-		}
 	}
 }
 

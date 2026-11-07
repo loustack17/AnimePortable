@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -150,75 +149,6 @@ func TestScheduleFillsAnimeIDFromMatchingMetadataOnly(t *testing.T) {
 	}
 	if got[0].AnimeID != "known" || got[1].AnimeID != "" || got[2].AnimeID != "" {
 		t.Fatalf("anime ids = %q, %q, %q, want known, empty, empty", got[0].AnimeID, got[1].AnimeID, got[2].AnimeID)
-	}
-}
-
-func TestReplaceScheduleRejectsInvalidInputWithoutWriting(t *testing.T) {
-	store := openScheduleStore(t)
-	defer store.Close()
-	ctx := context.Background()
-	kept := scheduleEntry("kept", time.Monday)
-	if err := store.ReplaceSchedule(ctx, []core.ScheduleEntry{kept}); err != nil {
-		t.Fatal(err)
-	}
-	valid := scheduleEntry("1", time.Tuesday)
-	with := func(change func(*core.ScheduleEntry)) []core.ScheduleEntry {
-		entry := scheduleEntry("2", time.Wednesday)
-		change(&entry)
-		return []core.ScheduleEntry{valid, entry}
-	}
-	tooMany := make([]core.ScheduleEntry, core.MaxScheduleEntries+1)
-	for index := range tooMany {
-		tooMany[index] = scheduleEntry(strconv.Itoa(index), time.Monday)
-	}
-	oversized := strings.Repeat("x", maxIdentityBytes+1)
-	tests := map[string][]core.ScheduleEntry{
-		"over limit":        tooMany,
-		"empty provider":    with(func(e *core.ScheduleEntry) { e.Ref.Provider = "" }),
-		"empty external id": with(func(e *core.ScheduleEntry) { e.Ref.ID = "" }),
-		"oversized ref":     with(func(e *core.ScheduleEntry) { e.Ref.ID = oversized }),
-		"weekday too high":  with(func(e *core.ScheduleEntry) { e.Weekday = 7 }),
-		"weekday negative":  with(func(e *core.ScheduleEntry) { e.Weekday = -1 }),
-		"both titles empty": with(func(e *core.ScheduleEntry) { e.Title, e.NativeTitle = "", "" }),
-		"control in title":  with(func(e *core.ScheduleEntry) { e.Title = "a\x01b" }),
-		"invalid utf8":      with(func(e *core.ScheduleEntry) { e.NativeTitle = "\xff" }),
-		"oversized title":   with(func(e *core.ScheduleEntry) { e.Title = strings.Repeat("t", maxTitleBytes+1) }),
-		"duplicate":         {valid, valid},
-	}
-	for name, entries := range tests {
-		if err := store.ReplaceSchedule(ctx, entries); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("%s error = %v, want ErrInvalidInput", name, err)
-		}
-		if got, err := store.Schedule(ctx); err != nil || !reflect.DeepEqual(got, []core.ScheduleEntry{kept}) {
-			t.Fatalf("%s left schedule = %#v, %v, want previous", name, got, err)
-		}
-	}
-}
-
-func TestScheduleAcceptsMaximumEntries(t *testing.T) {
-	store := openScheduleStore(t)
-	defer store.Close()
-	entries := make([]core.ScheduleEntry, core.MaxScheduleEntries)
-	for index := range entries {
-		entries[index] = scheduleEntry(strconv.Itoa(index), time.Weekday(index%7))
-	}
-	if err := store.ReplaceSchedule(context.Background(), entries); err != nil {
-		t.Fatal(err)
-	}
-	if count := scheduleRowCount(t, store); count != core.MaxScheduleEntries {
-		t.Fatalf("rows = %d, want %d", count, core.MaxScheduleEntries)
-	}
-}
-
-func TestScheduleFailsClosedOnCorruptRow(t *testing.T) {
-	store := openScheduleStore(t)
-	defer store.Close()
-	if _, err := store.db.Exec("INSERT INTO schedule_entries (provider, external_id, title, native_title, weekday, position) VALUES ('bangumi', '1', 'a' || char(1), '', 1, 0)"); err != nil {
-		t.Fatal(err)
-	}
-	got, err := store.Schedule(context.Background())
-	if !errors.Is(err, ErrStorage) || len(got) != 0 {
-		t.Fatalf("corrupt row = %#v, %v, want ErrStorage and no entries", got, err)
 	}
 }
 

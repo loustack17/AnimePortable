@@ -65,47 +65,6 @@ func TestEpisodeMappingsPersistSortAndEnforceIdentity(t *testing.T) {
 	}
 }
 
-func TestEpisodeMappingsValidateReferencesAndReturnSafeEmptyLists(t *testing.T) {
-	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
-	defer store.Close()
-	ctx := context.Background()
-	if err := store.SaveAnime(ctx, core.Anime{ID: "anime"}); err != nil {
-		t.Fatal(err)
-	}
-	ref := episodeRef("provider", "source-anime", "source-episode")
-	mappingValue := mapping("anime", "episode", ref)
-	if err := store.SaveEpisodeMapping(ctx, mappingValue); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("missing source ref error = %v, want ErrInvalidInput", err)
-	}
-	if err := store.SaveSourceRef(ctx, core.AnimeID("anime"), ref.Anime); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := store.EpisodeMappings(ctx, core.AnimeID("missing")); err != nil || got == nil || len(got) != 0 {
-		t.Fatalf("missing anime mappings = %#v, %v, want nonnil empty", got, err)
-	}
-	cancelled, cancel := context.WithCancel(ctx)
-	cancel()
-	if got, err := store.EpisodeMappings(cancelled, core.AnimeID("anime")); got == nil || !errors.Is(err, context.Canceled) {
-		t.Fatalf("cancelled mappings = %#v, %v", got, err)
-	}
-	if err := store.SaveEpisodeMapping(cancelled, mappingValue); !errors.Is(err, context.Canceled) {
-		t.Fatalf("cancelled mapping save error = %v", err)
-	}
-	tooLong := strings.Repeat("x", maxIdentityBytes+1)
-	invalid := []core.EpisodeMapping{
-		{AnimeID: "", EpisodeID: "episode", Ref: ref},
-		{AnimeID: "anime", EpisodeID: "", Ref: ref},
-		{AnimeID: "anime", EpisodeID: "episode", Ref: core.EpisodeRef{Anime: core.SourceRef{Provider: "", ID: "id"}, ID: "episode"}},
-		{AnimeID: "anime", EpisodeID: "episode", Ref: core.EpisodeRef{Anime: core.SourceRef{Provider: "provider", ID: "source-anime"}, ID: ""}},
-		{AnimeID: "anime", EpisodeID: core.EpisodeID(tooLong), Ref: ref},
-	}
-	for index, item := range invalid {
-		if err := store.SaveEpisodeMapping(ctx, item); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("invalid mapping %d error = %v, want ErrInvalidInput", index, err)
-		}
-	}
-}
-
 func TestEpisodeMappingsUpgradeFromInitialSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "anime.sqlite")
 	initial, err := migrationFS.ReadFile("migrations/0001_initial.sql")

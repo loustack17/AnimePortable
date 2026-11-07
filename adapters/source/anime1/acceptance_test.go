@@ -121,14 +121,3 @@ func assertAcceptanceErrorRedacted(t *testing.T, err error) {
 		}
 	}
 }
-
-func TestAnime1AdapterAcceptancePublicComposition(t *testing.T) {
-	client, err := securehttp.New(securehttp.Config{AllowedOrigins: AllowedOrigins()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	clientSource := New(client)
-	if clientSource == nil {
-		t.Fatal("Anime1 source composition returned nil")
-	}
-}

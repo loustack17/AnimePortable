@@ -54,28 +54,6 @@ func TestLoadAcceptsJPEGAndPNGWithExactRequest(t *testing.T) {
 	}
 }
 
-func TestLoadAcceptsExactBodyLimitAndRejectsOtherSizes(t *testing.T) {
-	body := encodedJPEG(t, 1, 1)
-	exact := append(append([]byte(nil), body...), make([]byte, maxResponseBytes-len(body))...)
-	for _, test := range []struct {
-		name string
-		body []byte
-		want error
-	}{
-		{"exact", exact, nil},
-		{"over", append(append([]byte(nil), exact...), 0), ErrInvalidImage},
-		{"empty", nil, ErrInvalidImage},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			loader := newWithClient(&fakeClient{response: imageResponse("image/jpeg", test.body)})
-			result, err := loader.Load(context.Background(), "https://lain.bgm.tv/pic/cover.jpg")
-			if !errors.Is(err, test.want) || test.want != nil && !zeroResult(result) {
-				t.Fatal(len(result.Bytes), err)
-			}
-		})
-	}
-}
-
 func TestLoadRejectsInvalidResponseMetadata(t *testing.T) {
 	pngBody := encodedPNG(t, 2, 2)
 	jpegBody := encodedJPEG(t, 2, 2)
@@ -144,40 +122,6 @@ func TestLoadRejectsMalformedAndUnsupportedImages(t *testing.T) {
 				t.Fatal(result, err)
 			}
 		})
-	}
-}
-
-func TestLoadChecksDimensionAndPixelLimits(t *testing.T) {
-	for _, test := range []struct {
-		name   string
-		width  int
-		height int
-		want   bool
-	}{
-		{"exact dimension and pixels", 4096, 1024, true},
-		{"dimension over", 4097, 1, false},
-		{"zero width", 0, 1, false},
-		{"zero height", 1, 0, false},
-		{"pixels over", 2049, 2048, false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			if got := validDimensions(test.width, test.height); got != test.want {
-				t.Fatalf("validDimensions(%d, %d) = %v, want %v", test.width, test.height, got, test.want)
-			}
-		})
-	}
-}
-
-func TestPixelLimitExactPlusOneAndOverflow(t *testing.T) {
-	if !validPixelCount(maxPixels, 1) {
-		t.Fatal("exact pixel limit rejected")
-	}
-	if validPixelCount(maxPixels+1, 1) {
-		t.Fatal("pixel limit plus one accepted")
-	}
-	maxInt := int(^uint(0) >> 1)
-	if validPixelCount(maxInt, maxInt) {
-		t.Fatal("overflowing product accepted")
 	}
 }
 
@@ -293,20 +237,6 @@ func TestLoadLimitsConcurrentWorkAndCancelsPermitWait(t *testing.T) {
 	if client.maxActive != maxConcurrentLoads {
 		t.Fatal(client.maxActive)
 	}
-}
-
-func TestCloseIdleConnectionsAndNewLifecycle(t *testing.T) {
-	client := &fakeClient{}
-	loader := newWithClient(client)
-	loader.CloseIdleConnections()
-	if client.closes != 1 {
-		t.Fatal(client.closes)
-	}
-	created, err := New(nil)
-	if err != nil || created == nil {
-		t.Fatal(created, err)
-	}
-	created.CloseIdleConnections()
 }
 
 type fakeClient struct {

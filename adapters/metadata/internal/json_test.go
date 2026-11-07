@@ -70,13 +70,3 @@ func TestDecodeObjectDoesNotPartiallyDecodeTypeMismatch(t *testing.T) {
 		t.Fatalf("target mutated on rejected type mismatch: %#v", target)
 	}
 }
-
-func TestDecodeObjectRejectsInvalidTargets(t *testing.T) {
-	var nilPointer *map[string]any
-	tests := []any{nil, map[string]any{}, nilPointer}
-	for _, target := range tests {
-		if DecodeObject([]byte(`{"value":1}`), target, JSONLimits{MaxBytes: 1024, MaxNestingDepth: 8}) {
-			t.Fatalf("invalid target accepted: %#v", target)
-		}
-	}
-}

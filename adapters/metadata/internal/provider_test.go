@@ -4,7 +4,6 @@ package internal
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -65,16 +64,6 @@ func TestRulesCheckResponse(t *testing.T) {
 	}
 }
 
-func TestRulesDecode(t *testing.T) {
-	var value struct{ A int }
-	if err := testRules.Decode([]byte(`{"A":1}`), &value); err != nil || value.A != 1 {
-		t.Fatalf("Decode = %v, value %+v", err, value)
-	}
-	if err := testRules.Decode([]byte(`{"A":1,"A":2}`), &value); !errors.Is(err, errTestMalformed) {
-		t.Fatalf("duplicate key error = %v", err)
-	}
-}
-
 func TestBoundedText(t *testing.T) {
 	if got, ok := BoundedText(nil, metadatapolicy.TitleLimits()); !ok || got != "" {
 		t.Fatalf("missing field = %q, %v", got, ok)
@@ -86,43 +75,6 @@ func TestBoundedText(t *testing.T) {
 	long := strings.Repeat("x", metadatapolicy.MaxStudioTextBytes+1)
 	if _, ok := BoundedText(&long, metadatapolicy.StudioLimits()); ok {
 		t.Fatal("over-limit text accepted")
-	}
-}
-
-func TestValidSearchQuery(t *testing.T) {
-	for value, want := range map[string]bool{
-		"作品":        true,
-		"":          false,
-		"bad\x00":   false,
-		"line\ttab": true,
-		strings.Repeat("x", metadatapolicy.MaxTitleTextBytes+1): false,
-		strings.Repeat("字", metadatapolicy.MaxTitleTextRunes+1): false,
-		string([]byte{0xff}): false,
-	} {
-		if got := ValidSearchQuery(value); got != want {
-			t.Fatalf("ValidSearchQuery(%q) = %v, want %v", value, got, want)
-		}
-	}
-}
-
-func TestParseID(t *testing.T) {
-	for value, want := range map[string]bool{
-		"1": true, "2147483647": true, "2147483648": false, "0": false, "012": false,
-		"": false, "12a": false, "-1": false, "12345678901": false,
-	} {
-		id, numeric, ok := ParseID(value)
-		if ok != want || ok && (id != value || numeric <= 0) {
-			t.Fatalf("ParseID(%q) = %q, %d, %v", value, id, numeric, ok)
-		}
-	}
-	if _, _, ok := ParseJSONID(json.RawMessage(nil)); ok {
-		t.Fatal("empty JSON ID accepted")
-	}
-	if id, numeric, ok := ParseJSONID(json.RawMessage(`42`)); !ok || id != "42" || numeric != 42 {
-		t.Fatalf("ParseJSONID = %q, %d, %v", id, numeric, ok)
-	}
-	if _, _, ok := ParseJSONID(json.RawMessage(`"42"`)); ok {
-		t.Fatal("quoted JSON ID accepted")
 	}
 }
 

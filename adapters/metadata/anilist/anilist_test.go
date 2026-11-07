@@ -407,70 +407,11 @@ func TestAniListGetDropsInvalidCoverAndNonAnimationStudios(t *testing.T) {
 	}
 }
 
-func TestAniListGetDropsOversizedStudio(t *testing.T) {
-	media := validMedia()
-	media["studios"] = map[string]any{"nodes": []any{
-		map[string]any{"name": strings.Repeat("x", metadatapolicy.MaxStudioTextBytes+1), "isAnimationStudio": true},
-	}}
-	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if metadata.Studio != "" {
-		t.Fatalf("studio = %q", metadata.Studio)
-	}
-}
-
-func TestAniListGetRejectsInvalidValuesAtomically(t *testing.T) {
-	tests := []struct {
-		name  string
-		field string
-		value any
-	}{
-		{name: "negative year", field: "seasonYear", value: -1},
-		{name: "oversized year", field: "seasonYear", value: maxSeasonYear + 1},
-		{name: "negative episodes", field: "episodes", value: -1},
-		{name: "oversized episodes", field: "episodes", value: maxEpisodeCount + 1},
-		{name: "unknown season", field: "season", value: "UNKNOWN"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			media := validMedia()
-			media[test.field] = test.value
-			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
-			if !errors.Is(err, errMetadataMalformed) {
-				t.Fatalf("error = %v", err)
-			}
-			if metadata != (core.AnimeMetadata{}) {
-				t.Fatalf("metadata = %#v", metadata)
-			}
-		})
-	}
-}
-
-func TestAniListGetRejectsOversizedTitleAtomically(t *testing.T) {
-	media := validMedia()
-	media["title"] = map[string]any{"romaji": strings.Repeat("x", metadatapolicy.MaxTitleTextBytes+1)}
-	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
-	if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
-		t.Fatalf("metadata = %#v, error = %v", metadata, err)
-	}
-}
-
 func TestAniListSearchRejectsInvalidCandidatesAtomically(t *testing.T) {
 	valid := validMedia()
 	invalid := validMedia()
 	invalid["id"] = -1
 	items, err := newWithDo(&fakeClient{response: jsonResponse(t, searchPayload(invalid, valid))}).Search(context.Background(), core.MetadataQuery{Title: "Anime"})
-	if !errors.Is(err, errMetadataMalformed) || items != nil {
-		t.Fatalf("items = %#v, error = %v", items, err)
-	}
-}
-
-func TestAniListSearchRejectsOutOfRangeCandidateAtomically(t *testing.T) {
-	invalid := validMedia()
-	invalid["episodes"] = maxEpisodeCount + 1
-	items, err := newWithDo(&fakeClient{response: jsonResponse(t, searchPayload(invalid))}).Search(context.Background(), core.MetadataQuery{Title: "Anime"})
 	if !errors.Is(err, errMetadataMalformed) || items != nil {
 		t.Fatalf("items = %#v, error = %v", items, err)
 	}
@@ -511,14 +452,6 @@ func TestAniListResponseValidation(t *testing.T) {
 				t.Fatalf("error leaked remote message: %v", err)
 			}
 		})
-	}
-}
-
-func TestAniListRejectsExcessiveJSONNesting(t *testing.T) {
-	body := `{"data":` + strings.Repeat("[", maxJSONNestingDepth+1) + `null` + strings.Repeat("]", maxJSONNestingDepth+1) + `}`
-	metadata, err := newWithDo(&fakeClient{response: rawJSONResponse([]byte(body))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
-	if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
-		t.Fatalf("metadata = %#v, error = %v", metadata, err)
 	}
 }
 

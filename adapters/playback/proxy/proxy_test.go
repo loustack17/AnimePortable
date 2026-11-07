@@ -236,31 +236,6 @@ func TestUnknownHostAndClosedSessionDoNotReachUpstream(t *testing.T) {
 	}
 }
 
-func TestConfigLimitsAndSessionLimit(t *testing.T) {
-	for _, config := range []Config{
-		{SessionTTL: -time.Second},
-		{SessionTTL: maxSessionTTL + time.Second},
-		{MaxSessions: maxSessions + 1},
-		{MaxConcurrentStreams: maxConcurrentStreams + 1},
-		{MaxStreamsPerSession: maxStreamsPerSession + 1},
-		{MaxConcurrentStreams: 1, MaxStreamsPerSession: 2},
-	} {
-		if _, err := New(config); !errorsIs(err, errInvalidConfig) {
-			t.Fatalf("config %#v accepted: %v", config, err)
-		}
-	}
-	remote := &fakeRemote{response: func(*http.Request) *securehttp.StreamResponse {
-		return streamResponse(http.StatusOK, http.Header{"Content-Type": {"video/mp4"}}, "")
-	}}
-	server := newProxyForTest(t, remote, Config{MaxSessions: 1})
-	if _, err := server.NewSession(newSource()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.NewSession(newSource()); !errorsIs(err, errClosed) {
-		t.Fatalf("second session error = %v", err)
-	}
-}
-
 func TestServerListenerUsesIPv4LoopbackAndEphemeralPort(t *testing.T) {
 	var gotNetwork string
 	var gotAddress string

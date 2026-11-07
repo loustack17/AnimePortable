@@ -66,27 +66,6 @@ func TestOpenConcurrentlyAppliesMigrationsOnce(t *testing.T) {
 	}
 }
 
-func TestOpenRejectsMalformedMigrationList(t *testing.T) {
-	tests := []struct {
-		name       string
-		migrations []migration
-	}{
-		{"gap", []migration{{version: 2, name: "0002_gap.sql", sql: "SELECT 1"}}},
-		{"duplicate", []migration{
-			{version: 1, name: "0001_first.sql", sql: "SELECT 1"},
-			{version: 1, name: "0001_duplicate.sql", sql: "SELECT 2"},
-		}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			_, err := open(context.Background(), filepath.Join(t.TempDir(), "anime.sqlite"), migrationSource{migrations: test.migrations})
-			if !errors.Is(err, ErrMigration) {
-				t.Fatalf("malformed migration list error = %v, want ErrMigration", err)
-			}
-		})
-	}
-}
-
 func TestMigrationFailureRollsBackAllStatements(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "anime.sqlite")
 	source := migrationSource{migrations: []migration{{
@@ -127,29 +106,6 @@ SELECT sum(value) FROM counter;`,
 	defer db.Close()
 	if tableExists(t, db, "cancel_probe") || tableExists(t, db, "schema_migrations") {
 		t.Fatal("canceled migration left partial schema")
-	}
-}
-
-func TestMigrationRejectsPreexistingPartialDomainSchema(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "anime.sqlite")
-	db := openRawDatabase(t, path)
-	if _, err := db.Exec("CREATE TABLE anime(id TEXT PRIMARY KEY)"); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := Open(context.Background(), path); !errors.Is(err, ErrMigration) {
-		t.Fatalf("Open error = %v, want ErrMigration", err)
-	}
-	db = openRawDatabase(t, path)
-	defer db.Close()
-	if !tableExists(t, db, "anime") {
-		t.Fatal("partial source schema was not preserved")
-	}
-	if tableExists(t, db, "schema_migrations") {
-		t.Fatal("partial source schema was incorrectly certified")
 	}
 }
 
@@ -455,15 +411,6 @@ func TestMigrationAddsCatalogInfoKeepingAnime(t *testing.T) {
 	}
 }
 
-func TestFreshSchemaHasNoSettingsMPVPath(t *testing.T) {
-	store := openLibraryStore(t, filepath.Join(t.TempDir(), "anime.sqlite"))
-	defer store.Close()
-	want := []string{"id", "appearance", "autoplay_next", "resume_playback", "language", "auto_play", "playback_speed", "hardware_decoding", "proxy_mode", "proxy_address"}
-	if got := settingsColumns(t, store.db); !slices.Equal(got, want) {
-		t.Fatalf("settings columns = %v, want %v", got, want)
-	}
-}
-
 func openRawDatabase(t *testing.T, path string) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", databaseDSN(path))
@@ -604,90 +551,6 @@ func TestOpenAllowsExistingEmptyDatabase(t *testing.T) {
 	if !tableExists(t, store.db, "schema_migrations") {
 		t.Fatal("existing empty database was not initialized")
 	}
-}
-
-func TestOpenRejectsZeroAppliedTrackingTable(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "anime.sqlite")
-	db := openRawDatabase(t, path)
-	if _, err := db.Exec(migrationBootstrapSQL); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Open(context.Background(), path); !errors.Is(err, ErrMigration) {
-		t.Fatalf("Open error = %v, want ErrMigration", err)
-	}
-	db = openRawDatabase(t, path)
-	defer db.Close()
-	var count int
-	if err := db.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 0 {
-		t.Fatalf("tracking history changed: count=%d err=%v", count, err)
-	}
-}
-
-func TestOpenRejectsSchemaTamperingWithoutFurtherChanges(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate string
-	}{
-		{"drop table", "DROP TABLE fingerprint_probe"},
-		{"drop history index", "DROP INDEX idx_history_last_played"},
-		{"add table", "CREATE TABLE attacker_probe(id INTEGER PRIMARY KEY)"},
-		{"add secret column", "ALTER TABLE fingerprint_probe ADD COLUMN secret TEXT"},
-		{"rebuild weaker constraint", "ALTER TABLE fingerprint_probe RENAME TO fingerprint_probe_old; CREATE TABLE fingerprint_probe(id INTEGER PRIMARY KEY, value TEXT NOT NULL); INSERT INTO fingerprint_probe SELECT id, value FROM fingerprint_probe_old; DROP TABLE fingerprint_probe_old"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "anime.sqlite")
-			source := migrationSource{migrations: []migration{{version: 1, name: "0001_probe.sql", sql: "CREATE TABLE fingerprint_probe(id INTEGER PRIMARY KEY CHECK (id > 0), value TEXT NOT NULL CHECK (length(value) > 0)); CREATE INDEX idx_history_last_played ON fingerprint_probe(value)"}}}
-			store, err := open(context.Background(), path, source)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := store.Close(); err != nil {
-				t.Fatal(err)
-			}
-			db := openRawDatabase(t, path)
-			if _, err := db.Exec(test.mutate); err != nil {
-				_ = db.Close()
-				t.Fatal(err)
-			}
-			before := schemaCatalog(t, db)
-			if err := db.Close(); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := open(context.Background(), path, source); !errors.Is(err, ErrMigration) {
-				t.Fatalf("Open error = %v, want ErrMigration", err)
-			}
-			db = openRawDatabase(t, path)
-			defer db.Close()
-			if after := schemaCatalog(t, db); after != before {
-				t.Fatalf("failed Open changed tampered schema:\nbefore: %s\nafter:  %s", before, after)
-			}
-		})
-	}
-}
-
-func schemaCatalog(t *testing.T, db *sql.DB) string {
-	t.Helper()
-	rows, err := db.Query("SELECT type || ':' || name || ':' || tbl_name || ':' || coalesce(sql, '') FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name, tbl_name, sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var values []string
-	for rows.Next() {
-		var value string
-		if err := rows.Scan(&value); err != nil {
-			t.Fatal(err)
-		}
-		values = append(values, value)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	return strings.Join(values, "\n")
 }
 
 func testMigrationSource(withSecond bool) migrationSource {
