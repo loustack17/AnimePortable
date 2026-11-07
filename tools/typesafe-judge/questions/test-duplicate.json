@@ -1,0 +1,7 @@
+{
+ "covered": {
+  "type": "noul",
+  "instructions": "Given `test` (one Go test: name, doc comment and first lines) and `siblings` (the other tests of the same package, by name and doc comment), does another sibling check the same user-visible behaviour more completely, so this test adds nothing a user would notice if it were deleted?",
+  "criteria": {"true": "A named sibling walks the same behaviour more completely; this one is a detail of it", "false": "No sibling covers this behaviour as completely, or this test is the more complete one"}
+ }
+}
