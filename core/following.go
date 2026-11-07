@@ -30,7 +30,7 @@ func (app *App) ListFollowing(ctx context.Context) ([]FollowingEntry, error) {
 		return nil, err
 	}
 	watched, recent := indexPlaybackHistory(history)
-	now := app.now()
+	now := app.tracking.now()
 	entries := make([]FollowingEntry, 0, len(followed))
 	for _, item := range followed {
 		id := item.AnimeID

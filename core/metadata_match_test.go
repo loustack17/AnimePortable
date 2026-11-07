@@ -46,182 +46,141 @@ func TestNormalizeMetadataTitle(t *testing.T) {
 }
 
 func TestMatchMetadataAcceptsBestCandidateInsteadOfFirst(t *testing.T) {
-	request := MetadataMatchRequest{
-		Query: MetadataQuery{Title: "葬送的芙莉莲", Year: 2023},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "wrong"}, Title: "葬送的芙莉蓮 第二季", Year: 2024},
-			{Ref: MetadataRef{Provider: "anilist", ID: "right"}, Title: "葬送的芙莉蓮", Year: 2023},
-		},
+	query := MetadataQuery{Title: "葬送的芙莉莲", Year: 2023}
+	candidates := []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "wrong"}, Title: "葬送的芙莉蓮 第二季", Year: 2024},
+		{Ref: MetadataRef{Provider: "anilist", ID: "right"}, Title: "葬送的芙莉蓮", Year: 2023},
 	}
-	result := MatchMetadata(request)
-	if result.Decision != MetadataMatchAccepted || topMetadataScore(request) < metadataHighScore {
-		t.Fatalf("unexpected result: %#v, score %d", result, topMetadataScore(request))
+	match, ok := MatchMetadata(query, candidates)
+	if !ok || topMetadataScore(query, candidates) < metadataHighScore {
+		t.Fatalf("unexpected result: %#v, score %d", match, topMetadataScore(query, candidates))
 	}
-	if result.Candidate.Ref.ID != "right" {
-		t.Fatalf("selected candidate = %#v, want right", result.Candidate.Ref)
+	if match.Ref.ID != "right" {
+		t.Fatalf("selected candidate = %#v, want right", match.Ref)
 	}
 }
 
 func TestMatchMetadataUsesNativeTitle(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "藥師少女的獨語", NativeTitle: "薬屋のひとりごと"},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "bangumi", ID: "right"}, Title: "薬屋のひとりごと", NativeTitle: "薬屋のひとりごと"},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "藥師少女的獨語", NativeTitle: "薬屋のひとりごと"}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "bangumi", ID: "right"}, Title: "薬屋のひとりごと", NativeTitle: "薬屋のひとりごと"},
 	})
-	if result.Decision != MetadataMatchAccepted || result.Candidate.Ref.ID != "right" {
-		t.Fatalf("unexpected result: %#v", result)
+	if !ok || match.Ref.ID != "right" {
+		t.Fatalf("unexpected result: %#v", match)
 	}
 }
 
 func TestMatchMetadataSeasonSuffixesMatch(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "Show Season 2"},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "show-2"}, Title: "Show S2"},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "Show Season 2"}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "show-2"}, Title: "Show S2"},
 	})
-	if result.Decision != MetadataMatchAccepted || result.Candidate.Ref.ID != "show-2" {
-		t.Fatalf("unexpected result: %#v", result)
+	if !ok || match.Ref.ID != "show-2" {
+		t.Fatalf("unexpected result: %#v", match)
 	}
 }
 
 func TestMatchMetadataSeasonAndEpisodeSuffixesMatch(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "Show Season 2 Episode 1"},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "show-2"}, Title: "Show S2"},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "Show Season 2 Episode 1"}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "show-2"}, Title: "Show S2"},
 	})
-	if result.Decision != MetadataMatchAccepted || result.Candidate.Ref.ID != "show-2" {
-		t.Fatalf("unexpected result: %#v", result)
+	if !ok || match.Ref.ID != "show-2" {
+		t.Fatalf("unexpected result: %#v", match)
 	}
 }
 
 func TestMatchMetadataReadsSeasonBeforePart(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "Show Season 4 Part 2"},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "season-2"}, Title: "Show Season 2 Part 2"},
-			{Ref: MetadataRef{Provider: "anilist", ID: "season-4"}, Title: "Show 4th Season Part 2"},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "Show Season 4 Part 2"}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "season-2"}, Title: "Show Season 2 Part 2"},
+		{Ref: MetadataRef{Provider: "anilist", ID: "season-4"}, Title: "Show 4th Season Part 2"},
 	})
-	if result.Decision != MetadataMatchAccepted || result.Candidate.Ref.ID != "season-4" {
-		t.Fatalf("unexpected result: %#v", result)
+	if !ok || match.Ref.ID != "season-4" {
+		t.Fatalf("unexpected result: %#v", match)
 	}
 }
 
 func TestMatchMetadataKeepsPartIdentity(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "Show Season 4 Part 2"},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "show-2"}, Title: "Show Season 2"},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "Show Season 4 Part 2"}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "show-2"}, Title: "Show Season 2"},
 	})
-	if result.Decision != MetadataMatchNoMetadata || !reflect.DeepEqual(result.Candidate, MetadataCandidate{}) {
-		t.Fatalf("unexpected result: %#v", result)
+	if ok || !reflect.DeepEqual(match, MetadataCandidate{}) {
+		t.Fatalf("unexpected result: %#v", match)
 	}
 }
 
 func TestMatchMetadataRequiresCrossCheckForMediumConfidence(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "My Great Anime"},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "partial"}, Title: "Great Anime"},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "My Great Anime"}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "partial"}, Title: "Great Anime"},
 	})
-	if result.Decision != MetadataMatchNeedsCrossCheck {
-		t.Fatalf("unexpected result: %#v", result)
-	}
-	if result.Candidate.Ref.ID != "partial" {
-		t.Fatalf("unexpected candidate state: %#v", result)
+	if ok || !reflect.DeepEqual(match, MetadataCandidate{}) {
+		t.Fatalf("medium confidence accepted without a cross-check: %#v", match)
 	}
 }
 
 func TestMatchMetadataAcceptsMediumConfidenceAfterProviderCrossCheck(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "My Great Anime"},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "cross-check"}, Title: "Great Anime"},
-			{Ref: MetadataRef{Provider: "bangumi", ID: "primary"}, Title: "Great Anime"},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "My Great Anime"}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "cross-check"}, Title: "Great Anime"},
+		{Ref: MetadataRef{Provider: "bangumi", ID: "primary"}, Title: "Great Anime"},
 	})
-	if result.Decision != MetadataMatchAccepted {
-		t.Fatalf("unexpected result: %#v", result)
+	if !ok {
+		t.Fatalf("unexpected result: %#v", match)
 	}
-	if result.Candidate.Ref.Provider != "bangumi" {
-		t.Fatalf("selected provider = %q, want bangumi (ADR-009: Chinese synopsis first)", result.Candidate.Ref.Provider)
+	if match.Ref.Provider != "bangumi" {
+		t.Fatalf("selected provider = %q, want bangumi (ADR-009: Chinese synopsis first)", match.Ref.Provider)
 	}
 }
 
 func TestMatchMetadataFailsClosedForLowConfidence(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "Unique Anime"},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "wrong"}, Title: "Unrelated Work"},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "Unique Anime"}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "wrong"}, Title: "Unrelated Work"},
 	})
-	if result.Decision != MetadataMatchNoMetadata {
-		t.Fatalf("unexpected result: %#v", result)
-	}
-	if !reflect.DeepEqual(result.Candidate, MetadataCandidate{}) {
-		t.Fatalf("low-confidence candidate leaked: %#v", result.Candidate)
+	if ok || !reflect.DeepEqual(match, MetadataCandidate{}) {
+		t.Fatalf("low-confidence candidate leaked: %#v", match)
 	}
 }
 
 func TestMatchMetadataDoesNotPromoteNearTitleMatches(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "Extraordinary Anime Show", Year: 2024},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "near"}, Title: "Extraordinary Anime Shiw", Year: 2024},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "Extraordinary Anime Show", Year: 2024}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "near"}, Title: "Extraordinary Anime Shiw", Year: 2024},
 	})
-	if result.Decision != MetadataMatchNoMetadata {
-		t.Fatalf("unexpected result: %#v", result)
+	if ok {
+		t.Fatalf("unexpected result: %#v", match)
 	}
 }
 
 func TestMatchMetadataFailsClosedForConflictingCandidates(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "Anime", Year: 2024},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "bangumi", ID: "later"}, Title: "Anime", Year: 2025},
-			{Ref: MetadataRef{Provider: "anilist", ID: "earlier"}, Title: "Anime", Year: 2023},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "Anime", Year: 2024}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "bangumi", ID: "later"}, Title: "Anime", Year: 2025},
+		{Ref: MetadataRef{Provider: "anilist", ID: "earlier"}, Title: "Anime", Year: 2023},
 	})
-	if result.Decision != MetadataMatchNoMetadata {
-		t.Fatalf("unexpected result: %#v", result)
-	}
-	if !reflect.DeepEqual(result.Candidate, MetadataCandidate{}) {
-		t.Fatalf("conflicting candidate leaked: %#v", result.Candidate)
+	if ok || !reflect.DeepEqual(match, MetadataCandidate{}) {
+		t.Fatalf("conflicting candidate leaked: %#v", match)
 	}
 }
 
 func TestMatchMetadataFailsClosedForDistinctSameProviderIdentities(t *testing.T) {
-	result := MatchMetadata(MetadataMatchRequest{
-		Query: MetadataQuery{Title: "Anime"},
-		Candidates: []MetadataCandidate{
-			{Ref: MetadataRef{Provider: "anilist", ID: "2"}, Title: "Anime"},
-			{Ref: MetadataRef{Provider: "anilist", ID: "1"}, Title: "Anime"},
-		},
+	match, ok := MatchMetadata(MetadataQuery{Title: "Anime"}, []MetadataCandidate{
+		{Ref: MetadataRef{Provider: "anilist", ID: "2"}, Title: "Anime"},
+		{Ref: MetadataRef{Provider: "anilist", ID: "1"}, Title: "Anime"},
 	})
-	if result.Decision != MetadataMatchNoMetadata || !reflect.DeepEqual(result.Candidate, MetadataCandidate{}) {
-		t.Fatalf("ambiguous identity accepted: %#v", result)
+	if ok || !reflect.DeepEqual(match, MetadataCandidate{}) {
+		t.Fatalf("ambiguous identity accepted: %#v", match)
 	}
 }
 
 func TestMatchMetadataRejectsInvalidAndEmptyInputs(t *testing.T) {
-	tests := []MetadataMatchRequest{
+	tests := []struct {
+		query      MetadataQuery
+		candidates []MetadataCandidate
+	}{
 		{},
-		{Query: MetadataQuery{Title: "Anime"}},
-		{Query: MetadataQuery{Title: "Anime"}, Candidates: []MetadataCandidate{{Title: "Anime"}}},
-		{Query: MetadataQuery{Title: strings.Repeat("a", metadataMaxTitleBytes+1)}, Candidates: []MetadataCandidate{{Ref: MetadataRef{Provider: "anilist", ID: "too-long"}, Title: "Anime"}}},
-		{Query: MetadataQuery{Title: "Anime"}, Candidates: makeMetadataCandidates(metadataMaxCandidates + 1)},
+		{query: MetadataQuery{Title: "Anime"}},
+		{query: MetadataQuery{Title: "Anime"}, candidates: []MetadataCandidate{{Title: "Anime"}}},
+		{query: MetadataQuery{Title: strings.Repeat("a", metadataMaxTitleBytes+1)}, candidates: []MetadataCandidate{{Ref: MetadataRef{Provider: "anilist", ID: "too-long"}, Title: "Anime"}}},
+		{query: MetadataQuery{Title: "Anime"}, candidates: makeMetadataCandidates(metadataMaxCandidates + 1)},
 	}
-	for index, request := range tests {
-		result := MatchMetadata(request)
-		if result.Decision != MetadataMatchNoMetadata || !reflect.DeepEqual(result.Candidate, MetadataCandidate{}) {
-			t.Fatalf("case %d returned unsafe result: %#v", index, result)
+	for index, test := range tests {
+		match, ok := MatchMetadata(test.query, test.candidates)
+		if ok || !reflect.DeepEqual(match, MetadataCandidate{}) {
+			t.Fatalf("case %d returned unsafe result: %#v", index, match)
 		}
 	}
 }
@@ -252,9 +211,9 @@ func TestMetadataMatchReadsTaiwanSeasonNotationAndAliases(t *testing.T) {
 			MetadataCandidate{Ref: MetadataRef{Provider: "bangumi", ID: "1"}, Title: "間諜過家家", Aliases: []string{"SPY×FAMILY間諜家家酒"}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			result := MatchMetadata(MetadataMatchRequest{Query: test.query, Candidates: []MetadataCandidate{test.other, test.candidate}})
-			if result.Decision != MetadataMatchAccepted || result.Candidate.Ref != test.candidate.Ref {
-				t.Fatalf("decision=%d picked %+v, want %+v", result.Decision, result.Candidate.Ref, test.candidate.Ref)
+			match, ok := MatchMetadata(test.query, []MetadataCandidate{test.other, test.candidate})
+			if !ok || match.Ref != test.candidate.Ref {
+				t.Fatalf("accepted=%t picked %+v, want %+v", ok, match.Ref, test.candidate.Ref)
 			}
 		})
 	}
@@ -272,15 +231,14 @@ func TestMetadataQueryUsesBracketedNameButNotSeasonMarker(t *testing.T) {
 }
 
 func TestMetadataMatchDoesNotOverreadSequelMarkersOrAliases(t *testing.T) {
-	gundam := MetadataMatchRequest{Query: MetadataQuery{Title: "Mobile Suit Gundam X"}, Candidates: []MetadataCandidate{{Ref: MetadataRef{Provider: "anilist", ID: "1"}, Title: "Mobile Suit Gundam"}}}
-	if topMetadataScore(gundam) == metadataHighScore {
+	if topMetadataScore(MetadataQuery{Title: "Mobile Suit Gundam X"}, []MetadataCandidate{{Ref: MetadataRef{Provider: "anilist", ID: "1"}, Title: "Mobile Suit Gundam"}}) == metadataHighScore {
 		t.Fatal("Gundam X matched Gundam exactly")
 	}
 	if _, season, _ := metadataTitleParts("Yu-Gi-Oh! ARC-V"); season != "" {
 		t.Fatalf("ARC-V read as season %q", season)
 	}
-	alias := MatchMetadata(MetadataMatchRequest{Query: MetadataQuery{Title: "Great Anime Movie Edition"}, Candidates: []MetadataCandidate{{Ref: MetadataRef{Provider: "bangumi", ID: "1"}, Title: "Other", Aliases: []string{"Great Anime"}}}})
-	if alias.Decision != MetadataMatchNoMetadata {
+	alias, ok := MatchMetadata(MetadataQuery{Title: "Great Anime Movie Edition"}, []MetadataCandidate{{Ref: MetadataRef{Provider: "bangumi", ID: "1"}, Title: "Other", Aliases: []string{"Great Anime"}}})
+	if ok {
 		t.Fatalf("alias substring matched: %+v", alias)
 	}
 }
@@ -303,48 +261,47 @@ func TestMetadataTitlePartsReadSubtitlesMidSeasonsAndAttachedNumerals(t *testing
 }
 
 func TestMetadataMatchTakesFirstArcOfSameSeasonButKeepsDifferentSubtitlesApart(t *testing.T) {
-	arcs := MatchMetadata(MetadataMatchRequest{Query: MetadataQuery{Title: "Re:從零開始的異世界生活 第三季"}, Candidates: []MetadataCandidate{
+	arcs, ok := MatchMetadata(MetadataQuery{Title: "Re:從零開始的異世界生活 第三季"}, []MetadataCandidate{
 		{Ref: MetadataRef{Provider: "bangumi", ID: "1"}, Title: "Re：從零開始的異世界生活 第三季 襲擊篇"},
 		{Ref: MetadataRef{Provider: "bangumi", ID: "2"}, Title: "Re：從零開始的異世界生活 第三季 反擊篇"},
 		{Ref: MetadataRef{Provider: "bangumi", ID: "3"}, Title: "Re：從零開始的異世界生活 第四季 喪失篇"},
-	}})
-	if arcs.Decision != MetadataMatchAccepted || arcs.Candidate.Ref.ID != "1" {
+	})
+	if !ok || arcs.Ref.ID != "1" {
 		t.Fatalf("arc match = %+v", arcs)
 	}
-	other := MatchMetadata(MetadataMatchRequest{Query: MetadataQuery{Title: "某作品 ～甲篇～"}, Candidates: []MetadataCandidate{
+	other, ok := MatchMetadata(MetadataQuery{Title: "某作品 ～甲篇～"}, []MetadataCandidate{
 		{Ref: MetadataRef{Provider: "bangumi", ID: "1"}, Title: "某作品 ～乙篇～"},
-	}})
-	if other.Decision == MetadataMatchAccepted {
+	})
+	if ok {
 		t.Fatalf("different subtitle accepted: %+v", other)
 	}
 }
 
 func TestMetadataMatchReviewEdgeCases(t *testing.T) {
-	differentSubtitles := MatchMetadata(MetadataMatchRequest{Query: MetadataQuery{Title: "某作品 第二季 ～甲篇～"}, Candidates: []MetadataCandidate{
+	differentSubtitles, ok := MatchMetadata(MetadataQuery{Title: "某作品 第二季 ～甲篇～"}, []MetadataCandidate{
 		{Ref: MetadataRef{Provider: "bangumi", ID: "1"}, Title: "某作品 第二季 ～乙篇～"},
 		{Ref: MetadataRef{Provider: "anilist", ID: "2"}, Title: "某作品 第二季 ～乙篇～"},
-	}})
-	if differentSubtitles.Decision != MetadataMatchNoMetadata {
+	})
+	if ok {
 		t.Fatalf("different subtitles accepted with a season match and cross-check: %+v", differentSubtitles)
 	}
 	if base, season, _ := metadataTitleParts("Show 2nd Season - 01"); base != "show" || season != "2" {
 		t.Fatalf("episode marker read as arc: base %q season %q", base, season)
 	}
-	recap := MatchMetadata(MetadataMatchRequest{Query: MetadataQuery{Title: "某作品 第二季"}, Candidates: []MetadataCandidate{
+	recap, ok := MatchMetadata(MetadataQuery{Title: "某作品 第二季"}, []MetadataCandidate{
 		{Ref: MetadataRef{Provider: "bangumi", ID: "1"}, Title: "某作品 第二季 本篇"},
 		{Ref: MetadataRef{Provider: "bangumi", ID: "2"}, Title: "某作品 第二季 總集篇"},
-	}})
-	if recap.Decision == MetadataMatchAccepted {
+	})
+	if ok {
 		t.Fatalf("recap arc treated as a season arc: %+v", recap)
 	}
 }
 
 func TestMetadataMatchAcceptsColonOrTildeSubtitle(t *testing.T) {
-	request := MetadataMatchRequest{Query: MetadataQuery{Title: "無職英雄：技能什麼的毫無用處"}, Candidates: []MetadataCandidate{
-		{Ref: MetadataRef{Provider: "bangumi", ID: "1"}, Title: "無職英雄 ～技能什麼的毫無用處～"},
-	}}
-	if result := MatchMetadata(request); result.Decision != MetadataMatchAccepted || topMetadataScore(request) != metadataHighScore {
-		t.Fatalf("colon subtitle = %+v, score %d", result, topMetadataScore(request))
+	query := MetadataQuery{Title: "無職英雄：技能什麼的毫無用處"}
+	candidates := []MetadataCandidate{{Ref: MetadataRef{Provider: "bangumi", ID: "1"}, Title: "無職英雄 ～技能什麼的毫無用處～"}}
+	if match, ok := MatchMetadata(query, candidates); !ok || topMetadataScore(query, candidates) != metadataHighScore {
+		t.Fatalf("colon subtitle = %+v, score %d", match, topMetadataScore(query, candidates))
 	}
 }
 
@@ -352,20 +309,19 @@ func TestSeasonNumeral(t *testing.T) {
 	for value, want := range map[string]string{
 		"一": "1", "五": "5", "九": "9", "十": "10", "十一": "11", "十二": "12",
 		"貳": "2", "參": "3", "叄": "3", "肆": "4", "II": "2", "III": "3", "IV": "4", "V": "5", "VI": "6",
-		"": "", "十三": "", "VII": "", "I": "", "零": "", "2": "", "一二": "", "ii": "",
+		"": "", "十三": "十三", "VII": "VII", "I": "I", "零": "零", "2": "2", "02": "2", "一二": "一二", "ii": "ii",
 	} {
-		got, ok := seasonNumeral(value)
-		if got != want || ok != (want != "") {
-			t.Fatalf("seasonNumeral(%q) = %q, %v, want %q", value, got, ok, want)
+		if got := seasonNumeral(value); got != want {
+			t.Fatalf("seasonNumeral(%q) = %q, want %q", value, got, want)
 		}
 	}
 }
 
-// topMetadataScore is the best candidate score MatchMetadata computes for request.
-func topMetadataScore(request MetadataMatchRequest) int {
-	title, native, season := metadataFields(request.Query.Title, request.Query.NativeTitle)
+// topMetadataScore is the best candidate score MatchMetadata computes for query and candidates.
+func topMetadataScore(query MetadataQuery, candidates []MetadataCandidate) int {
+	title, native, season := metadataFields(query.Title, query.NativeTitle)
 	best := 0
-	for _, candidate := range scoreMetadataCandidates(request, title, native, season) {
+	for _, candidate := range scoreMetadataCandidates(query, candidates, title, native, season) {
 		best = max(best, candidate.score)
 	}
 	return best

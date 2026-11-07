@@ -9,24 +9,6 @@ import (
 	"strings"
 )
 
-type MetadataMatchDecision uint8
-
-const (
-	MetadataMatchNoMetadata MetadataMatchDecision = iota
-	MetadataMatchNeedsCrossCheck
-	MetadataMatchAccepted
-)
-
-type MetadataMatchRequest struct {
-	Query      MetadataQuery
-	Candidates []MetadataCandidate
-}
-
-type MetadataMatchResult struct {
-	Decision  MetadataMatchDecision
-	Candidate MetadataCandidate
-}
-
 const (
 	metadataMediumScore = 50
 	metadataHighScore   = 70
@@ -49,16 +31,17 @@ type metadataScoredCandidate struct {
 	score      int
 }
 
-func MatchMetadata(request MetadataMatchRequest) MetadataMatchResult {
-	result := noMetadataResult()
-	queryTitle, queryNative, querySeason := metadataFields(request.Query.Title, request.Query.NativeTitle)
-	if !validMetadataRequest(request, queryTitle, queryNative) {
-		return result
+// MatchMetadata returns the candidate for query and true only when the match is confident;
+// otherwise no metadata is better than wrong metadata.
+func MatchMetadata(query MetadataQuery, candidates []MetadataCandidate) (MetadataCandidate, bool) {
+	queryTitle, queryNative, querySeason := metadataFields(query.Title, query.NativeTitle)
+	if queryTitle == "" && queryNative == "" || len(candidates) == 0 || len(candidates) > metadataMaxCandidates {
+		return MetadataCandidate{}, false
 	}
 
-	scored := scoreMetadataCandidates(request, queryTitle, queryNative, querySeason)
+	scored := scoreMetadataCandidates(query, candidates, queryTitle, queryNative, querySeason)
 	if len(scored) == 0 {
-		return result
+		return MetadataCandidate{}, false
 	}
 	sort.SliceStable(scored, func(left, right int) bool {
 		return metadataCandidateBefore(scored[left], scored[right])
@@ -66,34 +49,21 @@ func MatchMetadata(request MetadataMatchRequest) MetadataMatchResult {
 
 	top := scored[0]
 	if top.score < metadataMediumScore || metadataHasConflict(top, scored[1:]) {
-		return result
+		return MetadataCandidate{}, false
 	}
-
-	result.Candidate = top.candidate
-	crossChecked := metadataHasCrossCheck(top, scored[1:])
 	// A weak exact name match (alias, or a subtitle on one side only) is accepted when no other
 	// candidate is close and no hint counts against it.
 	weakExactAccepted := top.titleScore == metadataWeakExactScore && top.score >= metadataWeakExactScore
-	if top.score >= metadataHighScore || crossChecked || weakExactAccepted {
-		result.Decision = MetadataMatchAccepted
-		return result
+	if top.score >= metadataHighScore || metadataHasCrossCheck(top, scored[1:]) || weakExactAccepted {
+		return top.candidate, true
 	}
-	result.Decision = MetadataMatchNeedsCrossCheck
-	return result
+	return MetadataCandidate{}, false
 }
 
-func noMetadataResult() MetadataMatchResult {
-	return MetadataMatchResult{Decision: MetadataMatchNoMetadata}
-}
-
-func validMetadataRequest(request MetadataMatchRequest, queryTitle, queryNative string) bool {
-	return (queryTitle != "" || queryNative != "") && len(request.Candidates) > 0 && len(request.Candidates) <= metadataMaxCandidates
-}
-
-func scoreMetadataCandidates(request MetadataMatchRequest, queryTitle, queryNative, querySeason string) []metadataScoredCandidate {
-	scored := make([]metadataScoredCandidate, 0, len(request.Candidates))
-	series := metadataSeriesNames(queryTitle, queryNative, request.Candidates)
-	for _, candidate := range request.Candidates {
+func scoreMetadataCandidates(query MetadataQuery, candidates []MetadataCandidate, queryTitle, queryNative, querySeason string) []metadataScoredCandidate {
+	scored := make([]metadataScoredCandidate, 0, len(candidates))
+	series := metadataSeriesNames(queryTitle, queryNative, candidates)
+	for _, candidate := range candidates {
 		if strings.TrimSpace(candidate.Ref.Provider) == "" || strings.TrimSpace(candidate.Ref.ID) == "" {
 			continue
 		}
@@ -108,7 +78,7 @@ func scoreMetadataCandidates(request MetadataMatchRequest, queryTitle, queryNati
 			native:     native,
 			season:     season,
 			titleScore: titleScore,
-			score:      titleScore + metadataHintScore(request.Query, candidate, querySeason, season),
+			score:      titleScore + metadataHintScore(query, candidate, querySeason, season),
 		})
 	}
 	return scored

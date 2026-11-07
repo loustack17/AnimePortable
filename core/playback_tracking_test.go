@@ -157,9 +157,9 @@ func (store *trackingStore) entries() []HistoryEntry {
 
 func newTrackingTestApp(source AnimeSource, raw *trackingRawSession, store *trackingStore, ticker *manualPlaybackTicker) *App {
 	app := NewApp(source, &fakePlayer{session: raw}, store)
-	app.newTicker = func(time.Duration) playbackTicker { return ticker }
-	app.checkpointInterval = time.Hour
-	app.checkpointTimeout = time.Second
+	app.tracking.newTicker = func(time.Duration) playbackTicker { return ticker }
+	app.tracking.interval = time.Hour
+	app.tracking.timeout = time.Second
 	return app
 }
 
@@ -618,7 +618,7 @@ func TestTrackedCloseCancelsInflightSnapshotBeforeCleanup(t *testing.T) {
 	raw := newTrackingRawSession()
 	store := newTrackingStore()
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
-	app.checkpointTimeout = 50 * time.Millisecond
+	app.tracking.timeout = 50 * time.Millisecond
 	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if err != nil {
 		t.Fatal(err)
@@ -678,7 +678,7 @@ func TestTrackedCloseWaitsForOwnedRunAfterCheckpointTimeout(t *testing.T) {
 		})
 	}
 	app := newTrackingTestApp(&fakeSource{resolved: NewPlaybackSource("https://media.example/video", nil)}, raw, store, newManualPlaybackTicker())
-	app.checkpointTimeout = 10 * time.Millisecond
+	app.tracking.timeout = 10 * time.Millisecond
 	started, err := app.PlayEpisode(context.Background(), "anime", "episode", EpisodeRef{ID: "episode"}, 0, false)
 	if err != nil {
 		t.Fatal(err)

@@ -9,29 +9,24 @@ import (
 )
 
 type App struct {
-	source             AnimeSource
-	player             Player
-	store              Store
-	now                func() time.Time
-	newTicker          playbackTickerFactory
-	checkpointInterval time.Duration
-	checkpointTimeout  time.Duration
+	source   AnimeSource
+	player   Player
+	store    Store
+	tracking playbackTrackingConfig
 }
 
 func NewApp(source AnimeSource, player Player, store Store) *App {
 	return &App{
-		source:             source,
-		player:             player,
-		store:              store,
-		now:                time.Now,
-		newTicker:          newRealPlaybackTicker,
-		checkpointInterval: defaultCheckpointInterval,
-		checkpointTimeout:  defaultCheckpointTimeout,
+		source: source,
+		player: player,
+		store:  store,
+		tracking: playbackTrackingConfig{
+			now:       time.Now,
+			newTicker: newRealPlaybackTicker,
+			interval:  defaultCheckpointInterval,
+			timeout:   defaultCheckpointTimeout,
+		},
 	}
-}
-
-func (app *App) Search(ctx context.Context, query string) ([]SourceAnime, error) {
-	return app.source.Search(ctx, query)
 }
 
 // PlayEpisode starts a player for the episode. paused makes it wait at its start position
@@ -46,7 +41,7 @@ func (app *App) PlayEpisode(ctx context.Context, animeID AnimeID, episodeID Epis
 	if err != nil {
 		return nil, err
 	}
-	tracked, err := newTrackedPlaybackSession(raw, app.store, request, app.trackingConfig())
+	tracked, err := newTrackedPlaybackSession(raw, app.store, request, app.tracking)
 	if err != nil {
 		closeErr := raw.Close()
 		if closeErr != nil {
@@ -71,37 +66,9 @@ func (app *App) SwitchEpisode(ctx context.Context, session PlaybackSession, anim
 	})
 }
 
-func (app *App) Library(ctx context.Context) ([]Anime, error) {
-	return app.store.ListAnime(ctx)
-}
-
-func (app *App) Follow(ctx context.Context, animeID AnimeID) error {
-	return app.setFollowing(ctx, animeID, true)
-}
-
-func (app *App) Unfollow(ctx context.Context, animeID AnimeID) error {
-	return app.setFollowing(ctx, animeID, false)
-}
-
 // ready reports whether ctx is set and app has a store, which the store-backed operations need.
 func (app *App) ready(ctx context.Context) bool {
 	return ctx != nil && app != nil && app.store != nil
-}
-
-func (app *App) setFollowing(ctx context.Context, animeID AnimeID, following bool) error {
-	if !app.ready(ctx) {
-		return ErrInvalidPlayback
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if _, err := app.store.Anime(ctx, animeID); err != nil {
-		return err
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return app.store.SetFollowing(ctx, animeID, following)
 }
 
 func (app *App) preparePlayRequest(ctx context.Context, animeID AnimeID, episodeID EpisodeID, ref EpisodeRef, startAt time.Duration) (PlayRequest, error) {
@@ -162,13 +129,4 @@ func playbackResumePosition(ctx context.Context, store Store, animeID AnimeID, e
 		return 0, nil
 	}
 	return progress.Position, nil
-}
-
-func (app *App) trackingConfig() playbackTrackingConfig {
-	return playbackTrackingConfig{
-		now:       app.now,
-		newTicker: app.newTicker,
-		interval:  app.checkpointInterval,
-		timeout:   app.checkpointTimeout,
-	}
 }

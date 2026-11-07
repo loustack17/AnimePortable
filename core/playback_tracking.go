@@ -41,22 +41,6 @@ type playbackTrackingConfig struct {
 	timeout   time.Duration
 }
 
-func normalizePlaybackTrackingConfig(config playbackTrackingConfig) playbackTrackingConfig {
-	if config.now == nil {
-		config.now = time.Now
-	}
-	if config.newTicker == nil {
-		config.newTicker = newRealPlaybackTicker
-	}
-	if config.interval <= 0 {
-		config.interval = defaultCheckpointInterval
-	}
-	if config.timeout <= 0 {
-		config.timeout = defaultCheckpointTimeout
-	}
-	return config
-}
-
 // trackedPlayback is what the session knows about one episode: the current one, or the one a
 // pending Load switches to.
 type trackedPlayback struct {
@@ -124,7 +108,6 @@ func newTrackedPlaybackSession(raw PlaybackSession, store Store, request PlayReq
 	if !ok || snapshotter == nil || store == nil || raw.Events() == nil {
 		return nil, ErrPlaybackTracking
 	}
-	config = normalizePlaybackTrackingConfig(config)
 	lifecycle, cancel := context.WithCancel(context.Background())
 	session := &trackedPlaybackSession{
 		raw:         snapshotter,
@@ -169,25 +152,12 @@ func (session *trackedPlaybackSession) Snapshot(ctx context.Context) (PlaybackSn
 }
 
 func (session *trackedPlaybackSession) Load(ctx context.Context, request PlayRequest) error {
-	if session == nil || ctx == nil || request.StartAt < 0 {
+	if request.StartAt < 0 {
 		return ErrInvalidPlayback
 	}
-	operationCtx, end, err := session.beginOperation(ctx)
-	if err != nil {
-		return err
-	}
-	defer end()
-	if err := session.snapshotAndCheckpoint(operationCtx); err != nil {
-		return err
-	}
-	request, err = session.prepareDirectRequest(operationCtx, request)
-	if err != nil {
-		return err
-	}
-	if err := session.snapshotAndCheckpoint(operationCtx); err != nil {
-		return err
-	}
-	return session.loadPending(operationCtx, request)
+	return session.switchEpisode(ctx, func(operationCtx context.Context) (PlayRequest, error) {
+		return session.prepareDirectRequest(operationCtx, request)
+	})
 }
 
 func (session *trackedPlaybackSession) switchEpisode(ctx context.Context, resolve func(context.Context) (PlayRequest, error)) error {

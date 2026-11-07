@@ -15,40 +15,25 @@ import (
 )
 
 type fakeSource struct {
-	context     context.Context
-	calls       *[]string
-	searchQuery string
-	searchItems []SourceAnime
-	searchErr   error
-	resolveRef  EpisodeRef
-	resolved    PlaybackSource
-	resolveErr  error
-	resolve     func(context.Context, EpisodeRef) (PlaybackSource, error)
-	episodes    []SourceEpisode
-	episodesErr error
-	episodesFn  func(context.Context, SourceRef) ([]SourceEpisode, error)
-	called      bool
+	context    context.Context
+	calls      *[]string
+	resolveRef EpisodeRef
+	resolved   PlaybackSource
+	resolveErr error
+	resolve    func(context.Context, EpisodeRef) (PlaybackSource, error)
+	called     bool
 }
 
-func (source *fakeSource) Catalog(context.Context) ([]SourceAnime, error) {
-	source.called = true
-	return nil, source.searchErr
+func (*fakeSource) Catalog(context.Context) ([]SourceAnime, error) {
+	return nil, nil
 }
 
-func (source *fakeSource) Search(ctx context.Context, query string) ([]SourceAnime, error) {
-	source.called = true
-	source.context = ctx
-	source.searchQuery = query
-	return source.searchItems, source.searchErr
+func (*fakeSource) Search(context.Context, string) ([]SourceAnime, error) {
+	return nil, nil
 }
 
-func (source *fakeSource) Episodes(ctx context.Context, ref SourceRef) ([]SourceEpisode, error) {
-	source.called = true
-	source.context = ctx
-	if source.episodesFn != nil {
-		return source.episodesFn(ctx, ref)
-	}
-	return source.episodes, source.episodesErr
+func (*fakeSource) Episodes(context.Context, SourceRef) ([]SourceEpisode, error) {
+	return nil, nil
 }
 
 func (source *fakeSource) Resolve(ctx context.Context, ref EpisodeRef) (PlaybackSource, error) {
@@ -117,7 +102,7 @@ func (*fakeSession) Close() error {
 
 func trackFakeSession(t *testing.T, session *fakeSession, store *fakeStore) *trackedPlaybackSession {
 	t.Helper()
-	tracked, err := newTrackedPlaybackSession(session, store, PlayRequest{AnimeID: "old-anime", EpisodeID: "old-episode"}, playbackTrackingConfig{})
+	tracked, err := newTrackedPlaybackSession(session, store, PlayRequest{AnimeID: "old-anime", EpisodeID: "old-episode"}, NewApp(nil, nil, nil).tracking)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,21 +111,13 @@ func trackFakeSession(t *testing.T, session *fakeSession, store *fakeStore) *tra
 }
 
 type fakeStore struct {
-	context            context.Context
-	anime              []Anime
 	animeErr           error
-	err                error
 	settings           Settings
-	settingsErr        error
 	progress           PlaybackProgress
-	progressErr        error
 	checkpoints        []HistoryEntry
 	following          []AnimeID
 	followedAt         time.Time
 	followingErr       error
-	setFollowingErr    error
-	sourceRefs         map[AnimeID][]SourceRef
-	sourceRefsErr      error
 	saveSourceRefErr   error
 	savedSourceRefs    []savedSourceRef
 	episodeMappings    map[AnimeID][]EpisodeMapping
@@ -162,20 +139,17 @@ func (*fakeStore) SaveAnime(context.Context, Anime) error {
 }
 
 func (store *fakeStore) Anime(ctx context.Context, id AnimeID) (Anime, error) {
-	store.context = ctx
 	if store.animeErr != nil {
 		return Anime{}, store.animeErr
 	}
 	return Anime{ID: id}, nil
 }
 
-func (store *fakeStore) ListAnime(ctx context.Context) ([]Anime, error) {
-	store.context = ctx
-	return store.anime, store.err
+func (*fakeStore) ListAnime(context.Context) ([]Anime, error) {
+	return nil, nil
 }
 
 func (store *fakeStore) SaveSourceRef(ctx context.Context, animeID AnimeID, ref SourceRef) error {
-	store.context = ctx
 	if store.saveSourceRefErr != nil {
 		return store.saveSourceRefErr
 	}
@@ -186,16 +160,11 @@ func (store *fakeStore) SaveSourceRef(ctx context.Context, animeID AnimeID, ref 
 	return nil
 }
 
-func (store *fakeStore) SourceRefs(ctx context.Context, id AnimeID) ([]SourceRef, error) {
-	store.context = ctx
-	if store.sourceRefsErr != nil {
-		return nil, store.sourceRefsErr
-	}
-	return store.sourceRefs[id], nil
+func (*fakeStore) SourceRefs(context.Context, AnimeID) ([]SourceRef, error) {
+	return nil, nil
 }
 
 func (store *fakeStore) SaveEpisodeMapping(ctx context.Context, mapping EpisodeMapping) error {
-	store.context = ctx
 	if store.saveMappingErr != nil {
 		return store.saveMappingErr
 	}
@@ -207,7 +176,6 @@ func (store *fakeStore) SaveEpisodeMapping(ctx context.Context, mapping EpisodeM
 }
 
 func (store *fakeStore) EpisodeMappings(ctx context.Context, id AnimeID) ([]EpisodeMapping, error) {
-	store.context = ctx
 	if store.episodeMappingsErr != nil {
 		return nil, store.episodeMappingsErr
 	}
@@ -222,29 +190,11 @@ func (*fakeStore) Metadata(context.Context, AnimeID) (AnimeMetadata, error) {
 	return AnimeMetadata{}, ErrNotFound
 }
 
-func (store *fakeStore) SetFollowing(ctx context.Context, id AnimeID, following bool) error {
-	store.context = ctx
-	if store.setFollowingErr != nil {
-		return store.setFollowingErr
-	}
-	for index, existing := range store.following {
-		if existing != id {
-			continue
-		}
-		if following {
-			return nil
-		}
-		store.following = append(store.following[:index], store.following[index+1:]...)
-		return nil
-	}
-	if following {
-		store.following = append(store.following, id)
-	}
+func (*fakeStore) SetFollowing(context.Context, AnimeID, bool) error {
 	return nil
 }
 
 func (store *fakeStore) Following(ctx context.Context) ([]FollowedAnime, error) {
-	store.context = ctx
 	if store.followingErr != nil {
 		return nil, store.followingErr
 	}
@@ -256,7 +206,6 @@ func (store *fakeStore) Following(ctx context.Context) ([]FollowedAnime, error) 
 }
 
 func (store *fakeStore) History(ctx context.Context) ([]HistoryEntry, error) {
-	store.context = ctx
 	if store.historyErr != nil {
 		return nil, store.historyErr
 	}
@@ -273,9 +222,6 @@ func (store *fakeStore) SavePlaybackCheckpoint(_ context.Context, entry HistoryE
 }
 
 func (store *fakeStore) Progress(context.Context, AnimeID, EpisodeID) (PlaybackProgress, error) {
-	if store.progressErr != nil {
-		return PlaybackProgress{}, store.progressErr
-	}
 	if store.progress.AnimeID == "" {
 		return PlaybackProgress{}, ErrNotFound
 	}
@@ -295,9 +241,6 @@ func (*fakeStore) Schedule(context.Context) ([]ScheduleEntry, error) {
 }
 
 func (store *fakeStore) Settings(context.Context) (Settings, error) {
-	if store.settingsErr != nil {
-		return Settings{}, store.settingsErr
-	}
 	return store.settings, nil
 }
 
@@ -307,27 +250,6 @@ var (
 	_ PlaybackSession = (*fakeSession)(nil)
 	_ Store           = (*fakeStore)(nil)
 )
-
-func TestAppSearchUsesSource(t *testing.T) {
-	expected := []SourceAnime{{Ref: SourceRef{Provider: "source", ID: "anime"}, Title: "Anime"}}
-	source := &fakeSource{searchItems: expected}
-	app := NewApp(source, &fakePlayer{}, &fakeStore{})
-	ctx := context.WithValue(context.Background(), contextKey{}, "search")
-
-	actual, err := app.Search(ctx, "query")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if source.searchQuery != "query" {
-		t.Fatalf("query = %q", source.searchQuery)
-	}
-	if source.context != ctx {
-		t.Fatal("search context was not forwarded")
-	}
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("results = %#v", actual)
-	}
-}
 
 func TestAppPlayEpisodeResolvesBeforeStartingPlayer(t *testing.T) {
 	headers := http.Header{"Referer": {"https://source.example/"}}
@@ -483,21 +405,6 @@ func TestAppSwitchEpisodeForwardsPausedToTheLoad(t *testing.T) {
 	}
 }
 
-func TestAppSwitchEpisodeDoesNotLoadWhenResolveFails(t *testing.T) {
-	expected := errors.New("resolve failed")
-	session := &fakeSession{events: make(chan PlaybackEvent)}
-	store := &fakeStore{}
-	app := NewApp(&fakeSource{resolveErr: expected}, &fakePlayer{}, store)
-
-	err := app.SwitchEpisode(context.Background(), trackFakeSession(t, session, store), "anime", "episode", EpisodeRef{}, 0, false)
-	if !errors.Is(err, expected) {
-		t.Fatalf("error = %v", err)
-	}
-	if session.loads != 0 {
-		t.Fatalf("load calls = %d", session.loads)
-	}
-}
-
 func TestAppSwitchEpisodeDoesNotLoadWhenMappingFails(t *testing.T) {
 	expected := errors.New("mapping failed")
 	session := &fakeSession{events: make(chan PlaybackEvent)}
@@ -573,96 +480,6 @@ func TestAppSwitchEpisodeCancellationAfterResolveDoesNotLoad(t *testing.T) {
 	}
 }
 
-func TestAppLibraryDoesNotUseSource(t *testing.T) {
-	expected := []Anime{{ID: "local-anime", Title: "Cached"}}
-	source := &fakeSource{searchErr: errors.New("source unavailable")}
-	store := &fakeStore{anime: expected}
-	app := NewApp(source, &fakePlayer{}, store)
-	ctx := context.WithValue(context.Background(), contextKey{}, "library")
-
-	actual, err := app.Library(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if source.called {
-		t.Fatal("library accessed remote source")
-	}
-	if store.context != ctx {
-		t.Fatal("library context was not forwarded")
-	}
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatalf("library = %#v", actual)
-	}
-}
-
-func TestAppFollowAndUnfollow(t *testing.T) {
-	store := &fakeStore{}
-	app := NewApp(&fakeSource{}, &fakePlayer{}, store)
-	ctx := context.WithValue(context.Background(), contextKey{}, "following")
-
-	if err := app.Follow(ctx, "anime"); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(store.following, []AnimeID{"anime"}) {
-		t.Fatalf("following after follow = %#v", store.following)
-	}
-	if err := app.Unfollow(ctx, "anime"); err != nil {
-		t.Fatal(err)
-	}
-	if len(store.following) != 0 {
-		t.Fatalf("following after unfollow = %#v", store.following)
-	}
-	if store.context != ctx {
-		t.Fatal("following context was not forwarded")
-	}
-}
-
-func TestAppFollowAndUnfollowRejectMissingAnime(t *testing.T) {
-	for _, operation := range []struct {
-		name string
-		call func(*App) error
-	}{
-		{name: "follow", call: func(app *App) error { return app.Follow(context.Background(), "missing") }},
-		{name: "unfollow", call: func(app *App) error { return app.Unfollow(context.Background(), "missing") }},
-	} {
-		t.Run(operation.name, func(t *testing.T) {
-			store := &fakeStore{animeErr: ErrNotFound, following: []AnimeID{"existing"}}
-			app := NewApp(&fakeSource{}, &fakePlayer{}, store)
-
-			err := operation.call(app)
-			if !errors.Is(err, ErrNotFound) {
-				t.Fatalf("error = %v", err)
-			}
-			if !reflect.DeepEqual(store.following, []AnimeID{"existing"}) {
-				t.Fatalf("following after rejected operation = %#v", store.following)
-			}
-		})
-	}
-}
-
-func TestAppFollowAndUnfollowPropagateSetFollowingError(t *testing.T) {
-	expected := errors.New("following write failed")
-	for _, operation := range []struct {
-		name string
-		call func(*App) error
-	}{
-		{name: "follow", call: func(app *App) error { return app.Follow(context.Background(), "anime") }},
-		{name: "unfollow", call: func(app *App) error { return app.Unfollow(context.Background(), "anime") }},
-	} {
-		t.Run(operation.name, func(t *testing.T) {
-			store := &fakeStore{following: []AnimeID{"existing"}, setFollowingErr: expected}
-			app := NewApp(&fakeSource{}, &fakePlayer{}, store)
-
-			if err := operation.call(app); !errors.Is(err, expected) {
-				t.Fatalf("error = %v", err)
-			}
-			if !reflect.DeepEqual(store.following, []AnimeID{"existing"}) {
-				t.Fatalf("following after failed operation = %#v", store.following)
-			}
-		})
-	}
-}
-
 func TestAppListFollowingEmptyIsNonNil(t *testing.T) {
 	app := NewApp(&fakeSource{}, &fakePlayer{}, &fakeStore{})
 
@@ -675,20 +492,6 @@ func TestAppListFollowingEmptyIsNonNil(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("following entries = %#v", entries)
-	}
-}
-
-func TestAppFollowingCancellationPropagates(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	store := &fakeStore{following: []AnimeID{"anime"}}
-	app := NewApp(&fakeSource{}, &fakePlayer{}, store)
-
-	if err := app.Follow(ctx, "anime"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("follow error = %v", err)
-	}
-	if len(store.following) != 1 {
-		t.Fatalf("following after canceled follow = %#v", store.following)
 	}
 }
 
@@ -745,12 +548,5 @@ func TestSettingsResolvedKeepsChosenValues(t *testing.T) {
 	}
 	if got := light.Resolved(); got != light {
 		t.Fatalf("resolved light settings = %#v, want %#v", got, light)
-	}
-}
-
-func TestPlaybackEventIdentifiesCanonicalEpisode(t *testing.T) {
-	event := PlaybackEvent{AnimeID: "anime", EpisodeID: "episode", Kind: PlaybackEventProgress}
-	if event.AnimeID == "" || event.EpisodeID == "" {
-		t.Fatalf("event = %#v", event)
 	}
 }

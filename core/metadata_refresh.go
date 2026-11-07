@@ -46,18 +46,18 @@ func (app *App) RefreshMetadata(ctx context.Context, animeID AnimeID, providers 
 	if len(providers) > 0 && failed == len(providers) {
 		return false, ErrMetadataUnavailable
 	}
-	match := MatchMetadata(MetadataMatchRequest{Query: query, Candidates: candidates})
-	if match.Decision != MetadataMatchAccepted {
+	match, ok := MatchMetadata(query, candidates)
+	if !ok {
 		candidates = addSeasonCandidates(ctx, query, anime.Catalog, providers, candidates, sources)
 		if err := ctx.Err(); err != nil {
 			return false, err
 		}
-		match = MatchMetadata(MetadataMatchRequest{Query: query, Candidates: candidates})
+		match, ok = MatchMetadata(query, candidates)
 	}
-	if match.Decision != MetadataMatchAccepted {
+	if !ok {
 		return false, nil
 	}
-	metadata, err := sources[match.Candidate.Ref.Provider].Get(ctx, match.Candidate.Ref)
+	metadata, err := sources[match.Ref.Provider].Get(ctx, match.Ref)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return false, ctxErr

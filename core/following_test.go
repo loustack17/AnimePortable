@@ -246,7 +246,7 @@ func TestAppListFollowingRecentUpdateRule(t *testing.T) {
 				history: test.history,
 			}
 			app := NewApp(nil, &fakePlayer{}, store)
-			app.now = func() time.Time { return now }
+			app.tracking.now = func() time.Time { return now }
 			entries, err := app.ListFollowing(context.Background())
 			if err != nil || len(entries) != 1 {
 				t.Fatalf("entries = %#v, %v", entries, err)
@@ -271,7 +271,7 @@ func TestAppListFollowingRecentUpdateUsesEarliestSightingOfTheNumber(t *testing.
 		}},
 	}
 	app := NewApp(nil, &fakePlayer{}, store)
-	app.now = func() time.Time { return now }
+	app.tracking.now = func() time.Time { return now }
 	entries, err := app.ListFollowing(context.Background())
 	if err != nil || len(entries) != 1 || entries[0].RecentlyUpdated || !entries[0].LatestSeenAt.Equal(early) {
 		t.Fatalf("entries = %#v, %v, want episode 13 first seen 9 days ago (not recent)", entries, err)
@@ -318,7 +318,7 @@ func TestAppListFollowingFirstStoredListAndLegacyRowsAreNotUpdates(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			store := &fakeStore{following: []AnimeID{"anime"}, followedAt: followedAt, episodeMappings: map[AnimeID][]EpisodeMapping{"anime": test.mappings}}
 			app := NewApp(nil, &fakePlayer{}, store)
-			app.now = func() time.Time { return now }
+			app.tracking.now = func() time.Time { return now }
 			entries, err := app.ListFollowing(context.Background())
 			if err != nil || len(entries) != 1 || entries[0].RecentlyUpdated != test.want {
 				t.Fatalf("entries = %#v, %v, want RecentlyUpdated %v", entries, err, test.want)

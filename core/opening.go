@@ -70,11 +70,11 @@ func (app *App) MyAnimeListID(ctx context.Context, animeID AnimeID, source MyAni
 	if err != nil {
 		return 0, false, err
 	}
-	match := MatchMetadata(MetadataMatchRequest{Query: query, Candidates: candidates})
-	if match.Decision != MetadataMatchAccepted {
+	match, ok := MatchMetadata(query, candidates)
+	if !ok {
 		return 0, japanese, nil
 	}
-	id, err = source.MyAnimeListID(ctx, match.Candidate.Ref)
+	id, err = source.MyAnimeListID(ctx, match.Ref)
 	if errors.Is(err, ErrNotFound) {
 		return 0, true, nil
 	}

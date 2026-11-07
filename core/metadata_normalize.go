@@ -3,6 +3,7 @@
 package core
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -63,10 +64,7 @@ func metadataTitleParts(value string) (string, string, bool) {
 			} else {
 				number = value[match[4]:match[5]]
 			}
-			if numeric, ok := seasonNumeral(number); ok {
-				number = numeric
-			}
-			season = strings.TrimLeft(number, "0")
+			season = seasonNumeral(number)
 			value = value[:match[0]]
 			if subtitle == "" {
 				subtitle = arc
@@ -105,10 +103,7 @@ func metadataSeasonFromTitle(value string) string {
 		if len(match) == 0 {
 			continue
 		}
-		if numeric, ok := seasonNumeral(match[1]); ok {
-			return numeric
-		}
-		return strings.TrimLeft(match[1], "0")
+		return seasonNumeral(match[1])
 	}
 	for _, pattern := range metadataSeasonSuffixes {
 		match := pattern.FindStringSubmatch(value)
@@ -119,10 +114,7 @@ func metadataSeasonFromTitle(value string) string {
 			if match[index] == "" {
 				continue
 			}
-			if numeric, ok := seasonNumeral(match[index]); ok {
-				return numeric
-			}
-			return strings.TrimLeft(match[index], "0")
+			return seasonNumeral(match[index])
 		}
 	}
 	return ""
@@ -155,7 +147,42 @@ var seasonNumerals = map[string]string{
 	"II": "2", "III": "3", "IV": "4", "V": "5", "VI": "6",
 }
 
-func seasonNumeral(value string) (string, bool) {
-	numeric, ok := seasonNumerals[value]
-	return numeric, ok
+// seasonNumeral is the season a numeral names: a known Chinese or Roman numeral as digits,
+// anything else with its leading zeros removed.
+func seasonNumeral(value string) string {
+	if numeric, ok := seasonNumerals[value]; ok {
+		return numeric
+	}
+	return strings.TrimLeft(value, "0")
 }
+
+var (
+	metadataSeasonSuffixes = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)[\s\p{P}]+(season|s)\s*0*([0-9]+)[\s\p{P}]*$`),
+		regexp.MustCompile(`(?i)[\s\p{P}]+0*([0-9]+)(?:st|nd|rd|th)\s*season[\s\p{P}]*$`),
+		regexp.MustCompile(`[\s\p{P}]+第\s*0*([0-9]+)\s*[季期][\s\p{P}]*$`),
+		regexp.MustCompile(`[\s\p{P}]+第([一二三四五六七八九十]+)[季期][\s\p{P}]*$`),
+		// Taiwan sequel titles: "炎炎消防隊 貳之章", "冰劍的魔術師將要統一世界 II".
+		regexp.MustCompile(`[\s\p{P}]+([一二三四五六七八九十貳參叄肆]+)之章[\s\p{P}]*$`),
+		// Whitespace before the numeral, so "ARC-V" is not read as season 5.
+		regexp.MustCompile(`\s+(II|III|IV|V|VI)[\s\p{P}]*$`),
+	}
+	// NFKC has already turned a full-width ～ into ~. A long light-novel subtitle often opens
+	// with ～ and is never closed ("…第二人生。～不只是武器…嗎？"); it runs to the end.
+	metadataSubtitle                 = regexp.MustCompile(`\s*[~〜]([^~〜]+)(?:[~〜]\s*|$)`)
+	metadataAttachedRoman            = regexp.MustCompile(`(\p{Han})(II|III|IV|V|VI)([\s\p{P}]|$)`)
+	metadataMidSeason                = regexp.MustCompile(`(?i)[\s\p{P}]+(?:第\s*([0-9]+|[一二三四五六七八九十]+)\s*[季期]|0*([0-9]+)(?:st|nd|rd|th)\s*season)[\s\p{P}]+`)
+	metadataPartMarker               = regexp.MustCompile(`(?i)part|cour|部分|クール|[前後]半|[前後][篇編]`)
+	metadataSeasonBeforePartSuffixes = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)[\s\p{P}]+(?:season|s)\s*0*([0-9]+)([\s\p{P}]+(?:part|cour)\b)`),
+		regexp.MustCompile(`(?i)[\s\p{P}]+0*([0-9]+)(?:st|nd|rd|th)\s*season([\s\p{P}]+(?:part|cour)\b)`),
+		regexp.MustCompile(`(?i)[\s\p{P}]+第\s*0*([0-9]+)\s*[季期]([\s\p{P}]+(?:part|cour)\b)`),
+		regexp.MustCompile(`(?i)[\s\p{P}]+第([一二三四五六七八九十]+)[季期]([\s\p{P}]+(?:part|cour)\b)`),
+	}
+	metadataEpisodeSuffixes = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)[\s\p{P}]+(episode|ep|#)\s*0*[0-9]+[\s\p{P}]*$`),
+		regexp.MustCompile(`[\s\p{P}]+第\s*0*[0-9]+\s*[話集][\s\p{P}]*$`),
+		regexp.MustCompile(`[\s\p{P}]+0*[0-9]+\s*[話集][\s\p{P}]*$`),
+		regexp.MustCompile(`[\s]*[-–—_:：]\s*0*[0-9]{1,4}[\s\p{P}]*$`),
+	}
+)

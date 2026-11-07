@@ -51,13 +51,6 @@ type Anime struct {
 	Catalog     CatalogInfo
 }
 
-type Episode struct {
-	ID      EpisodeID
-	AnimeID AnimeID
-	Number  string
-	Title   string
-}
-
 type AnimeMetadata struct {
 	Ref          MetadataRef
 	Title        string
