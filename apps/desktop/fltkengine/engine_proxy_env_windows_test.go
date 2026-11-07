@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"animeportable/apps/desktop/fltkengine"
+	mpv "animeportable/apps/desktop/fltkengine/internal/mpvwin"
 )
 
 const (
@@ -64,13 +66,26 @@ func TestProxyEnvChild(t *testing.T) {
 	if os.Getenv(proxyChildControl) != "" {
 		fltkengine.AllowEnvironmentProxy()
 	}
-	fixture := newEndFixture(t)
-	media = fixture.media
-	var duration time.Duration
-	fixture.engine.SetStateHandler(func(_, d time.Duration, _ bool, _ int) { duration = d })
-	fixture.load(server.URL+"/stream/token/black.mp4", 0, 1)
-	pumpUntil(t, 8*time.Second, func() bool { return duration > 0 })
-	println("CHILDRESULT loaded=" + strconv.FormatBool(duration > 0) + " mediaRequests=" + strconv.Itoa(int(mediaRequests.Load())))
+	// The child plays without a window: the proxy path is mpv's network code, not the video output.
+	preparePinnedRuntime(t)
+	media = filepath.Join(t.TempDir(), "black.mp4")
+	writeBlackVideo(t, media)
+	library, err := mpv.Open(os.Getenv("ANIMEPORTABLE_LIBMPV_OVERRIDE"), pinnedDLLHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer library.Close()
+	player := newHeadlessMpv(t, library, fltkengine.Options{})
+	defer func() { _ = player.TerminateDestroy() }()
+	if err := player.Command([]string{"loadfile", server.URL + "/stream/token/black.mp4"}); err != nil {
+		t.Fatal(err)
+	}
+	loaded := false
+	waitForMpvEvent(player, 8*time.Second, func(event *mpv.Event) bool {
+		loaded = event.EventID == mpv.EventFileLoaded
+		return loaded || event.EventID == mpv.EventEnd
+	})
+	println("CHILDRESULT loaded=" + strconv.FormatBool(loaded) + " mediaRequests=" + strconv.Itoa(int(mediaRequests.Load())))
 }
 
 type proxyChildResult struct {

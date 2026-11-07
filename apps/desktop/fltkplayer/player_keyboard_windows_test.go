@@ -4,7 +4,6 @@ package fltkplayer
 
 import (
 	"reflect"
-	"runtime"
 	"testing"
 	"time"
 
@@ -100,20 +99,6 @@ func TestPlayerContextualArrowsAfterTab(t *testing.T) {
 	keyUp(view, 'L')
 	if !reflect.DeepEqual(seeks, []int{-5, 5, -10, 10}) || view.State().Focus != focusStop {
 		t.Fatalf("J/L independent seek = %v, focus=%d", seeks, view.State().Focus)
-	}
-}
-
-func TestNewWindowDefaultsToProgressFocus(t *testing.T) {
-	runtime.LockOSThread()
-	if !fltk.Lock() {
-		runtime.UnlockOSThread()
-		t.Fatal("FLTK threading initialization failed")
-	}
-	t.Cleanup(func() { fltk.Unlock(); runtime.UnlockOSThread() })
-	view := NewWindow(Callbacks{})
-	t.Cleanup(func() { view.Close(); view.window.Hide(); view.window.Destroy() })
-	if view.State().Focus != FocusProgress {
-		t.Fatalf("NewWindow focus = %d, want progress %d", view.State().Focus, FocusProgress)
 	}
 }
 

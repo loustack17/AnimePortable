@@ -4,10 +4,7 @@ package fltkplayer
 
 import (
 	"reflect"
-	"runtime"
-	"syscall"
 	"testing"
-	"unsafe"
 
 	fltk "github.com/pwiecz/go-fltk"
 )
@@ -198,79 +195,6 @@ func TestSpeedRowAtMapsRowsAndRejectsOutside(t *testing.T) {
 			t.Errorf("%s hit a row", name)
 		}
 	}
-}
-
-func TestPlayerSpeedButtonClickAndDraw(t *testing.T) {
-	runtime.LockOSThread()
-	if !fltk.Lock() {
-		runtime.UnlockOSThread()
-		t.Fatal("FLTK threading initialization failed")
-	}
-	t.Cleanup(func() { fltk.Unlock(); runtime.UnlockOSThread() })
-	var chosen []int
-	view := NewWindow(Callbacks{SetSpeed: func(percent int) { chosen = append(chosen, percent) }})
-	t.Cleanup(func() { view.Close(); view.window.Hide(); view.window.Destroy() })
-	view.window.Show()
-	fltk.Wait(0.01)
-	width, height := view.video.W(), view.video.H()
-	barY := height - 26
-
-	if got := view.actionAt(width-95, barY); got != focusSpeed {
-		t.Fatalf("button hit = %d, want speed", got)
-	}
-	if got := view.actionAt(width-35, barY); got != focusFullscreen {
-		t.Fatalf("fullscreen hit = %d, want fullscreen beside the button", got)
-	}
-	if got := view.actionAt(width-135, barY); got != -1 {
-		t.Fatalf("hit just left of the button = %d, want none", got)
-	}
-	view.activate(view.actionAt(width-95, barY))
-	if !view.speedOpen {
-		t.Fatal("clicking the button did not open the list")
-	}
-	row, ok := speedRowAt(speedListLeft(width)+20, speedListTop(height)+speedListRowsOffset+4*speedRowHeight+10, width, height)
-	if !ok || row != 4 {
-		t.Fatalf("last row hit = %d, %v", row, ok)
-	}
-	view.chooseSpeed(row)
-	if !reflect.DeepEqual(chosen, []int{200}) || view.speedOpen {
-		t.Fatalf("choosing the last row gave %v, open=%v; want [200] and a closed list", chosen, view.speedOpen)
-	}
-
-	gl := syscall.NewLazyDLL("opengl32.dll")
-	call := func(name string, args ...uintptr) { t.Helper(); _, _, _ = gl.NewProc(name).Call(args...) }
-	view.video.MakeCurrent()
-	call("glDisable", 0x0C11)
-	call("glClearColor", 0, 0, 0, 0)
-	call("glClear", 0x00004000)
-	drawPlayerOverlay(width, height, view)
-	var doubleBuffered byte
-	call("glGetBooleanv", 0x0C32, uintptr(unsafe.Pointer(&doubleBuffered)))
-	buffer := uintptr(0x0404)
-	if doubleBuffered != 0 {
-		buffer = 0x0405
-	}
-	call("glReadBuffer", buffer)
-	// A pixel inside the button, left of its label (glReadPixels counts rows from the bottom).
-	var pixel [4]byte
-	call("glReadPixels", uintptr(width-122), 14, 1, 1, 0x1908, 0x1401, uintptr(unsafe.Pointer(&pixel[0])))
-	if pixel[2] < 50 || pixel[2] <= pixel[0] {
-		t.Fatalf("button background pixel = %v, want the blue-grey control fill", pixel)
-	}
-
-	// With the list open, a pixel inside the list is the opaque dark panel, not cleared video.
-	view.openSpeeds()
-	view.video.MakeCurrent()
-	call("glClearColor", 0, 0, 0, 0)
-	call("glClear", 0x00004000)
-	drawPlayerOverlay(width, height, view)
-	call("glReadBuffer", buffer)
-	listY := height - speedListTop(height) - speedListHeight() + 1
-	call("glReadPixels", uintptr(speedListLeft(width)+2), uintptr(listY), 1, 1, 0x1908, 0x1401, uintptr(unsafe.Pointer(&pixel[0])))
-	if pixel[3] < 200 {
-		t.Fatalf("list panel pixel = %v, want an opaque panel", pixel)
-	}
-	view.window.Hide()
 }
 
 func TestSpeedListBlocksMediaShortcuts(t *testing.T) {

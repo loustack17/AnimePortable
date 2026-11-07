@@ -3,12 +3,8 @@
 package fltkplayer
 
 import (
-	"runtime"
-	"syscall"
 	"testing"
-	"unsafe"
 
-	"animeportable/apps/desktop/uitext"
 	fltk "github.com/pwiecz/go-fltk"
 )
 
@@ -105,87 +101,4 @@ func TestSkipIntroJoinsTheTabOrderOnlyWhileShown(t *testing.T) {
 	if view.state.Focus != focusProgress {
 		t.Fatalf("Shift+Tab with no button = %d, want progress", view.state.Focus)
 	}
-}
-
-func TestSkipIntroClickAndDrawWhileControlsAreHidden(t *testing.T) {
-	runtime.LockOSThread()
-	if !fltk.Lock() {
-		runtime.UnlockOSThread()
-		t.Fatal("FLTK threading initialization failed")
-	}
-	t.Cleanup(func() { fltk.Unlock(); runtime.UnlockOSThread(); uitext.Use("zh-TW") })
-	var seeks []int
-	view := NewWindow(Callbacks{SeekTo: func(seconds int) { seeks = append(seeks, seconds) }})
-	t.Cleanup(func() { view.Close(); view.window.Hide(); view.window.Destroy() })
-	view.window.Show()
-	fltk.Wait(0.01)
-	width, height := view.video.W(), view.video.H()
-	buttonX, buttonY := width-skipButtonRightInset-view.skipWidth/2, height-skipButtonBottomInset+skipButtonHeight/2
-
-	if got := view.actionAt(buttonX, buttonY); got != -1 {
-		t.Fatalf("hidden button hit = %d", got)
-	}
-	view.SetState(inOpening())
-	view.hideControls()
-	if got := view.actionAt(buttonX, buttonY); got != focusSkip {
-		t.Fatalf("button hit = %d, want skip", got)
-	}
-	view.activate(focusSkip)
-	if len(seeks) != 1 || seeks[0] != 110 {
-		t.Fatalf("click sought %v", seeks)
-	}
-
-	gl := syscall.NewLazyDLL("opengl32.dll")
-	call := func(name string, args ...uintptr) { t.Helper(); _, _, _ = gl.NewProc(name).Call(args...) }
-	// white counts white pixels in the button's box: its outline and label.
-	white := func(state State) int {
-		t.Helper()
-		view.SetState(state)
-		view.hideControls()
-		view.video.MakeCurrent()
-		call("glDisable", 0x0C11)
-		call("glClearColor", 0, 0, 0, 0)
-		call("glClear", 0x00004000)
-		drawPlayerOverlay(width, height, view)
-		var doubleBuffered byte
-		call("glGetBooleanv", 0x0C32, uintptr(unsafe.Pointer(&doubleBuffered)))
-		buffer := uintptr(0x0404)
-		if doubleBuffered != 0 {
-			buffer = 0x0405
-		}
-		call("glReadBuffer", buffer)
-		boxWidth := view.skipWidth
-		pixels := make([]byte, boxWidth*skipButtonHeight*4)
-		call("glReadPixels", uintptr(width-skipButtonRightInset-boxWidth), uintptr(skipButtonBottomInset-skipButtonHeight), uintptr(boxWidth), uintptr(skipButtonHeight), 0x1908, 0x1401, uintptr(unsafe.Pointer(&pixels[0])))
-		count := 0
-		for index := 0; index < len(pixels); index += 4 {
-			if pixels[index] >= 200 && pixels[index+1] >= 200 && pixels[index+2] >= 200 {
-				count++
-			}
-		}
-		return count
-	}
-	outside := inOpening()
-	outside.Position = 200
-	if got := white(outside); got != 0 {
-		t.Fatalf("outside the opening drew %d white pixels", got)
-	}
-	for _, code := range uitext.LanguageCodes {
-		uitext.Use(code)
-		view.updateLabelBuffers()
-		label := uitext.T().PlayerSkipIntro
-		if view.skipWidth-2*skipButtonPadding < skipLabelWidth(label) || view.skipWidth > width/3 {
-			t.Errorf("%s: button %d px for %q", code, view.skipWidth, label)
-		}
-		if got := white(inOpening()); got < 2*view.skipWidth+100 {
-			t.Errorf("%s: hidden controls drew %d white pixels, want outline and label", code, got)
-		}
-	}
-	view.window.Hide()
-}
-
-func skipLabelWidth(label string) int {
-	fltk.SetDrawFont(fltk.HELVETICA_BOLD, skipLabelSize)
-	width, _ := fltk.MeasureText(label, false)
-	return width
 }

@@ -21,13 +21,18 @@ Tests check the project, not themselves. Each module keeps a few scenario tests 
 
 | Slice | Content | State |
 | --- | --- | --- |
-| S1 | Workflow rule: no `-race`, real-usage rule (AGENTS.md, 05_WORKFLOW.md). Delete the five resource-pass stress tests and the then-unused `internal/resourcepass`. | done, not committed |
-| S2 | Window packages (`fltkhome`, `fltkplayer`, `fltkengine`): one shared Home window and one player window per run; logic checks move to headless tests; delete the rest. Needs a spike: FLTK on the main thread from `TestMain`. | next |
+| S1 | Workflow rule: no `-race`, real-usage rule (AGENTS.md, 05_WORKFLOW.md). Delete the five resource-pass stress tests and the then-unused `internal/resourcepass`. | done (5127904) |
+| S2 | Window packages (`fltkhome`, `fltkplayer`, `fltkengine`): one shared Home window and one player window per run; logic checks move to headless tests; delete the rest. Done as one walk per window: `TestHomeRealUse` (fltkhome) and `TestPlayerRealUse` (fltkengine); fltkplayer keeps only headless tests; the proxy child plays headless. | done, run once (both walks and the proxy check pass), not committed |
 | S3 | Adapters (`anime1`, metadata, network, playback, persistence). | open |
 | S4 | `apps/desktop/backend`, `apps/desktop`, `internal`, `tools`, `tests`. | open |
 | S5 | `core` (after Loop 39's uncommitted work is settled, since both touch `core/*_test.go`). | open |
 
 Each slice: list keep, merge or delete per test, the owner approves the list, then the change, one focused run, one commit after owner approval.
+
+## S2 coverage dropped (owner rule: not real use, or not worth a window)
+
+- Per-button, per-language and per-text checks; focus-order and generation-race checks; dialog keys and layout (dialogs open no window in tests now); data-location move, proxy test, update check rows; startup error and settings-load-failure screens; schedule cache-first order; cover decoding.
+- Player: native media keys and Space/Enter through the window procedure, fullscreen subclass, star/speed/skip-intro click-and-draw, overlay viewport across reentry; 30-cycle memory growth; opt-in playback diagnostics report.
 
 ## Noticed, not done
 
