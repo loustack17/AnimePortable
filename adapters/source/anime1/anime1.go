@@ -61,11 +61,7 @@ type Client struct {
 }
 
 func New(client *securehttp.Client) *Client {
-	return newWithDo(client)
-}
-
-func newWithDo(do responseClient) *Client {
-	return &Client{do: do}
+	return &Client{do: client}
 }
 
 func (client *Client) Catalog(ctx context.Context) ([]core.SourceAnime, error) {
@@ -315,13 +311,8 @@ func parseSmallNumber(value string, maxDigits int) (int, bool) {
 
 func parseID(raw json.RawMessage) (string, bool) {
 	value := strings.TrimSpace(string(raw))
-	if value == "" {
+	if !allASCIIDigits(value) {
 		return "", false
-	}
-	for _, digit := range value {
-		if digit < '0' || digit > '9' {
-			return "", false
-		}
 	}
 	trimmed := strings.TrimLeft(value, "0")
 	if trimmed == "" {
@@ -423,13 +414,8 @@ func parseEpisodeCategoryID(ref core.SourceRef) (string, bool) {
 }
 
 func parseBoundedPositiveDecimal(value string, maxDigits int) (string, bool) {
-	if len(value) == 0 || len(value) > maxDigits || value[0] == '0' {
+	if !allASCIIDigits(value) || len(value) > maxDigits || value[0] == '0' {
 		return "", false
-	}
-	for _, digit := range value {
-		if digit < '0' || digit > '9' {
-			return "", false
-		}
 	}
 	return value, true
 }
@@ -489,7 +475,7 @@ func parseEpisodePage(ctx context.Context, body []byte, ref core.SourceRef, page
 			return episodePage{}, errEpisodesMalformed
 		}
 		categoryClass = articleCategoryClass
-		if postID, ok := parsePostID(attributeValue(child, "id")); ok {
+		if postID, ok, _ := parsePostIDResult(attributeValue(child, "id")); ok {
 			postIDs = append(postIDs, postID)
 		}
 		episode, valid, err := parseEpisodeArticle(ctx, child, ref, pageURL)
@@ -617,7 +603,7 @@ func parseEpisodeArticle(ctx context.Context, article *html.Node, ref core.Sourc
 	if !validEpisodeLink(pageURL, href, postID) {
 		return core.SourceEpisode{}, false, nil
 	}
-	title, err := normalizeEpisodeText(ctx, anchors[0])
+	title, err := visibleText(ctx, []*html.Node{anchors[0]}, maxEpisodeTitleBytes, maxEpisodeTitleRunes, errEpisodesMalformed)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errEpisodesMalformed) {
 			return core.SourceEpisode{}, false, err
@@ -635,11 +621,6 @@ func parseEpisodeArticle(ctx context.Context, article *html.Node, ref core.Sourc
 		Ref:    core.EpisodeRef{Anime: ref, ID: postID},
 		Number: number,
 	}, true, nil
-}
-
-func parsePostID(value string) (string, bool) {
-	postID, ok, _ := parsePostIDResult(value)
-	return postID, ok
 }
 
 func parsePostIDResult(value string) (string, bool, bool) {
@@ -690,10 +671,6 @@ func findEntryTitleAnchors(ctx context.Context, article *html.Node) ([]*html.Nod
 		}
 	}
 	return anchors, nil
-}
-
-func normalizeEpisodeText(ctx context.Context, root *html.Node) (string, error) {
-	return visibleText(ctx, []*html.Node{root}, maxEpisodeTitleBytes, maxEpisodeTitleRunes, errEpisodesMalformed)
 }
 
 // visibleText joins the text under roots, in document order, that a reader would see: text
@@ -886,13 +863,8 @@ func isHexDigit(value byte) bool {
 }
 
 func parsePageNumber(value string) (int, bool) {
-	if value == "" || value[0] == '0' {
+	if !allASCIIDigits(value) || value[0] == '0' {
 		return 0, false
-	}
-	for _, digit := range value {
-		if digit < '0' || digit > '9' {
-			return 0, false
-		}
 	}
 	page, err := strconv.Atoi(value)
 	return page, err == nil && page > 0

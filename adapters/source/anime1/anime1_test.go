@@ -269,7 +269,7 @@ func TestParseCatalogRejectsMalformedTopLevelAndExcessRows(t *testing.T) {
 
 func TestCatalogUsesFixedGETAndSanitizesFailures(t *testing.T) {
 	fake := &fakeClient{response: jsonResponse(catalogFixture(t))}
-	client := newWithDo(fake)
+	client := &Client{do: fake}
 	items, err := client.Catalog(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -288,17 +288,17 @@ func TestCatalogUsesFixedGETAndSanitizesFailures(t *testing.T) {
 	}
 
 	statusFake := &fakeClient{response: &securehttp.Response{StatusCode: http.StatusForbidden, Header: http.Header{"Content-Type": {"application/json"}}, Body: catalogFixture(t)}}
-	_, err = newWithDo(statusFake).Catalog(context.Background())
+	_, err = (&Client{do: statusFake}).Catalog(context.Background())
 	var statusError *securehttp.Error
 	if !errors.As(err, &statusError) || statusError.Kind != securehttp.KindStatus {
 		t.Fatalf("status error = %v", err)
 	}
 	networkFake := &fakeClient{err: errors.New("raw-secret network URL")}
-	if _, err := newWithDo(networkFake).Catalog(context.Background()); err == nil || strings.Contains(err.Error(), "raw-secret") {
+	if _, err := (&Client{do: networkFake}).Catalog(context.Background()); err == nil || strings.Contains(err.Error(), "raw-secret") {
 		t.Fatalf("network error = %v", err)
 	}
 	nonJSONFake := &fakeClient{response: &securehttp.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html"}}, Body: catalogFixture(t)}}
-	if _, err := newWithDo(nonJSONFake).Catalog(context.Background()); !errors.Is(err, errCatalogMalformed) {
+	if _, err := (&Client{do: nonJSONFake}).Catalog(context.Background()); !errors.Is(err, errCatalogMalformed) {
 		t.Fatalf("content type error = %v", err)
 	}
 }
@@ -306,7 +306,7 @@ func TestCatalogUsesFixedGETAndSanitizesFailures(t *testing.T) {
 func TestCatalogPropagatesActiveCancellationToDo(t *testing.T) {
 	started := make(chan struct{})
 	fake := &fakeClient{started: started, blockDone: true}
-	client := newWithDo(fake)
+	client := &Client{do: fake}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	result := make(chan error, 1)
@@ -332,7 +332,7 @@ func TestCatalogPropagatesActiveCancellationToDo(t *testing.T) {
 
 func TestSearchIsLocalCaseInsensitiveSubstringAndBlankQueryDoesNotRequest(t *testing.T) {
 	fake := &fakeClient{response: jsonResponse(catalogFixture(t))}
-	client := newWithDo(fake)
+	client := &Client{do: fake}
 	items, err := client.Search(context.Background(), "  beta &  ")
 	if err != nil {
 		t.Fatal(err)
@@ -361,7 +361,7 @@ func TestSearchIsLocalCaseInsensitiveSubstringAndBlankQueryDoesNotRequest(t *tes
 
 func TestCanceledBlankSearchReturnsCancellationWithoutRequest(t *testing.T) {
 	fake := &fakeClient{response: jsonResponse(catalogFixture(t))}
-	client := newWithDo(fake)
+	client := &Client{do: fake}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	items, err := client.Search(ctx, " ")
@@ -381,7 +381,7 @@ func TestEpisodesFixtureReturnsOldestFirstAndUsesArchivePagination(t *testing.T)
 		episodeResponse(episodeFixture(t, "episodes-page-1.html")),
 		episodeResponse(episodeFixture(t, "episodes-page-2.html")),
 	}}
-	items, err := newWithDo(fake).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	items, err := (&Client{do: fake}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,10 +413,10 @@ func TestEpisodesFixtureReturnsOldestFirstAndUsesArchivePagination(t *testing.T)
 func TestEpisodesAcceptsConsistentCategorySlugs(t *testing.T) {
 	pageOne := strings.ReplaceAll(episodeFixture(t, "episodes-page-1.html"), "category-42", "category-lets-go-")
 	pageTwo := strings.ReplaceAll(episodeFixture(t, "episodes-page-2.html"), "category-42", "category-lets-go-")
-	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{
+	items, err := (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{
 		episodeResponse(pageOne),
 		episodeResponse(pageTwo),
-	}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if err != nil || len(items) != 4 {
 		t.Fatalf("items = %d error = %v", len(items), err)
 	}
@@ -436,7 +436,7 @@ func TestEpisodesRejectsInvalidCategoryClassStructure(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(test.body)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+			items, err := (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(test.body)}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 			if !errors.Is(err, errEpisodesMalformed) || items != nil {
 				t.Fatalf("items = %#v error = %v", items, err)
 			}
@@ -447,10 +447,10 @@ func TestEpisodesRejectsInvalidCategoryClassStructure(t *testing.T) {
 func TestEpisodesRejectsCategorySlugChangesAcrossPages(t *testing.T) {
 	pageOne := strings.ReplaceAll(episodeFixture(t, "episodes-page-1.html"), "category-42", "category-show")
 	pageTwo := strings.ReplaceAll(episodeFixture(t, "episodes-page-2.html"), "category-42", "category-other")
-	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{
+	items, err := (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{
 		episodeResponse(pageOne),
 		episodeResponse(pageTwo),
-	}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if !errors.Is(err, errEpisodesMalformed) || items != nil {
 		t.Fatalf("items = %#v error = %v", items, err)
 	}
@@ -458,7 +458,7 @@ func TestEpisodesRejectsCategorySlugChangesAcrossPages(t *testing.T) {
 
 func TestEpisodesRejectsInvalidRefsBeforeRequest(t *testing.T) {
 	fake := &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(episodeFixture(t, "episodes-page-1.html"))}}
-	client := newWithDo(fake)
+	client := &Client{do: fake}
 	for _, ref := range []core.SourceRef{
 		{},
 		{Provider: "other", ID: "42"},
@@ -483,15 +483,15 @@ func TestEpisodesRejectsInvalidRefsBeforeRequest(t *testing.T) {
 func TestEpisodesPropagatesCancellationAndSanitizesFailures(t *testing.T) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	client := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(episodeFixture(t, "episodes-page-1.html"))}})
+	client := &Client{do: &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(episodeFixture(t, "episodes-page-1.html"))}}}
 	if _, err := client.Episodes(canceled, core.SourceRef{Provider: providerID, ID: "42"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled error = %v", err)
 	}
-	if _, err := newWithDo(&fakeClient{err: errors.New("raw token https://private.example")}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); !errors.Is(err, errEpisodesUnavailable) || strings.Contains(err.Error(), "raw token") {
+	if _, err := (&Client{do: &fakeClient{err: errors.New("raw token https://private.example")}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); !errors.Is(err, errEpisodesUnavailable) || strings.Contains(err.Error(), "raw token") {
 		t.Fatalf("network error = %v", err)
 	}
 	status := &securehttp.Error{Kind: securehttp.KindStatus}
-	if _, err := newWithDo(&fakeClient{err: status}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); !errors.Is(err, status) {
+	if _, err := (&Client{do: &fakeClient{err: status}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); !errors.Is(err, status) {
 		t.Fatalf("secure error = %v", err)
 	}
 }
@@ -500,23 +500,23 @@ func TestEpisodePageTimeoutRetriesOnce(t *testing.T) {
 	ref := core.SourceRef{Provider: providerID, ID: "42"}
 	page := episodeResponse(episodeFixture(t, "episodes-page-2.html"))
 	fake := &sequenceEpisodeClient{errors: []error{context.DeadlineExceeded}, responses: []*securehttp.Response{nil, page}}
-	if items, err := newWithDo(fake).Episodes(context.Background(), ref); err != nil || len(items) == 0 || fake.index != 2 {
+	if items, err := (&Client{do: fake}).Episodes(context.Background(), ref); err != nil || len(items) == 0 || fake.index != 2 {
 		t.Fatalf("stalled page then answer: items=%d err=%v requests=%d", len(items), err, fake.index)
 	}
 	fake = &sequenceEpisodeClient{errors: []error{context.DeadlineExceeded, context.DeadlineExceeded}}
-	if _, err := newWithDo(fake).Episodes(context.Background(), ref); err == nil || fake.index != 2 {
+	if _, err := (&Client{do: fake}).Episodes(context.Background(), ref); err == nil || fake.index != 2 {
 		t.Fatalf("two stalls: err=%v requests=%d, want an error after 2 requests", err, fake.index)
 	}
 	status := &securehttp.Error{Kind: securehttp.KindStatus, Status: http.StatusBadGateway}
 	fake = &sequenceEpisodeClient{errors: []error{status}, responses: []*securehttp.Response{nil, page}}
-	if _, err := newWithDo(fake).Episodes(context.Background(), ref); !errors.Is(err, status) || fake.index != 1 {
+	if _, err := (&Client{do: fake}).Episodes(context.Background(), ref); !errors.Is(err, status) || fake.index != 1 {
 		t.Fatalf("non-timeout failure: err=%v requests=%d, want no retry", err, fake.index)
 	}
 }
 
 func TestEpisodePageRequestsCarryThePageTimeout(t *testing.T) {
 	fake := &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(episodeFixture(t, "episodes-page-2.html"))}}
-	if _, err := newWithDo(fake).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); err != nil {
+	if _, err := (&Client{do: fake}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); err != nil {
 		t.Fatal(err)
 	}
 	deadline, ok := fake.requests[0].Context().Deadline()
@@ -531,7 +531,7 @@ func TestEpisodePageRetryKeepsTheClientTimeoutsOnly(t *testing.T) {
 		_, ok := request.Context().Deadline()
 		deadlines = append(deadlines, ok)
 	}, first: context.DeadlineExceeded, then: episodeResponse(episodeFixture(t, "episodes-page-2.html"))}
-	if _, err := newWithDo(fake).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); err != nil {
+	if _, err := (&Client{do: fake}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(deadlines) != 2 || !deadlines[0] || deadlines[1] {
@@ -572,7 +572,7 @@ func TestEpisodesRejectsMalformedPagesAndDoesNotReturnPartialResults(t *testing.
 		invalidLink,
 		malformedTitle,
 	} {
-		items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+		items, err := (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 		if !errors.Is(err, errEpisodesMalformed) || items != nil {
 			t.Fatalf("items = %#v error = %v", items, err)
 		}
@@ -581,7 +581,7 @@ func TestEpisodesRejectsMalformedPagesAndDoesNotReturnPartialResults(t *testing.
 		episodeResponse(base),
 		{StatusCode: http.StatusForbidden, Header: http.Header{"Content-Type": {"text/html"}}, Body: []byte("secret")},
 	}}
-	items, err := newWithDo(secondPageError).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	items, err := (&Client{do: secondPageError}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if _, ok := err.(*securehttp.Error); !ok || items != nil {
 		t.Fatalf("second page items = %#v error = %v", items, err)
 	}
@@ -591,7 +591,7 @@ func TestEpisodesAcceptsXHTMLAndExactLabels(t *testing.T) {
 	body := `<html><body><main id="main"><article id="post-123" class="category-42"><h2 class="entry-title"><a href="/123">Show <span>[BD特典SP]</span></a></h2></article></main></body></html>`
 	response := episodeResponse(body)
 	response.Header.Set("Content-Type", "application/xhtml+xml")
-	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{response}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	items, err := (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{response}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -616,13 +616,13 @@ func TestEpisodesRejectsPaginationViolations(t *testing.T) {
 		`/category/%65xample-show/page/2/`,
 	} {
 		body := strings.Replace(base, `/category/anime/%e7%95%aa/page/2`, href, 1)
-		items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+		items, err := (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 		if !errors.Is(err, errEpisodesMalformed) || items != nil {
 			t.Fatalf("href %q items = %#v error = %v", href, items, err)
 		}
 	}
 	pageTwo := episodeFixture(t, "episodes-page-2.html") + `<nav class="navigation"><div class="nav-previous"><a href="/category/other-show/page/3/">Older</a></div></nav>`
-	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(base), episodeResponse(pageTwo)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	items, err := (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(base), episodeResponse(pageTwo)}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if !errors.Is(err, errEpisodesMalformed) || items != nil {
 		t.Fatalf("changed prefix items = %#v error = %v", items, err)
 	}
@@ -632,18 +632,18 @@ func TestEpisodesRejectsBoundsAndMIMEViolations(t *testing.T) {
 	valid := episodeFixture(t, "episodes-page-2.html")
 	tooLarge := strings.Repeat("x", maxEpisodeBodyBytes+1)
 	largeResponse := episodeResponse(tooLarge)
-	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{largeResponse}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	items, err := (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{largeResponse}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if !errors.Is(err, errEpisodesMalformed) || items != nil {
 		t.Fatalf("large body items = %#v error = %v", items, err)
 	}
 	wrongMIME := episodeResponse(valid)
 	wrongMIME.Header.Set("Content-Type", "application/json")
-	items, err = newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{wrongMIME}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	items, err = (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{wrongMIME}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if !errors.Is(err, errEpisodesMalformed) || items != nil {
 		t.Fatalf("wrong MIME items = %#v error = %v", items, err)
 	}
 	nodes := `<html><body>` + strings.Repeat(`<span></span>`, maxEpisodeDOMNodes) + `</body></html>`
-	items, err = newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(nodes)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	items, err = (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(nodes)}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if !errors.Is(err, errEpisodesMalformed) || items != nil {
 		t.Fatalf("large DOM items = %#v error = %v", items, err)
 	}
@@ -656,7 +656,7 @@ func TestEpisodeTitleExcludesRawTextTokens(t *testing.T) {
 		excluded += "<" + element + ">" + token + " [evil]</" + element + ">"
 	}
 	body := `<html><body><main id="main"><article id="post-123" class="category-42"><h2 class="entry-title"><a href="/123">Show ` + excluded + `[SP]</a></h2><video data-apireq="` + token + `"></video></article></main></body></html>`
-	items, err := newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+	items, err := (&Client{do: &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}}}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -685,7 +685,7 @@ func TestEpisodesSecondPageFailuresReturnNoPartialResult(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			items, err := newWithDo(test.client).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
+			items, err := (&Client{do: test.client}).Episodes(context.Background(), core.SourceRef{Provider: providerID, ID: "42"})
 			if items != nil {
 				t.Fatalf("partial items = %#v", items)
 			}
@@ -712,7 +712,7 @@ func TestEpisodesCancellationDuringTraversalAndPagination(t *testing.T) {
 	}
 	requestContext, cancel := context.WithCancel(context.Background())
 	client := &cancelAfterPageClient{response: episodeResponse(episodeFixture(t, "episodes-page-1.html")), cancel: cancel}
-	items, err := newWithDo(client).Episodes(requestContext, core.SourceRef{Provider: providerID, ID: "42"})
+	items, err := (&Client{do: client}).Episodes(requestContext, core.SourceRef{Provider: providerID, ID: "42"})
 	if !errors.Is(err, context.Canceled) || items != nil || client.calls != 2 {
 		t.Fatalf("pagination items = %#v error = %v calls = %d", items, err, client.calls)
 	}
@@ -720,14 +720,14 @@ func TestEpisodesCancellationDuringTraversalAndPagination(t *testing.T) {
 
 func TestAnime1AdapterAcceptanceContract(t *testing.T) {
 	factory := func(*testing.T) core.AnimeSource {
-		return newWithDo(&fakeClient{
+		return &Client{do: &fakeClient{
 			response: jsonResponse(catalogFixture(t)),
 			episodeResponses: []*securehttp.Response{
 				episodeResponse(episodeFixture(t, "episodes-page-1.html")),
 				episodeResponse(episodeFixture(t, "episodes-page-2.html")),
 			},
 			resolverResponses: resolverContractResponses(),
-		})
+		}}
 	}
 	contract.RunAnimeSource(t, contract.AnimeSourceSuite{
 		New:     factory,

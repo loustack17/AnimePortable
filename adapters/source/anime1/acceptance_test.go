@@ -33,7 +33,7 @@ func TestAnime1AdapterAcceptanceMalformedResponses(t *testing.T) {
 		{
 			name: "catalog and search",
 			client: func() *Client {
-				return newWithDo(&fakeClient{response: jsonResponse([]byte(`[{"secret":"` + acceptanceSecret + `"}]`))})
+				return &Client{do: &fakeClient{response: jsonResponse([]byte(`[{"secret":"` + acceptanceSecret + `"}]`))}}
 			},
 			calls: []malformedAcceptanceCall{
 				{
@@ -58,7 +58,7 @@ func TestAnime1AdapterAcceptanceMalformedResponses(t *testing.T) {
 			name: "episodes",
 			client: func() *Client {
 				body := `<html><body><main id="main"><p>` + acceptanceSecret + `</p></main></body></html>`
-				return newWithDo(&fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}})
+				return &Client{do: &fakeClient{episodeResponses: []*securehttp.Response{episodeResponse(body)}}}
 			},
 			calls: []malformedAcceptanceCall{
 				{
@@ -75,11 +75,11 @@ func TestAnime1AdapterAcceptanceMalformedResponses(t *testing.T) {
 			name: "resolve",
 			client: func() *Client {
 				body := `<html><body><main id="main"><article id="post-101"><video data-apireq="">` + acceptanceSecret + `</video></article></main></body></html>`
-				return newWithDo(&fakeClient{resolverResponses: []*securehttp.Response{{
+				return &Client{do: &fakeClient{resolverResponses: []*securehttp.Response{{
 					StatusCode: http.StatusOK,
 					Header:     http.Header{"Content-Type": {"text/html; charset=utf-8"}},
 					Body:       []byte(body),
-				}}})
+				}}}}
 			},
 			calls: []malformedAcceptanceCall{
 				{

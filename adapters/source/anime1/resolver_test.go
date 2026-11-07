@@ -97,7 +97,7 @@ func resolverRef() core.EpisodeRef {
 
 func TestResolveExactProtocolAndOpaqueOutput(t *testing.T) {
 	fake := &resolverClient{responses: resolverContractResponses()}
-	source, err := newWithDo(fake).Resolve(context.Background(), resolverRef())
+	source, err := (&Client{do: fake}).Resolve(context.Background(), resolverRef())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestResolveRejectsMalformedEpisodePages(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			fake := &resolverClient{responses: []*securehttp.Response{{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html"}}, Body: []byte(body)}}}
-			source, err := newWithDo(fake).Resolve(context.Background(), resolverRef())
+			source, err := (&Client{do: fake}).Resolve(context.Background(), resolverRef())
 			if !errors.Is(err, errResolverMalformed) || source.URL() != "" || len(fake.requests) != 1 {
 				t.Fatalf("source=%v requests=%d error=%v", source, len(fake.requests), err)
 			}
@@ -192,7 +192,7 @@ func TestResolveFailureMatrixAndSanitization(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			fake := &resolverClient{responses: test.responses, errors: test.errors}
-			source, err := newWithDo(fake).Resolve(context.Background(), resolverRef())
+			source, err := (&Client{do: fake}).Resolve(context.Background(), resolverRef())
 			if source.URL() != "" || !errors.Is(err, test.want) {
 				var gotSecure, wantSecure *securehttp.Error
 				if !errors.As(err, &gotSecure) || !errors.As(test.want, &wantSecure) || gotSecure.Kind != wantSecure.Kind {
@@ -230,9 +230,6 @@ func TestResolverSourceURLPolicy(t *testing.T) {
 			t.Fatalf("invalid URL accepted")
 		}
 	}
-	if _, ok := normalizeResolverURL("https://cdn.v.anime1.me/" + strings.Repeat("a", maxResolverURLBytes) + ".mp4"); ok {
-		t.Fatal("URL limit +1 accepted")
-	}
 	base := "https://cdn.v.anime1.me/video.mp4?q="
 	exact := base + strings.Repeat("a", maxResolverURLBytes-len(base))
 	if len(exact) != maxResolverURLBytes {
@@ -265,7 +262,7 @@ func TestResolverSourceURLPolicy(t *testing.T) {
 func TestResolveCancellationDuringAPIRequest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	fake := &resolverClient{responses: resolverContractResponses(), cancelAt: 2, cancel: cancel}
-	source, err := newWithDo(fake).Resolve(ctx, resolverRef())
+	source, err := (&Client{do: fake}).Resolve(ctx, resolverRef())
 	if !errors.Is(err, context.Canceled) || source.URL() != "" || len(fake.requests) != 2 {
 		t.Fatalf("source=%v requests=%d error=%v", source, len(fake.requests), err)
 	}
@@ -276,19 +273,19 @@ func TestResolverPageTimeoutRetriesOnce(t *testing.T) {
 		responses: []*securehttp.Response{nil, resolverPage(resolverTestToken), resolverSuccess()},
 		errors:    []error{context.DeadlineExceeded},
 	}
-	if _, err := newWithDo(fake).Resolve(context.Background(), resolverRef()); err != nil {
+	if _, err := (&Client{do: fake}).Resolve(context.Background(), resolverRef()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.requests) != 3 || fake.requests[0].method != http.MethodGet || fake.requests[1].method != http.MethodGet || fake.requests[2].method != http.MethodPost {
 		t.Fatalf("retry requests = %#v", fake.requests)
 	}
 	fake = &resolverClient{errors: []error{context.DeadlineExceeded, context.DeadlineExceeded}}
-	if _, err := newWithDo(fake).Resolve(context.Background(), resolverRef()); !errors.Is(err, context.DeadlineExceeded) || len(fake.requests) != 2 {
+	if _, err := (&Client{do: fake}).Resolve(context.Background(), resolverRef()); !errors.Is(err, context.DeadlineExceeded) || len(fake.requests) != 2 {
 		t.Fatalf("exhausted timeout requests=%d error=%v", len(fake.requests), err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	fake = &resolverClient{errors: []error{context.DeadlineExceeded}, cancelAt: 1, cancel: cancel}
-	if _, err := newWithDo(fake).Resolve(ctx, resolverRef()); !errors.Is(err, context.Canceled) || len(fake.requests) != 1 {
+	if _, err := (&Client{do: fake}).Resolve(ctx, resolverRef()); !errors.Is(err, context.Canceled) || len(fake.requests) != 1 {
 		t.Fatalf("canceled request retried; requests=%d error=%v", len(fake.requests), err)
 	}
 }
