@@ -23,7 +23,8 @@ The full process is [docs/05_WORKFLOW.md](docs/05_WORKFLOW.md). It overrides any
 - Never weaken, skip or special-case a test, check or criterion to get PASS.
 - On failure: classify, diagnose with evidence, make the smallest causal fix, rerun the focused check, then regressions. After three failed attempts at the same problem, stop and report to the owner.
 - PASS needs final-state evidence: required checks, independent code-quality review with no `MUST_FIX`, and the owner's check when required.
-- Run the full native suite locally before pushing (`CGO_ENABLED=1 go test -count=1 ./...`, then `-race`, with an msvcrt MinGW gcc such as MSYS2 MINGW64 or nuwen MinGW on PATH). GitHub Windows CI confirms the build and the tests that need no window or libmpv for the pushed commit; the local run is the only run of the window and playback tests.
+- Tests follow real usage: keep only cases that happen in real use (user flows, real outside events, real attacks); no tests for impossible cases, per-button or per-text checks, or stress loops. A full run opens at most two windows (one Home, one player). See [docs/loops/LOOP39T.md](docs/loops/LOOP39T.md).
+- Run the full native suite once locally before pushing (`CGO_ENABLED=1 go test -count=1 ./...`; no `-race` run, owner decision 2026-11-06), with an msvcrt MinGW gcc such as MSYS2 MINGW64 or nuwen MinGW on PATH). GitHub Windows CI confirms the build and the tests that need no window or libmpv for the pushed commit; the local run is the only run of the window and playback tests.
 - Preserve unrelated user files (`.codex/`, portable `data/`, `artifacts/` evidence).
 
 ## Roles

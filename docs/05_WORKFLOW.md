@@ -16,7 +16,7 @@ A loop is one coherent slice from the roadmap. Keep one slice per loop; no unrel
 
 1. **Scope.** Write `docs/loops/LOOPNN.md`: goal, in and out of scope, how it is tested, the owner check. Short.
 2. **Build.** Implement with tests that encode the intended behavior.
-3. **Check locally.** Run the focused test, then the full suite and race (section 5).
+3. **Check locally.** Run the focused test, then the full suite once (section 5).
 4. **Simplify.** Reread every changed file for clarity without changing behavior; rerun the tests.
 5. **Review.** A fresh-context, read-only reviewer checks correctness, security, resources and code quality ([02_ARCHITECTURE.md](02_ARCHITECTURE.md)). Fix every must-fix finding, then rerun the tests.
 6. **Owner check.** Put the build in `artifacts/test-build/` (section 4) and ask the owner to try it with plain steps.
@@ -45,8 +45,9 @@ Local, before every push:
 
 ```
 CGO_ENABLED=1 go test -count=1 ./...
-CGO_ENABLED=1 go test -race -count=1 ./...
 ```
+
+No `-race` run (owner decision 2026-11-06). Tests follow real usage only, and a full run opens at most two windows ([LOOP39T.md](loops/LOOP39T.md)).
 
 Use an msvcrt MinGW gcc (MSYS2 MINGW64 or nuwen MinGW) on PATH; go-fltk's prebuilt libraries cannot link with a UCRT MinGW. The git-ignored `artifacts/` folder has its own `go.mod` so `./...` skips it. The local native suite is the only run of the window (FLTK) and real-libmpv tests. GitHub Windows CI (owner decision 2026-10-22: a small project, so CI stays small) checks formatting, the module, vet, known vulnerabilities, the build and a portable startup smoke test, and runs every other package's tests once; documentation-only changes start no CI. A CI run on another OS cannot stand in for native Windows behavior, real playback or the owner's judgment.
 
