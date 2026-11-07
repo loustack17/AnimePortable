@@ -187,7 +187,7 @@ func validateMetadataText(name, value string, maxBytes, maxRunes int) error {
 			return fmt.Errorf("metadata %s contains unsafe text", name)
 		}
 	}
-	limits := metadatapolicy.PlainTextLimits{MaxInputBytes: maxBytes, MaxOutputBytes: maxBytes, MaxOutputRunes: maxRunes}
+	limits := metadatapolicy.PlainTextLimits{MaxInputBytes: maxBytes, MaxOutputRunes: maxRunes}
 	if !metadatapolicy.IsCanonicalPlainText(value, limits) {
 		return fmt.Errorf("metadata %s does not satisfy the canonical display policy", name)
 	}

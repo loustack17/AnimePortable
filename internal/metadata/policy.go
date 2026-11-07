@@ -31,35 +31,34 @@ const (
 
 type PlainTextLimits struct {
 	MaxInputBytes  int
-	MaxOutputBytes int
 	MaxOutputRunes int
 }
 
 func TitleLimits() PlainTextLimits {
-	return PlainTextLimits{MaxInputBytes: MaxTitleTextBytes, MaxOutputBytes: MaxTitleTextBytes, MaxOutputRunes: MaxTitleTextRunes}
+	return PlainTextLimits{MaxInputBytes: MaxTitleTextBytes, MaxOutputRunes: MaxTitleTextRunes}
 }
 
 func DescriptionLimits() PlainTextLimits {
-	return PlainTextLimits{MaxInputBytes: MaxDescriptionTextBytes, MaxOutputBytes: MaxDescriptionTextBytes, MaxOutputRunes: MaxDescriptionTextRunes}
+	return PlainTextLimits{MaxInputBytes: MaxDescriptionTextBytes, MaxOutputRunes: MaxDescriptionTextRunes}
 }
 
 func SeasonLimits() PlainTextLimits {
-	return PlainTextLimits{MaxInputBytes: MaxSeasonTextBytes, MaxOutputBytes: MaxSeasonTextBytes, MaxOutputRunes: MaxSeasonTextRunes}
+	return PlainTextLimits{MaxInputBytes: MaxSeasonTextBytes, MaxOutputRunes: MaxSeasonTextRunes}
 }
 
 func StudioLimits() PlainTextLimits {
-	return PlainTextLimits{MaxInputBytes: MaxStudioTextBytes, MaxOutputBytes: MaxStudioTextBytes, MaxOutputRunes: MaxStudioTextRunes}
+	return PlainTextLimits{MaxInputBytes: MaxStudioTextBytes, MaxOutputRunes: MaxStudioTextRunes}
 }
 
 func NormalizePlainText(value string, limits PlainTextLimits) (string, bool) {
-	if limits.MaxInputBytes <= 0 || limits.MaxOutputBytes <= 0 || limits.MaxOutputRunes <= 0 || len(value) > limits.MaxInputBytes || !utf8.ValidString(value) {
+	if len(value) > limits.MaxInputBytes || !utf8.ValidString(value) {
 		return "", false
 	}
 	plain := stripHTML(stdhtml.UnescapeString(value))
 	plain = stripHTML(plain)
 	plain = strings.NewReplacer("<", " ", ">", " ").Replace(plain)
 	plain = strings.TrimSpace(stripMarkdown(plain))
-	if len(plain) > limits.MaxOutputBytes || utf8.RuneCountInString(plain) > limits.MaxOutputRunes || ContainsDisallowedControl(plain) {
+	if len(plain) > limits.MaxInputBytes || utf8.RuneCountInString(plain) > limits.MaxOutputRunes || ContainsDisallowedControl(plain) {
 		return "", false
 	}
 	return strings.Join(strings.Fields(plain), " "), true

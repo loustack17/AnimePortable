@@ -31,17 +31,15 @@ func TestNormalizePlainText(t *testing.T) {
 }
 
 func TestNormalizePlainTextRejectsInvalidAndOversizedValues(t *testing.T) {
-	limits := PlainTextLimits{MaxInputBytes: 8, MaxOutputBytes: 8, MaxOutputRunes: 4}
+	limits := PlainTextLimits{MaxInputBytes: 8, MaxOutputRunes: 4}
 	tests := []struct {
 		name  string
 		value string
 		limit PlainTextLimits
 	}{
-		{name: "invalid limits", value: "safe", limit: PlainTextLimits{}},
 		{name: "invalid UTF-8", value: string([]byte{0xff}), limit: limits},
 		{name: "disallowed control", value: "a\x00b", limit: limits},
 		{name: "input bytes", value: "123456789", limit: limits},
-		{name: "output bytes", value: "12345", limit: PlainTextLimits{MaxInputBytes: 8, MaxOutputBytes: 4, MaxOutputRunes: 8}},
 		{name: "output runes", value: "12345", limit: limits},
 	}
 	for _, test := range tests {
@@ -55,7 +53,7 @@ func TestNormalizePlainTextRejectsInvalidAndOversizedValues(t *testing.T) {
 
 func TestNormalizePlainTextAdversarialOpenDelimiters(t *testing.T) {
 	value := strings.Repeat("<", 4096) + strings.Repeat("[", 4096)
-	got, ok := NormalizePlainText(value, PlainTextLimits{MaxInputBytes: 16 << 10, MaxOutputBytes: 16 << 10, MaxOutputRunes: 16 << 10})
+	got, ok := NormalizePlainText(value, PlainTextLimits{MaxInputBytes: 16 << 10, MaxOutputRunes: 16 << 10})
 	if !ok || got == "" {
 		t.Fatalf("result = %q, %v", got, ok)
 	}
@@ -67,7 +65,7 @@ func TestIsCanonicalPlainText(t *testing.T) {
 			t.Fatalf("canonical value rejected: %q", value)
 		}
 	}
-	for _, value := range []string{" Anime Title ", "Anime\nTitle", "**Anime**", "<b>Anime</b>", "a\x00b", strings.Repeat("x", TitleLimits().MaxOutputBytes+1)} {
+	for _, value := range []string{" Anime Title ", "Anime\nTitle", "**Anime**", "<b>Anime</b>", "a\x00b", strings.Repeat("x", TitleLimits().MaxInputBytes+1)} {
 		if IsCanonicalPlainText(value, TitleLimits()) {
 			t.Fatalf("noncanonical value accepted: %q", value)
 		}
