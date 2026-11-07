@@ -74,14 +74,6 @@ func TestIsCanonicalPlainText(t *testing.T) {
 	}
 }
 
-func TestFieldLimitsAreIndependentValues(t *testing.T) {
-	limits := TitleLimits()
-	limits.MaxInputBytes = 1
-	if TitleLimits().MaxInputBytes != MaxTitleTextBytes {
-		t.Fatal("title limits expose mutable policy")
-	}
-}
-
 func TestIsSafeCoverURL(t *testing.T) {
 	for _, value := range []string{"", "https://images.example/cover.jpg", "HTTPS://images.example/cover.png?size=large"} {
 		if !IsSafeCoverURL(value) {

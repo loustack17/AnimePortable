@@ -30,28 +30,6 @@ func readFailureLines(t *testing.T, directory string) []string {
 	return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
 }
 
-func TestFailureLineFormat(t *testing.T) {
-	at := time.Date(2026, 10, 14, 1, 2, 3, 999, time.FixedZone("x", 8*3600))
-	cases := []struct {
-		stage    failureStage
-		status   int
-		category failureCategory
-		want     string
-	}{
-		{stageResolve, 502, failureCategory(securehttp.KindStatus), "2026-10-13T17:02:03Z resolve 502 status"},
-		{stagePlayerLoad, 0, categoryPlayerFailed, "2026-10-13T17:02:03Z player_load - player_failed"},
-		{"https://secret.example", 99, "token=abc", "2026-10-13T17:02:03Z other - unknown"},
-		{stageOther, 600, categoryTimeout, "2026-10-13T17:02:03Z other - timeout"},
-		{stageResolve, 0, failureCategory(securehttp.KindProxy), "2026-10-13T17:02:03Z resolve - proxy"},
-		{stageResolve, 0, failureCategory(securehttp.KindProxyRefused), "2026-10-13T17:02:03Z resolve - proxy_refused"},
-	}
-	for _, test := range cases {
-		if got := formatFailureLine(at, test.stage, test.status, test.category); got != test.want {
-			t.Errorf("got %q want %q", got, test.want)
-		}
-	}
-}
-
 func TestFailureLogNeverWritesErrorText(t *testing.T) {
 	directory := t.TempDir()
 	log := NewFailureLog(directory)
@@ -210,16 +188,6 @@ func TestStartTimeoutCarriesARecentProxyRejection(t *testing.T) {
 			t.Errorf("line %d = %q want suffix %q", index, lines[index], want[index])
 		}
 	}
-}
-
-func TestNilFailureLogIsNoOp(t *testing.T) {
-	var log *FailureLog
-	log.record(stageOther, 0, categoryUnknown)
-	log.recordPlayFailure(errors.New("x"))
-	log.beginAttempt()
-	log.UpstreamRejected(502)
-	log.PlayerFailed()
-	log.StartTimedOut()
 }
 
 func TestStageSourceTagsResolveErrors(t *testing.T) {

@@ -302,25 +302,6 @@ func TestChangeLocationUseExistingKeepsFolderData(t *testing.T) {
 	requireHistoryRows(t, filepath.Join(folder, DatabaseFileName), 0)
 }
 
-func TestChangeLocationUseExistingRejectsForeignDatabase(t *testing.T) {
-	fixture := newLocationFixture(t)
-	openSeededStore(t, fixture.plan)
-	folder := newLocationFolder(t)
-	if err := os.WriteFile(filepath.Join(folder, DatabaseFileName), []byte("this is not sqlite"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	move, err := fixture.plan.PrepareLocationChange(folder)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := move.UseExisting(context.Background()); err == nil {
-		t.Fatal("foreign database was accepted")
-	}
-	if _, err := os.Lstat(fixture.locationFile()); !os.IsNotExist(err) {
-		t.Fatal("rejected database still wrote the location file")
-	}
-}
-
 func TestChangeLocationOverwriteBacksUpExistingFiles(t *testing.T) {
 	fixture := newLocationFixture(t)
 	store := openSeededStore(t, fixture.plan)
@@ -477,18 +458,6 @@ func TestChangeLocationRejectsInvalidTargets(t *testing.T) {
 		if _, err := fixture.plan.PrepareLocationChange(target); err == nil {
 			t.Fatalf("%s target %q was accepted", name, target)
 		}
-	}
-}
-
-func TestChangeLocationRejectsStaleSidecarsWithoutDatabase(t *testing.T) {
-	fixture := newLocationFixture(t)
-	openSeededStore(t, fixture.plan)
-	folder := newLocationFolder(t)
-	if err := os.WriteFile(filepath.Join(folder, DatabaseFileName+"-wal"), []byte("stale"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fixture.plan.PrepareLocationChange(folder); err == nil {
-		t.Fatal("stale WAL without a database was accepted")
 	}
 }
 

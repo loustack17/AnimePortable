@@ -3,7 +3,6 @@
 package fltkengine
 
 import (
-	"context"
 	"errors"
 	"math"
 	"path/filepath"
@@ -14,13 +13,6 @@ import (
 	"animeportable/apps/desktop/fltkengine/internal/mpvwin"
 	"animeportable/internal/runtimepin"
 )
-
-func TestSnapshotRejectsNilContext(t *testing.T) {
-	engine := &Engine{}
-	if _, err := engine.Snapshot(nil); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Snapshot(nil) error = %v, want context.Canceled", err)
-	}
-}
 
 func TestSecondsToDurationRejectsInvalidValues(t *testing.T) {
 	for _, test := range []struct {

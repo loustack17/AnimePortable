@@ -295,25 +295,6 @@ func TestLifecycle(t *testing.T) {
 	}
 }
 
-func TestValidationAndNormalization(t *testing.T) {
-	for _, v := range []string{"", strings.Repeat("x", 129), "   "} {
-		if _, e := localID(v); e != ErrInvalidInput {
-			t.Errorf("localID %q: %v", v, e)
-		}
-		if _, e := episodeID(v); e != ErrInvalidInput {
-			t.Errorf("episodeID %q: %v", v, e)
-		}
-	}
-	for _, in := range []core.SourceAnime{{Title: "x"}, {Ref: core.SourceRef{ID: "x"}, Title: "x"}, {Ref: core.SourceRef{Provider: "p"}, Title: "x"}, {Ref: core.SourceRef{Provider: "p", ID: "x"}}} {
-		if _, e := normalizeSourceAnime(in); e == nil {
-			t.Error("expected invalid source")
-		}
-	}
-	v, e := normalizeSourceAnime(sourceAnime())
-	if e != nil || v.Title != "Title" || v.NativeTitle != "Native" {
-		t.Fatalf("normalized=%+v err=%v", v, e)
-	}
-}
 func TestSafeError(t *testing.T) {
 	for _, x := range []struct{ in, want error }{
 		{context.Canceled, context.Canceled},

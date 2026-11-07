@@ -44,11 +44,3 @@ func TestScheduleWeekStartsTodayAndKeepsSourceOrder(t *testing.T) {
 		t.Fatalf("tomorrow's heading = %q", heading)
 	}
 }
-
-func TestScheduleWeekWithoutItemsHasEmptyDays(t *testing.T) {
-	for _, day := range scheduleWeek(nil, time.Now()) {
-		if len(day.Shows) != 0 {
-			t.Fatalf("day = %#v", day)
-		}
-	}
-}

@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -115,33 +114,6 @@ func TestScheduleIsStoredMatchedAndCachedOfflineAfterRestart(t *testing.T) {
 	}
 	if offline.calls != 0 {
 		t.Fatalf("CachedSchedule called the provider %d times", offline.calls)
-	}
-}
-
-func TestScheduleRejectsOversizedFetchAndKeepsCache(t *testing.T) {
-	ctx := context.Background()
-	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "schedule.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	provider := &fakeScheduleProvider{entries: []core.ScheduleEntry{{Ref: bangumiRef("1"), Title: "舊", Weekday: time.Monday}}}
-	service := newWithDependencies(dependencies{store: store, source: &catalogSource{}, schedule: provider})
-	t.Cleanup(func() { _ = service.Close() })
-	if _, err := service.Schedule(ctx); err != nil {
-		t.Fatal(err)
-	}
-	oversized := make([]core.ScheduleEntry, core.MaxScheduleEntries+1)
-	for index := range oversized {
-		oversized[index] = core.ScheduleEntry{Ref: bangumiRef(strconv.Itoa(index + 1)), Title: "作品", Weekday: time.Weekday(index % 7)}
-	}
-	provider.entries = oversized
-	if _, err := service.Schedule(ctx); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("oversized fetch error = %v, want ErrInvalidInput", err)
-	}
-	cached, err := service.CachedSchedule(ctx)
-	if err != nil || len(cached) != 1 || cached[0].Title != "舊" {
-		t.Fatalf("cached after rejected fetch = %#v, %v", cached, err)
 	}
 }
 

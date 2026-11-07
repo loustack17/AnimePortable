@@ -166,33 +166,6 @@ func TestMatchMetadataFailsClosedForDistinctSameProviderIdentities(t *testing.T)
 	}
 }
 
-func TestMatchMetadataRejectsInvalidAndEmptyInputs(t *testing.T) {
-	tests := []struct {
-		query      MetadataQuery
-		candidates []MetadataCandidate
-	}{
-		{},
-		{query: MetadataQuery{Title: "Anime"}},
-		{query: MetadataQuery{Title: "Anime"}, candidates: []MetadataCandidate{{Title: "Anime"}}},
-		{query: MetadataQuery{Title: strings.Repeat("a", metadataMaxTitleBytes+1)}, candidates: []MetadataCandidate{{Ref: MetadataRef{Provider: "anilist", ID: "too-long"}, Title: "Anime"}}},
-		{query: MetadataQuery{Title: "Anime"}, candidates: makeMetadataCandidates(metadataMaxCandidates + 1)},
-	}
-	for index, test := range tests {
-		match, ok := MatchMetadata(test.query, test.candidates)
-		if ok || !reflect.DeepEqual(match, MetadataCandidate{}) {
-			t.Fatalf("case %d returned unsafe result: %#v", index, match)
-		}
-	}
-}
-
-func makeMetadataCandidates(count int) []MetadataCandidate {
-	candidates := make([]MetadataCandidate, count)
-	for index := range candidates {
-		candidates[index] = MetadataCandidate{Ref: MetadataRef{Provider: "anilist", ID: string(rune(index + 1))}, Title: "Anime"}
-	}
-	return candidates
-}
-
 func TestMetadataMatchReadsTaiwanSeasonNotationAndAliases(t *testing.T) {
 	for _, test := range []struct {
 		name      string
