@@ -11,7 +11,8 @@ status: PASS
 branch: main
 observed_head: see git log  # check `gh run list --limit 1` for the latest CI result
 active_work: >
-  Loop 38R (cleanup before 2.0) PASSED 2026-10-26 (docs/loops/LOOP38R.md): S1-S11 and the O2/O3 fixes done; production Go -572 lines; the real-libmpv resource check fails on this PC for v1.0.0 and the current code alike (warm-up), so no regression. v1.0.1 released 2026-10-26. O4-O6 removed 2026-10-27 (AppData import, unused UI text, test-only port fields; owner rule: remove anything legacy or not needed later). Open owner decisions: O7-O8 (LOOP38R.md) and the resource check's warm-up (STATUS.md). Owner rules 2026-10-26: light testing (focused check once, full suite at most once), no temp note files.
+  Loop 39T (tests follow real usage) PASSED 2026-11-07 (docs/loops/LOOP39T.md; 5127904..ca1d6a7, pushed): 832 tests -> 619; a full run opens 2 windows (TestHomeRealUse, TestPlayerRealUse) and takes about 25 s; no -race run; the resource-pass stress tests and internal/resourcepass are gone. Owner rule 2026-11-06: test only what happens in real use (AGENTS.md). Loop 39 resumes next; its audit rows that name tests must be rechecked against the current files.
+  Loop 38R (cleanup before 2.0) PASSED 2026-10-26 (docs/loops/LOOP38R.md): S1-S11 and the O2/O3 fixes done; production Go -572 lines; the real-libmpv resource check fails on this PC for v1.0.0 and the current code alike (warm-up), so no regression. v1.0.1 released 2026-10-26. O4-O6 removed 2026-10-27 (AppData import, unused UI text, test-only port fields; owner rule: remove anything legacy or not needed later). Open owner decisions: O7-O8 (LOOP38R.md). Owner rules 2026-10-26: light testing (focused check once, full suite at most once), no temp note files.
   Loop 38 (hardening and release) PASSED 2026-10-24 (docs/loops/LOOP38.md; v1.0.0 published, tag on 5d9c068).
   Next: version 2.0 (Loops 39-49, docs/04_ROADMAP.md) needs owner approval to start. Plan revised by the owner 2026-11-06 (6c99b05; strict rules in AGENTS.md, 04_ROADMAP "Rules for every 2.0 loop" and docs/loops/LOOP39.md, uncommitted): Loop 39 core slimming (Phase A audit is read-only, then stop for the owner's picks), Loop 40 UI boundary (UI imports only backend/uitext/appicon), Loop 41 Go UI toolkit trial against FLTK; the "UI stays on FLTK" decision is replaced.
   Open owner decisions: update check offers pre-releases to users on 1.0.0; 03_SECURITY close order (N8); numbering of versions after 1.0.0.
@@ -22,7 +23,7 @@ next_actions:
   - New UI text goes into apps/desktop/uitext (all three languages); a fixed label uses labelled, a status a localText, so a live language switch reaches it.
   - A new FLTK window outside fltkhome newDialog must close leaked groups at the source (see LOOP37 final review).
   - Build exes with -ldflags "-H windowsgui" (test builds too); CI fails on a console-subsystem exe.
-  - Ask before any GUI test run while the owner may be using the PC (owner request 2026-10-22).
+  - Ask before any GUI test run while the owner may be using the PC (owner request 2026-10-22). New window checks go into TestHomeRealUse or TestPlayerRealUse, never a new window.
   - 2. After each push, confirm GitHub Windows CI for that commit; classify any failure with the ci-log template.
   - Open owner choices: 追蹤 更新集數 wording; remove unused NewEpisode (docs/STATUS.md); Home 今日播出 from the stored schedule.
   - Releases: bump internal/release.Version + notes in docs/releases/<tag>.md, push to main, wait for CI, then push the v* tag; the release job reuses that run's exe (owner approval each time). CI is small by owner decision: no window or libmpv tests there; run them locally (ask the owner first).

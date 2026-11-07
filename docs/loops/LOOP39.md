@@ -2,7 +2,7 @@
 
 # Loop 39: Core slimming
 
-Status: NOT STARTED. Planned by the owner on 2026-11-06. Base: 6c99b05. Starting this loop needs the owner's go-ahead.
+Status: NOT STARTED. Planned by the owner on 2026-11-06. Base: 6c99b05. Starting this loop needs the owner's go-ahead. Loop 39T (2026-11-07) has since deleted many tests: recheck every audit row that names a test or a test line against the current files before acting on it.
 
 ## Goal
 
@@ -43,7 +43,7 @@ Phase A ends with a short report to the owner: the table and the total estimate.
 Group the approved rows into slices, one package group each, in table order. For each slice:
 
 1. Make the change.
-2. Run the focused tests for the touched packages, then the full suite once and the race suite once (05_WORKFLOW.md section 5; owner rule: light testing, no repeated runs).
+2. Run the focused tests for the touched packages, then the full suite once (05_WORKFLOW.md section 5; no race run since Loop 39T; owner rule: light testing, no repeated runs).
 3. Measure lines (command below) and record before and after in the slice row.
 4. Fresh read-only review (02_ARCHITECTURE.md quality rules plus these hard rules); fix every MUST_FIX.
 5. Ask the owner to approve the commit.
