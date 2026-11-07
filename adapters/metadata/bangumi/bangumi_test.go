@@ -401,43 +401,24 @@ func TestBangumiRejectsBothTitlesEmptyAtomically(t *testing.T) {
 	}
 }
 
-func TestBangumiRejectsInvalidDatesAtomically(t *testing.T) {
-	values := []string{"2024-1-01", "2024-01-1", "2024-02-30", "2024-00-01", "2024-13-01", "2024-01-01T00:00:00Z", strconv.Itoa(testMaxYear+1) + "-01-01"}
-	for _, value := range values {
-		t.Run(value, func(t *testing.T) {
-			subject := validSubject()
-			subject["date"] = value
-			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, subject)}).Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"})
-			if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
-				t.Fatalf("metadata = %#v, error = %v", metadata, err)
-			}
-		})
+func TestBangumiGetRejectsInvalidFieldsAtomically(t *testing.T) {
+	for _, test := range []struct {
+		field string
+		value any
+	}{
+		{"date", "2024-1-01"}, {"date", "2024-01-1"}, {"date", "2024-02-30"}, {"date", "2024-00-01"}, {"date", "2024-13-01"},
+		{"date", "2024-01-01T00:00:00Z"}, {"date", strconv.Itoa(testMaxYear+1) + "-01-01"},
+		{"type", nil}, {"type", 0}, {"type", 1}, {"type", 3}, {"type", 99}, {"type", "2"},
+		{"name_cn", "中文\x00標題"}, {"summary", "摘要\x00秘密"},
+		{"id", 0}, {"id", -1}, {"id", int64(100000000000)}, {"id", "123"},
+	} {
+		subject := validSubject()
+		subject[test.field] = test.value
+		metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, subject)}).Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"})
+		if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
+			t.Fatalf("%s = %#v: metadata = %#v, error = %v", test.field, test.value, metadata, err)
+		}
 	}
-}
-
-func TestBangumiRejectsInvalidAnimeTypesAtomically(t *testing.T) {
-	for _, value := range []any{nil, 0, 1, 3, 99, "2"} {
-		t.Run(typeName(value), func(t *testing.T) {
-			subject := validSubject()
-			subject["type"] = value
-			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, subject)}).Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"})
-			if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
-				t.Fatalf("metadata = %#v, error = %v", metadata, err)
-			}
-		})
-	}
-}
-
-func typeName(value any) string {
-	if value == nil {
-		return "null"
-	}
-	return strings.ReplaceAll(strings.TrimSpace(string(mustJSONForName(value))), "\"", "")
-}
-
-func mustJSONForName(value any) []byte {
-	body, _ := json.Marshal(value)
-	return body
 }
 
 func TestBangumiSearchRejectsInvalidCandidateAtomically(t *testing.T) {
@@ -571,26 +552,6 @@ func TestBangumiNormalizesRemoteDisplayFields(t *testing.T) {
 	}
 }
 
-func TestBangumiRejectsControlCharactersAtomically(t *testing.T) {
-	for _, test := range []struct {
-		name  string
-		field string
-		value string
-	}{
-		{name: "title", field: "name_cn", value: "中文\x00標題"},
-		{name: "summary", field: "summary", value: "摘要\x00秘密"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			subject := validSubject()
-			subject[test.field] = test.value
-			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, subject)}).Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"})
-			if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
-				t.Fatalf("metadata = %#v, error = %v", metadata, err)
-			}
-		})
-	}
-}
-
 func TestBangumiCoverHostValidation(t *testing.T) {
 	for _, value := range []string{
 		"http://lain.bgm.tv/pic/cover/l/12/34/1234_abc.jpg",
@@ -674,23 +635,12 @@ func TestBangumiHTTPStatusMappingAndRedaction(t *testing.T) {
 	}
 }
 
-func TestBangumiGetRejectsResponseIDMismatchAndInvalidIDs(t *testing.T) {
+func TestBangumiGetRejectsResponseIDMismatch(t *testing.T) {
 	mismatched := validSubject()
 	mismatched["id"] = 124
 	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, mismatched)}).Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"})
 	if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
 		t.Fatalf("mismatched metadata = %#v, error = %v", metadata, err)
-	}
-
-	for _, value := range []any{0, -1, int64(100000000000), "123"} {
-		t.Run(typeName(value), func(t *testing.T) {
-			subject := validSubject()
-			subject["id"] = value
-			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, subject)}).Get(context.Background(), core.MetadataRef{Provider: testProviderID, ID: "123"})
-			if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
-				t.Fatalf("metadata = %#v, error = %v", metadata, err)
-			}
-		})
 	}
 }
 

@@ -125,7 +125,7 @@ func TestAniListAdapterAcceptance(t *testing.T) {
 	}}
 
 	contract.RunMetadataProvider(t, contract.MetadataProviderSuite{
-		New: func(*testing.T) core.MetadataProvider { return newWithDo(client) },
+		New: func(*testing.T) core.MetadataProvider { return &Client{do: client} },
 		Search: contract.MetadataSearchCase{
 			Query:    core.MetadataQuery{Title: "Romaji Title"},
 			Expected: []core.MetadataRef{{Provider: providerID, ID: "123"}},
@@ -159,7 +159,7 @@ func TestAniListAdapterAcceptance(t *testing.T) {
 
 func TestAniListRequestShape(t *testing.T) {
 	searchClient := &fakeClient{response: jsonResponse(t, searchPayload())}
-	provider := newWithDo(searchClient)
+	provider := &Client{do: searchClient}
 	ctx := context.WithValue(context.Background(), struct{}{}, "request")
 	if _, err := provider.Search(ctx, core.MetadataQuery{Title: "Title", NativeTitle: "Native", Year: 2020, EpisodeCount: 12}); err != nil {
 		t.Fatal(err)
@@ -187,7 +187,7 @@ func TestAniListRequestShape(t *testing.T) {
 	}
 
 	getClient := &fakeClient{response: jsonResponse(t, getPayload(validMedia()))}
-	if _, err := newWithDo(getClient).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"}); err != nil {
+	if _, err := (&Client{do: getClient}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(getClient.requests) != 1 {
@@ -225,7 +225,7 @@ func assertRequest(t *testing.T, request *http.Request, document string) {
 
 func TestAniListSearchUsesNativeFallbackAndRejectsEmpty(t *testing.T) {
 	client := &fakeClient{response: jsonResponse(t, searchPayload())}
-	provider := newWithDo(client)
+	provider := &Client{do: client}
 	if _, err := provider.Search(context.Background(), core.MetadataQuery{NativeTitle: "Native"}); err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestAniListGetMapsMinimalNullOptionals(t *testing.T) {
 		"season":      nil,
 		"studios":     nil,
 	}
-	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(minimal))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "7"})
+	metadata, err := (&Client{do: &fakeClient{response: jsonResponse(t, getPayload(minimal))}}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "7"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestAniListGetSanitizesDescriptionMarkup(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			media := validMedia()
 			media["description"] = test.description
-			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+			metadata, err := (&Client{do: &fakeClient{response: jsonResponse(t, getPayload(media))}}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -314,12 +314,12 @@ func TestAniListNormalizesRemoteDisplayFields(t *testing.T) {
 	media["studios"] = map[string]any{"nodes": []any{
 		map[string]any{"name": " <b>Animation</b> **Studio** ", "isAnimationStudio": true},
 	}}
-	provider := newWithDo(&fakeClient{handler: func(_ *http.Request, body []byte) (*securehttp.Response, error) {
+	provider := &Client{do: &fakeClient{handler: func(_ *http.Request, body []byte) (*securehttp.Response, error) {
 		if strings.Contains(string(body), "Page(") {
 			return jsonResponse(t, searchPayload(media)), nil
 		}
 		return jsonResponse(t, getPayload(media)), nil
-	}})
+	}}}
 	items, err := provider.Search(context.Background(), core.MetadataQuery{Title: "Anime"})
 	if err != nil {
 		t.Fatal(err)
@@ -347,20 +347,6 @@ func TestAniListNormalizesRemoteDisplayFields(t *testing.T) {
 	}
 }
 
-func TestAniListDropsUnsafeStudio(t *testing.T) {
-	media := validMedia()
-	media["studios"] = map[string]any{"nodes": []any{
-		map[string]any{"name": "Unsafe\x00Studio", "isAnimationStudio": true},
-	}}
-	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if metadata.Studio != "" {
-		t.Fatalf("unsafe studio retained: %q", metadata.Studio)
-	}
-}
-
 func TestAniListRejectsUnsafeDisplayFieldsAtomically(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -383,7 +369,7 @@ func TestAniListRejectsUnsafeDisplayFieldsAtomically(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			media := validMedia()
 			test.mutate(media)
-			metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+			metadata, err := (&Client{do: &fakeClient{response: jsonResponse(t, getPayload(media))}}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
 			if !errors.Is(err, errMetadataMalformed) || metadata != (core.AnimeMetadata{}) {
 				t.Fatalf("metadata = %#v, error = %v", metadata, err)
 			}
@@ -391,19 +377,21 @@ func TestAniListRejectsUnsafeDisplayFieldsAtomically(t *testing.T) {
 	}
 }
 
-func TestAniListGetDropsInvalidCoverAndNonAnimationStudios(t *testing.T) {
-	media := validMedia()
-	media["coverImage"] = map[string]any{"extraLarge": "https://evil.example/cover.jpg"}
-	media["studios"] = map[string]any{"nodes": []any{
-		map[string]any{"name": "Wrong Studio", "isAnimationStudio": false},
-		map[string]any{"name": "", "isAnimationStudio": true},
-	}}
-	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if metadata.CoverURL != "" || metadata.Studio != "" {
-		t.Fatalf("metadata = %#v", metadata)
+func TestAniListGetDropsInvalidCoverAndUnusableStudios(t *testing.T) {
+	for _, studios := range [][]any{
+		{map[string]any{"name": "Wrong Studio", "isAnimationStudio": false}, map[string]any{"name": "", "isAnimationStudio": true}},
+		{map[string]any{"name": "Unsafe\x00Studio", "isAnimationStudio": true}},
+	} {
+		media := validMedia()
+		media["coverImage"] = map[string]any{"extraLarge": "https://evil.example/cover.jpg"}
+		media["studios"] = map[string]any{"nodes": studios}
+		metadata, err := (&Client{do: &fakeClient{response: jsonResponse(t, getPayload(media))}}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if metadata.CoverURL != "" || metadata.Studio != "" {
+			t.Fatalf("studios %#v: metadata = %#v", studios, metadata)
+		}
 	}
 }
 
@@ -411,21 +399,21 @@ func TestAniListSearchRejectsInvalidCandidatesAtomically(t *testing.T) {
 	valid := validMedia()
 	invalid := validMedia()
 	invalid["id"] = -1
-	items, err := newWithDo(&fakeClient{response: jsonResponse(t, searchPayload(invalid, valid))}).Search(context.Background(), core.MetadataQuery{Title: "Anime"})
+	items, err := (&Client{do: &fakeClient{response: jsonResponse(t, searchPayload(invalid, valid))}}).Search(context.Background(), core.MetadataQuery{Title: "Anime"})
 	if !errors.Is(err, errMetadataMalformed) || items != nil {
 		t.Fatalf("items = %#v, error = %v", items, err)
 	}
 }
 
 func TestAniListGetHandlesMissingAndGraphQLErrors(t *testing.T) {
-	missing, err := newWithDo(&fakeClient{response: &securehttp.Response{StatusCode: http.StatusNotFound, Header: http.Header{"Content-Type": {"application/json"}}, Body: []byte(`{"message":"remote-secret"}`)}}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+	missing, err := (&Client{do: &fakeClient{response: &securehttp.Response{StatusCode: http.StatusNotFound, Header: http.Header{"Content-Type": {"application/json"}}, Body: []byte(`{"message":"remote-secret"}`)}}}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
 	if !errors.Is(err, core.ErrNotFound) || missing != (core.AnimeMetadata{}) {
 		t.Fatalf("missing = %#v, %v", missing, err)
 	}
-	graphql, err := newWithDo(&fakeClient{response: jsonResponse(t, map[string]any{
+	graphql, err := (&Client{do: &fakeClient{response: jsonResponse(t, map[string]any{
 		"errors": []any{map[string]any{"message": "remote-secret"}},
 		"data":   nil,
-	})}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+	})}}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
 	if !errors.Is(err, errMetadataProvider) || graphql != (core.AnimeMetadata{}) || strings.Contains(err.Error(), "remote-secret") {
 		t.Fatalf("graphql = %#v, %v", graphql, err)
 	}
@@ -444,7 +432,7 @@ func TestAniListResponseValidation(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			metadata, err := newWithDo(&fakeClient{response: test.response}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+			metadata, err := (&Client{do: &fakeClient{response: test.response}}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
 			if !errors.Is(err, test.want) || metadata != (core.AnimeMetadata{}) {
 				t.Fatalf("metadata = %#v, error = %v", metadata, err)
 			}
@@ -458,7 +446,7 @@ func TestAniListResponseValidation(t *testing.T) {
 func TestAniListDescriptionWithManyOpenBracketsIsBounded(t *testing.T) {
 	media := validMedia()
 	media["description"] = strings.Repeat("[", metadatapolicy.MaxDescriptionTextRunes)
-	metadata, err := newWithDo(&fakeClient{response: jsonResponse(t, getPayload(media))}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
+	metadata, err := (&Client{do: &fakeClient{response: jsonResponse(t, getPayload(media))}}).Get(context.Background(), core.MetadataRef{Provider: providerID, ID: "123"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +457,7 @@ func TestAniListDescriptionWithManyOpenBracketsIsBounded(t *testing.T) {
 
 func TestAniListSearchDoesNotTreatHTTPNotFoundAsMissingMetadata(t *testing.T) {
 	response := &securehttp.Response{StatusCode: http.StatusNotFound, Header: http.Header{"Content-Type": {"application/json"}}}
-	items, err := newWithDo(&fakeClient{response: response}).Search(context.Background(), core.MetadataQuery{Title: "Anime"})
+	items, err := (&Client{do: &fakeClient{response: response}}).Search(context.Background(), core.MetadataQuery{Title: "Anime"})
 	if !errors.Is(err, errMetadataUnavailable) || errors.Is(err, core.ErrNotFound) || items != nil {
 		t.Fatalf("items = %#v, error = %v", items, err)
 	}
@@ -477,7 +465,7 @@ func TestAniListSearchDoesNotTreatHTTPNotFoundAsMissingMetadata(t *testing.T) {
 
 func TestAniListReferenceValidation(t *testing.T) {
 	client := &fakeClient{response: jsonResponse(t, getPayload(validMedia()))}
-	provider := newWithDo(client)
+	provider := &Client{do: client}
 	refs := []core.MetadataRef{
 		{Provider: "other", ID: "123"},
 		{Provider: providerID, ID: ""},
@@ -502,7 +490,7 @@ func TestAniListCancellationAndSanitizedRequestError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	client := &fakeClient{response: jsonResponse(t, searchPayload())}
-	if _, err := newWithDo(client).Search(ctx, core.MetadataQuery{Title: "Anime"}); !errors.Is(err, context.Canceled) {
+	if _, err := (&Client{do: client}).Search(ctx, core.MetadataQuery{Title: "Anime"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation error = %v", err)
 	}
 	if len(client.requests) != 0 {
@@ -510,7 +498,7 @@ func TestAniListCancellationAndSanitizedRequestError(t *testing.T) {
 	}
 
 	secret := errors.New("remote-secret network failure")
-	if _, err := newWithDo(&fakeClient{err: secret}).Search(context.Background(), core.MetadataQuery{Title: "Anime"}); !errors.Is(err, errMetadataUnavailable) || strings.Contains(err.Error(), "remote-secret") {
+	if _, err := (&Client{do: &fakeClient{err: secret}}).Search(context.Background(), core.MetadataQuery{Title: "Anime"}); !errors.Is(err, errMetadataUnavailable) || strings.Contains(err.Error(), "remote-secret") {
 		t.Fatalf("sanitized error = %v", err)
 	}
 }
@@ -559,7 +547,7 @@ func TestAniListMyAnimeListID(t *testing.T) {
 		return jsonResponse(t, map[string]any{"data": map[string]any{"Media": map[string]any{"id": id, "idMal": idMal}}})
 	}
 	client := &fakeClient{response: media(123, 52991)}
-	got, err := newWithDo(client).MyAnimeListID(context.Background(), ref)
+	got, err := (&Client{do: client}).MyAnimeListID(context.Background(), ref)
 	if err != nil || got != 52991 {
 		t.Fatal(got, err)
 	}
@@ -580,13 +568,13 @@ func TestAniListMyAnimeListID(t *testing.T) {
 		"graphql":     {jsonResponse(t, map[string]any{"errors": []any{map[string]any{"message": "x"}}}), errMetadataProvider},
 		"404 missing": {&securehttp.Response{StatusCode: http.StatusNotFound, Header: http.Header{"Content-Type": {"application/json"}}}, core.ErrNotFound},
 	} {
-		got, err := newWithDo(&fakeClient{response: test.response}).MyAnimeListID(context.Background(), ref)
+		got, err := (&Client{do: &fakeClient{response: test.response}}).MyAnimeListID(context.Background(), ref)
 		if got != 0 || !errors.Is(err, test.want) {
 			t.Errorf("%s: %d, %v", name, got, err)
 		}
 	}
 	empty := &fakeClient{}
-	if _, err := newWithDo(empty).MyAnimeListID(context.Background(), core.MetadataRef{Provider: "bangumi", ID: "123"}); !errors.Is(err, errMetadataInvalidRef) || len(empty.requests) != 0 {
+	if _, err := (&Client{do: empty}).MyAnimeListID(context.Background(), core.MetadataRef{Provider: "bangumi", ID: "123"}); !errors.Is(err, errMetadataInvalidRef) || len(empty.requests) != 0 {
 		t.Fatal(err)
 	}
 }

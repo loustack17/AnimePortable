@@ -57,11 +57,7 @@ type Client struct {
 }
 
 func New(client *securehttp.Client) *Client {
-	return newWithDo(client)
-}
-
-func newWithDo(do responseClient) *Client {
-	return &Client{do: do}
+	return &Client{do: client}
 }
 
 func AllowedOrigins() []string {
@@ -238,12 +234,8 @@ func mapCandidate(media mediaResponse) (core.MetadataCandidate, bool) {
 }
 
 func mapMetadata(media mediaResponse) (core.AnimeMetadata, bool) {
-	id, _, ok := metadatainternal.ParseJSONID(media.ID)
+	candidate, ok := mapCandidate(media)
 	if !ok {
-		return core.AnimeMetadata{}, false
-	}
-	title, nativeTitle, ok := mapTitles(media.Title)
-	if !ok || !validOptionalNumber(media.SeasonYear, maxSeasonYear) || !validOptionalNumber(media.Episodes, maxEpisodeCount) {
 		return core.AnimeMetadata{}, false
 	}
 	description, ok := mapDescription(media.Description)
@@ -251,12 +243,12 @@ func mapMetadata(media mediaResponse) (core.AnimeMetadata, bool) {
 		return core.AnimeMetadata{}, false
 	}
 	metadata := core.AnimeMetadata{
-		Ref:          core.MetadataRef{Provider: providerID, ID: id},
-		Title:        title,
-		NativeTitle:  nativeTitle,
+		Ref:          candidate.Ref,
+		Title:        candidate.Title,
+		NativeTitle:  candidate.NativeTitle,
 		Description:  description,
-		Year:         numericValue(media.SeasonYear),
-		EpisodeCount: numericValue(media.Episodes),
+		Year:         candidate.Year,
+		EpisodeCount: candidate.EpisodeCount,
 	}
 	if media.Season != nil {
 		season, ok := metadatapolicy.NormalizePlainText(*media.Season, metadatapolicy.SeasonLimits())
