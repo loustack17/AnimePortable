@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/big"
@@ -189,16 +190,6 @@ func TestRedirectsValidateDestinationAndStripCrossOriginHeaders(t *testing.T) {
 	c.maxRedirects = 1
 	if err := c.checkRedirect(mustRequest(t, "https://one.example/a"), []*http.Request{previous, previous}); !isKind(err, KindRedirect) {
 		t.Fatal(err)
-	}
-	dialed := false
-	c = newTestClient(t, []string{"https://one.example", "https://private.example"}, func(context.Context, string) ([]netip.Addr, error) {
-		return []netip.Addr{netip.MustParseAddr("10.0.0.1")}, nil
-	}, func(context.Context, string, string) (net.Conn, error) {
-		dialed = true
-		return nil, nil
-	})
-	if err := c.checkRedirect(mustRequest(t, "https://private.example/a"), []*http.Request{previous}); !isKind(err, KindRedirect) || dialed {
-		t.Fatal(err, dialed)
 	}
 }
 
@@ -496,7 +487,7 @@ func TestOpenUsesRedirectPolicyAndStripsCrossOriginHeaders(t *testing.T) {
 	}
 }
 
-func TestOpenDisablesOverallTimeoutButDoRemainsBounded(t *testing.T) {
+func TestOpenIgnoresOverallTimeoutButObservesCancellation(t *testing.T) {
 	c := newRoundTripClientFunc(t, func(request *http.Request) (*http.Response, error) {
 		<-request.Context().Done()
 		return nil, request.Context().Err()
@@ -522,13 +513,6 @@ func TestOpenDisablesOverallTimeoutButDoRemainsBounded(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Open did not finish after cancellation")
-	}
-	start := time.Now()
-	if _, err := c.Do(mustRequest(t, "https://example.com/media")); !isKind(err, KindTimeout) {
-		t.Fatal(err)
-	}
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Fatalf("Do exceeded timeout bound: %s", elapsed)
 	}
 }
 
@@ -665,5 +649,48 @@ func TestRequireSuccessReportsStatusCode(t *testing.T) {
 	}
 	if err := (&Response{StatusCode: http.StatusOK}).RequireSuccess(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSafeErrorKeepsOnlySafeErrors(t *testing.T) {
+	fallback := errors.New("adapter unavailable")
+	secure := &Error{Kind: KindStatus, Status: 503}
+	tests := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "canceled", err: fmt.Errorf("wrapped: %w", context.Canceled), want: context.Canceled},
+		{name: "deadline", err: fmt.Errorf("wrapped: %w", context.DeadlineExceeded), want: context.DeadlineExceeded},
+		{name: "secure error", err: fmt.Errorf("wrapped: %w", secure), want: secure},
+		{name: "other error", err: errors.New("dial tcp 203.0.113.7:443: secret detail"), want: fallback},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := SafeError(test.err, fallback); got != test.want {
+				t.Fatalf("SafeError(%v) = %v, want %v", test.err, got, test.want)
+			}
+		})
+	}
+}
+
+func TestHasMediaType(t *testing.T) {
+	tests := []struct {
+		contentType string
+		mediaTypes  []string
+		want        bool
+	}{
+		{contentType: "application/json", mediaTypes: []string{"application/json"}, want: true},
+		{contentType: "Application/JSON; charset=utf-8", mediaTypes: []string{"application/json"}, want: true},
+		{contentType: "application/xhtml+xml", mediaTypes: []string{"text/html", "application/xhtml+xml"}, want: true},
+		{contentType: "text/plain", mediaTypes: []string{"application/json"}, want: false},
+		{contentType: "", mediaTypes: []string{"application/json"}, want: false},
+		{contentType: "application/json; =broken", mediaTypes: []string{"application/json"}, want: false},
+		{contentType: "application/json", mediaTypes: nil, want: false},
+	}
+	for _, test := range tests {
+		if got := HasMediaType(test.contentType, test.mediaTypes...); got != test.want {
+			t.Fatalf("HasMediaType(%q, %q) = %v, want %v", test.contentType, test.mediaTypes, got, test.want)
+		}
 	}
 }

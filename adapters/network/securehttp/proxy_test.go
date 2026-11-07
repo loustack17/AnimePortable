@@ -256,13 +256,6 @@ func TestProxyChangeAppliesToNewRequests(t *testing.T) {
 	}
 }
 
-func TestClientWithoutProxyKeepsTransportProxyUnset(t *testing.T) {
-	c := newTestClient(t, []string{"https://example.com"}, nil, nil)
-	if c.httpClient.Transport.(*http.Transport).Proxy != nil {
-		t.Fatal("transport proxy set without a configured source")
-	}
-}
-
 func TestDialProxyTriesEachResolvedAddress(t *testing.T) {
 	c, err := newClient(Config{AllowedOrigins: []string{"https://example.test"}, Proxy: func() string { return "proxy.test:8080" }}, func(context.Context, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("10.0.0.1"), netip.MustParseAddr("10.0.0.2")}, nil

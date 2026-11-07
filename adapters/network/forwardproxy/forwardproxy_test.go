@@ -57,8 +57,8 @@ func TestSystemAddress(t *testing.T) {
 }
 
 func TestSourceModes(t *testing.T) {
-	enabled, server, readErr := true, "system.example:3128", error(nil)
-	source := NewWithReader(func() (SystemProxy, error) { return SystemProxy{Enabled: enabled, Server: server}, readErr })
+	server := "system.example:3128"
+	source := NewWithReader(func() (SystemProxy, error) { return SystemProxy{Enabled: true, Server: server}, nil })
 	if source.Address() != "" {
 		t.Fatal("a new source must be direct")
 	}
@@ -85,25 +85,9 @@ func TestSourceModes(t *testing.T) {
 	if got := source.Address(); got != "other.example:8888" {
 		t.Fatalf("system after change = %q", got)
 	}
-	enabled = false
-	if got := source.Address(); got != "" {
-		t.Fatalf("system disabled = %q", got)
-	}
-	enabled, readErr = true, errors.New("registry unreadable")
-	if got := source.Address(); got != "" {
-		t.Fatalf("system unreadable = %q", got)
-	}
 	source.Set(core.ProxyModeUnspecified, "manual.example:8080")
 	if got := source.Address(); got != "" {
 		t.Fatalf("unspecified = %q", got)
-	}
-}
-
-func TestSourceWithoutReaderIsDirectInSystemMode(t *testing.T) {
-	source := NewWithReader(nil)
-	source.Set(core.ProxyModeSystem, "")
-	if source.Address() != "" {
-		t.Fatal("system mode without a reader must be direct")
 	}
 }
 

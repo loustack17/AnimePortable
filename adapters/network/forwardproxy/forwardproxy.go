@@ -83,9 +83,6 @@ func (source *Source) Resolve() Resolution {
 			return Resolution{Address: manual}
 		}
 	case core.ProxyModeSystem:
-		if system == nil {
-			return Resolution{}
-		}
 		setting, err := system()
 		if err != nil {
 			return Resolution{SystemUnusable: true}

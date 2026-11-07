@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
@@ -276,12 +277,8 @@ func (c *Client) Open(req *http.Request) (*StreamResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	transport := c.httpClient.Transport
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
 	client := &http.Client{
-		Transport:     closeResponseBodyTransport{transport: transport},
+		Transport:     closeResponseBodyTransport{transport: c.httpClient.Transport},
 		CheckRedirect: c.checkRedirect,
 	}
 	response, err := client.Do(clone)
@@ -383,10 +380,7 @@ func (c *Client) activeProxy() string {
 // proxyFor is the transport's Proxy hook. Idle connections made under another proxy are
 // closed when the setting changes.
 func (c *Client) proxyFor(request *http.Request) (*url.URL, error) {
-	address := ""
-	if c.proxy != nil {
-		address = c.proxy()
-	}
+	address := c.proxy()
 	c.proxyMu.Lock()
 	changed := address != c.lastProxy
 	c.lastProxy = address
@@ -670,4 +664,36 @@ func stripSensitiveHeaders(headers http.Header, extra []string) {
 	for _, header := range extra {
 		headers.Del(header)
 	}
+}
+
+// SafeError is the error an adapter may pass up after a failed request: cancellation and
+// deadline errors, and this package's *Error (which carries no URL, header or body), go through
+// unchanged; anything else is replaced by fallback, so no other error text leaves the adapter.
+func SafeError(err, fallback error) error {
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
+	var secureError *Error
+	if errors.As(err, &secureError) {
+		return secureError
+	}
+	return fallback
+}
+
+// HasMediaType reports whether a Content-Type header value parses and names one of mediaTypes,
+// compared case-insensitively; parameters such as charset are ignored.
+func HasMediaType(contentType string, mediaTypes ...string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	for _, want := range mediaTypes {
+		if strings.EqualFold(mediaType, want) {
+			return true
+		}
+	}
+	return false
 }
