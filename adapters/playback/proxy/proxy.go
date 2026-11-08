@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -653,7 +652,7 @@ func (server *Server) serveSession(writer http.ResponseWriter, request *http.Req
 		server.rejectUpstream(writer, response.StatusCode, report)
 		return
 	}
-	if !validStatusAndRange(response, rangeSpec, rangeRequested) || !validVideoType(response.Header.Get("Content-Type")) || !validContentEncoding(response.Header) {
+	if !validStatusAndRange(response, rangeSpec, rangeRequested) || !securehttp.HasMediaType(response.Header.Get("Content-Type"), "video/mp4") || !validContentEncoding(response.Header) {
 		server.rejectUpstream(writer, response.StatusCode, report)
 		return
 	}
@@ -850,11 +849,6 @@ func unsatisfiedContentRange(value string) (int64, bool) {
 	}
 	size, ok := parseRangeNumber(strings.TrimPrefix(value, "bytes */"))
 	return size, ok
-}
-
-func validVideoType(value string) bool {
-	mediaType, _, err := mime.ParseMediaType(value)
-	return err == nil && strings.EqualFold(mediaType, "video/mp4")
 }
 
 func validContentEncoding(header http.Header) bool {
